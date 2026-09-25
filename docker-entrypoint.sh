@@ -7,7 +7,10 @@
 set -e
 
 echo "[entrypoint] Starte DB-Migration..."
+# migrate.php zuerst: importiert bei fehlender DB einen evtl. vorhandenen JSON-Altbestand.
 php /var/www/html/migrate.php || true
+# Schema-Migrationen; bei Fehler oder zu neuem Schema startet die App nicht.
+php /var/www/html/bin/console db:migrate
 echo "[entrypoint] Migration abgeschlossen."
 
 # Eigentümer aller Dateien im data-Verzeichnis auf www-data setzen,

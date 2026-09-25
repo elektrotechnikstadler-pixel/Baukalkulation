@@ -94,7 +94,12 @@ foreach ([DATA_DIR] as $_d) {
 }
 
 // ── DB verbinden ─────────────────────────────────────────────
-$db = Database::connect();
+try {
+    $db = Database::connect();
+} catch (\App\Database\SchemaTooNewException $e) {
+    error_log('[DIN1090] ' . $e->getMessage());
+    jsonOut(['error' => $e->getMessage()], 503);
+}
 
 // Automatische Abmeldung nach konfigurierbarer Inaktivität (Admin-Einstellungen).
 if (!empty($_SESSION['authenticated'])) {

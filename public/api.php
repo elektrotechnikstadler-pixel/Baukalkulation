@@ -119,7 +119,12 @@ foreach ([DATA_DIR, BACKUP_DIR, ARCHIVE_DIR, EXPORT_DIR, TAGEBUCH_DIR, UPLOADS_D
 }
 
 // ── Datenbankverbindung ──────────────────────────────────────
-$db = Database::connect();
+try {
+    $db = Database::connect();
+} catch (\App\Database\SchemaTooNewException $e) {
+    error_log('[Baukalkulation] ' . $e->getMessage());
+    jsonOut(['error' => $e->getMessage()], 503);
+}
 
 // ── Systemadmin sicherstellen ────────────────────────────────
 Auth::ensureSystemadmin($db);
