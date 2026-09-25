@@ -53,87 +53,33 @@ Das Skript fragt Ports, OCR und WhatsApp ab, schreibt `.env` und startet anschli
 
 ## 1. Dateien auf den Server kopieren
 
-Alle folgenden Dateien/Ordner in ein Verzeichnis auf dem Server kopieren (z.B. `/opt/baukalkulation/`):
+Das komplette Repository (ohne `tests/`, `docs/`, `.github/`) in ein Verzeichnis auf dem Server kopieren (z.B. `/opt/baukalkulation/`). Aufbau:
 
 ```
-├── api.php
-├── composer.json
-├── cron_material_erinnerung.php
-├── cron_stunden_erinnerung.php
-├── docker-compose.yml
-├── Dockerfile.app
-├── .htaccess
-├── index.html
-├── login.html
-├── manifest.json
-├── migrate.php
-├── mobile.html
-├── script.js
-├── style.css
-├── sw.js
-├── wochenplan_display.html
-├── whatsapp_api.php
-├── whatsapp_config.php
-├── whatsapp_webhook.php
-│
-├── planning-dashboard-logo.png
-├── planning-dashboard-logo-light.png
-├── favicon-32.png
-├── favicon-64.png
-├── favicon.svg
-├── logo_es.png                  ← Firmenlogo für PDFs/Rechnungen (kundenspezifisch!)
-│
-├── data/
-│   ├── .htaccess
-│   └── index.php
-│
-├── Datanorm/
-│   ├── datanorm.001
-│   ├── datanorm.wrg
-│   └── datpreis.001
-│
-├── icons/
-│   ├── icon.svg
-│   ├── icon-light.svg
-│   ├── icon-64.png
-│   ├── icon-180.png
-│   ├── icon-512.png
-│   ├── icon-light-512.png
-│   ├── icon-192.png
-│   ├── icon-192.svg
-│   └── icon-512.svg
-│
-├── src/
-│   ├── .htaccess
-│   ├── Auth.php
-│   ├── Database.php
-│   ├── DataService.php
-│   ├── Helpers.php
-│   ├── Handlers/
-│   │   ├── AdminActions.php
-│   │   ├── AuthActions.php
-│   │   ├── BaustelleActions.php
-│   │   ├── CatalogActions.php
-│   │   ├── CrudActions.php
-│   │   ├── DataActions.php
-│   │   ├── ExportActions.php
-│   │   ├── FileActions.php
-│   │   ├── PlanActions.php
-│   │   ├── TerminActions.php
-│   │   └── ZeiterfassungActions.php
-│   └── Services/
-│       ├── AuditService.php
-│       └── ZugferdService.php
-│
-└── whatsapp-bridge/
-    ├── Dockerfile
-    ├── package.json
-    └── server.js
+├── public/                      ← einziger Webroot (DocumentRoot)
+│   ├── api.php, din1090_api.php ← API-Einstiegspunkte
+│   ├── index.html, login.html, mobile.html, mobile_light.html, wochenplan_display.html
+│   ├── script.min.js, style.css, sw.js, manifest.json
+│   ├── logo_es.png              ← Firmenlogo für PDFs/Rechnungen (kundenspezifisch!)
+│   ├── icons/, lib/
+│   └── modules/<modul>/         ← Browser-Dateien der Module (JS/CSS)
+├── src/                         ← PHP-Code (nicht per HTTP erreichbar)
+├── modules/<modul>/             ← Modul-Backend (PHP, module.json)
+├── data/                        ← Datenbank, Uploads, Backups (Volume)
+├── Datanorm/                    ← optional: Großhändler-Kataloge
+├── cron_*.php, migrate.php      ← CLI-Skripte (Cron / Container-Start)
+├── VERSION                      ← App-Version (einzige Quelle)
+├── composer.json, composer.lock
+├── docker-compose.yml, Dockerfile.app, docker-entrypoint.sh
+└── .env                         ← kundenspezifisch (siehe 2.1)
 ```
+
+> **Ohne Docker** (z.B. Synology Web Station): Der Webserver muss auf `public/` zeigen,
+> **nicht** auf die Projektwurzel. Zeigt er versehentlich auf die Wurzel, leitet die
+> dortige `.htaccess` intern nach `public/` um; `src/` und `data/` bleiben gesperrt.
 
 **Nicht benötigt** für die Installation:
-- `logos/` Ordner (nur Design-Quelldateien)
-- `WHATSAPP_SETUP.md`, `INSTALLATION.md` (Dokumentation)
+- `tests/`, `docs/`, `.github/` (Entwicklung)
 - `vendor/` Ordner (wird beim Docker-Build automatisch erstellt)
 
 ---
@@ -187,7 +133,7 @@ APP_PORT=8082
 
 ### 2.2 Firmenlogo ersetzen
 
-Die Datei `logo_es.png` mit dem Firmenlogo des Kunden überschreiben. Dieses Logo wird verwendet für:
+Die Datei `public/logo_es.png` mit dem Firmenlogo des Kunden überschreiben. Dieses Logo wird verwendet für:
 - PDF-Rechnungen und Angebote
 - Berichte / Reports
 - Mobile Exports
@@ -292,7 +238,7 @@ Für automatische Erinnerungen per WhatsApp:
 
 ## 6. WhatsApp-Bridge einrichten (optional)
 
-Siehe [WHATSAPP_SETUP.md](WHATSAPP_SETUP.md) für die vollständige Anleitung.
+Siehe `WHATSAPP_SETUP.md` (liegt dem WhatsApp-Bridge-Paket bei) für die vollständige Anleitung.
 
 Kurzfassung:
 1. `whatsapp_config.php` mit API-Token und Bridge-URL konfigurieren

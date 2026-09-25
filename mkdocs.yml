@@ -1,0 +1,23 @@
+site_name: Baukalkulation ES
+site_description: Installation, Betrieb und Entwicklung
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  language: de
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Start: index.md
+  - Installation: installation.md
+  - Entwicklung: entwicklung.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences

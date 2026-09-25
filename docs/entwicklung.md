@@ -1,0 +1,77 @@
+# Entwicklung
+
+## Projektstruktur
+
+| Ordner/Datei | Inhalt |
+|---|---|
+| `public/` | Webroot. Nur was hier liegt, ist per HTTP erreichbar. |
+| `public/api.php` | API-Einstiegspunkt (`?action=…`), leitet an `src/Handlers/*` weiter |
+| `src/` | PHP-Backend, PSR-4-Namespace `App\` |
+| `modules/<name>/` | Modul-Backend (`module.json`, `backend/Module.php`, Datenbankschema) |
+| `public/modules/<name>/` | Browser-Dateien des Moduls (JS/CSS) |
+| `src/frontend/`, `modules/*/frontend/` | Quellen für den Vite-Build → `public/dist/` |
+| `cron_*.php`, `migrate.php` | CLI-Skripte (Cron, Container-Start) |
+| `tests/` | PHPUnit-Tests und Backup-Fixtures |
+| `data/` | Laufzeitdaten (SQLite, Uploads, Backups) – nie einchecken |
+| `VERSION` | App-Version, einzige Quelle |
+
+## Befehle
+
+| Zweck | make | ohne make |
+|---|---|---|
+| Abhängigkeiten | `make install` | `composer install && npm ci` |
+| Tests | `make test` | `vendor/bin/phpunit` |
+| Statische Analyse | `make type-check` | `vendor/bin/phpstan analyse --memory-limit=2G` |
+| Formatierung prüfen / korrigieren | `make lint` / `make fix` | `vendor/bin/php-cs-fixer check` / `fix` |
+| Frontend bauen | `make build` | `npm run minify && npm run build` |
+| Versionen prüfen | `make check-versions` | `node scripts/check-versions.mjs --strict` |
+
+Git-Hooks: `prek install` (oder `pre-commit install`) aktiviert die Prüfungen aus
+`.pre-commit-config.yaml` vor jedem Commit.
+
+## Tests
+
+- `tests/Unit/` – reine PHP-Funktionen.
+- `tests/Api/` – Charakterisierungstests: starten `public/api.php` im PHP-Built-in-Server
+  mit leerem Datenverzeichnis (`BK_DATA_DIR`) und prüfen das Verhalten über HTTP.
+  Sie halten das heutige Verhalten fest, damit Umbauten (z. B. PostgreSQL) nichts
+  unbemerkt verändern.
+- `tests/fixtures/legacy-v0/` – alter JSON-Datenstand (vor SQLite), Import über `migrate.php`.
+- `tests/fixtures/backups/v*.zip` – echte Backups früherer Versionen. Jede Datei muss sich in
+  eine frische Installation einspielen lassen. Bei jedem Release mit Schemaänderung
+  `make fixture` ausführen und die neue Datei einchecken.
+
+## Statische Analyse
+
+PHPStan läuft auf Level 5. Bestehende Befunde stehen in `phpstan-baseline.neon`; neuer Code
+muss ohne neue Einträge auskommen. Behobene Befunde aus der Baseline entfernen
+(`vendor/bin/phpstan analyse --generate-baseline`).
+
+PHP-CS-Fixer (PER-CS 2.0) prüft vorerst nur `tests/`. Die übrigen Dateien werden in einem
+eigenen, reinen Formatierungs-Commit umgestellt und danach in `.php-cs-fixer.dist.php` ergänzt.
+
+## Versionen und Cache-Busting
+
+1. Version nur in `VERSION` ändern, dann `npm run version:sync`
+   (überträgt sie nach `public/manifest.json` und `package.json`).
+2. Bei Änderungen an `public/script.js`: `npm run minify` und `?v=` in `index.html` + `sw.js`
+   sowie `CACHE_VERSION` in `sw.js` erhöhen.
+3. `make check-versions` meldet Abweichungen; die CI bricht dann ab.
+
+## Commits und Release
+
+Commit-Nachrichten nach [Conventional Commits](https://www.conventionalcommits.org/):
+`feat:`, `fix:`, `sec:`, `perf:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`.
+
+Release:
+
+```bash
+# VERSION anpassen, npm run version:sync, CHANGELOG.md ergänzen, committen
+git tag v2.11.0
+git push --tags
+```
+
+Die Release-Pipeline prüft, dass Tag und `VERSION` übereinstimmen, baut das Docker-Image
+(`ghcr.io/<owner>/<repo>:<version>`) mit SBOM und erstellt ein GitHub-Release mit
+Release-Notes aus den Commits (git-cliff). `CHANGELOG.md` bleibt die ausführliche,
+von Hand gepflegte Änderungshistorie.
