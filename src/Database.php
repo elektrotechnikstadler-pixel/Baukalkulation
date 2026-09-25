@@ -22,12 +22,6 @@ class Database
         return self::$pdo = $pdo;
     }
 
-    /** Öffnet eine SQLite-Datei (z. B. Sicherung) mit den Standard-Einstellungen der App, ohne Migration. */
-    public static function open(string $dbPath): Connection
-    {
-        return ConnectionConfig::openSqlite($dbPath);
-    }
-
     // ── Hilfs-Queries ────────────────────────────────────────
     public static function fetchOne(\PDO $db, string $sql, array $params = []): ?array
     {

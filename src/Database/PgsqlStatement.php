@@ -33,17 +33,11 @@ class PgsqlStatement extends \PDOStatement
     public function fetchAll(int $mode = \PDO::FETCH_DEFAULT, mixed ...$args): array
     {
         $rows = parent::fetchAll($mode, ...$args);
-        $cols = $this->numericColumns();
-        if (!$cols) return $rows;
-        if (($mode & \PDO::FETCH_COLUMN) === \PDO::FETCH_COLUMN && ($mode & \PDO::FETCH_KEY_PAIR) !== \PDO::FETCH_KEY_PAIR) {
-            $col = $cols[(int)($args[0] ?? 0)] ?? null;
+        if ($mode === \PDO::FETCH_COLUMN) {
+            $col = $this->numericColumns()[(int)($args[0] ?? 0)] ?? null;
             return $col !== null ? array_map(fn($v) => self::castValue($v, $col[1]), $rows) : $rows;
         }
-        if ($mode === \PDO::FETCH_KEY_PAIR) {
-            $col = $cols[1] ?? null;
-            return $col !== null ? array_map(fn($v) => self::castValue($v, $col[1]), $rows) : $rows;
-        }
-        return array_map([$this, 'castRow'], $rows);
+        return $this->numericColumns() ? array_map([$this, 'castRow'], $rows) : $rows;
     }
 
     public function fetchColumn(int $column = 0): mixed

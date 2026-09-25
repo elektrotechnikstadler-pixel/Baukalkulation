@@ -12,11 +12,6 @@ final class PgsqlDialect extends Dialect
     /** @var array<string,string> */
     private static array $cache = [];
 
-    public function name(): string
-    {
-        return 'pgsql';
-    }
-
     public function translate(string $sql): string
     {
         if (isset(self::$cache[$sql])) return self::$cache[$sql];
@@ -150,6 +145,12 @@ final class PgsqlDialect extends Dialect
     {
         $pdo->beginTransaction();
         $pdo->prepare('SELECT pg_advisory_xact_lock(hashtext(?))')->execute([$lockName]);
+    }
+
+    public function beginSnapshot(\PDO $pdo): void
+    {
+        $pdo->beginTransaction();
+        $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
     }
 
     public function relaxForeignKeys(\PDO $pdo): void

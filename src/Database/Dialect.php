@@ -17,8 +17,6 @@ abstract class Dialect
         };
     }
 
-    abstract public function name(): string;
-
     /** Überträgt SQL im SQLite-Stil in diesen Dialekt. */
     public function translate(string $sql): string
     {
@@ -47,6 +45,12 @@ abstract class Dialect
 
     /** Schreibtransaktion, die sofort gegen parallele Schreiber sperrt (z. B. fortlaufende Nummern). */
     abstract public function beginExclusive(\PDO $pdo, string $lockName): void;
+
+    /** Lesetransaktion mit gleichbleibendem Datenstand, z. B. für Sicherungen und Übertragungen. */
+    public function beginSnapshot(\PDO $pdo): void
+    {
+        $pdo->beginTransaction();
+    }
 
     /** Fremdschlüssel für einen Massenimport lockern; innerhalb der Transaktion aufrufen. */
     abstract public function relaxForeignKeys(\PDO $pdo): void;

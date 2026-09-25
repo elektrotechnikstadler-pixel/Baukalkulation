@@ -20,22 +20,68 @@ final class TableCopier
         $this->dstDialect = Dialect::for($dst);
     }
 
-    public function clear(string $table): void
+    /**
+     * Ersetzt den Inhalt der Zieltabellen durch den der Quelle.
+     * @param list<string> $tables
+     * @return array<string,int> Zeilen je Tabelle
+     */
+    public function copyAll(array $tables): array
     {
-        $this->dst->exec('DELETE FROM ' . Dialect::quoteIdentifier($table));
+        // Erst alles leeren, dann füllen: ON DELETE CASCADE darf bereits kopierte Zeilen nicht treffen.
+        foreach ($tables as $table) {
+            $this->dst->exec('DELETE FROM ' . Dialect::quoteIdentifier($table));
+        }
+        $counts = [];
+        foreach ($tables as $table) {
+            try {
+                $counts[$table] = $this->copyRows($table);
+            } catch (\PDOException $e) {
+                throw new \RuntimeException("Tabelle {$table} konnte nicht übernommen werden: " . $e->getMessage(), 0, $e);
+            }
+        }
+        $this->dstDialect->resetSequences($this->dst, $tables);
+        return $counts;
     }
 
-    /** Fügt alle Zeilen der Quelltabelle ins Ziel ein; gibt die Anzahl zurück. */
-    public function copyRows(string $table): int
+    /**
+     * Legt im Ziel fehlende Tabellen nach der Definition der SQLite-Quelle an –
+     * referenzierte Tabellen zuerst, weil PostgreSQL Fremdschlüssel sofort prüft.
+     * @param list<string> $tables
+     */
+    public function createMissingTables(array $tables): void
+    {
+        $ddl = [];
+        foreach ($tables as $table) {
+            if ($this->dstDialect->tableExists($this->dst, $table)) continue;
+            $sql = (string)$this->src->query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = " . $this->src->quote($table))->fetchColumn();
+            if (!preg_match('/^\s*CREATE TABLE\b/i', $sql) || str_contains($sql, ';')) {
+                throw new \RuntimeException("Unerwartete Tabellendefinition für {$table}.");
+            }
+            $ddl[$table] = $sql;
+        }
+        $done = [];
+        $create = function (string $table, array $path) use (&$create, &$done, $ddl): void {
+            if (isset($done[$table]) || isset($path[$table])) return;
+            preg_match_all('/\bREFERENCES\s+"?([a-z][a-z0-9_]*)"?/i', $ddl[$table], $m);
+            foreach ($m[1] as $dep) {
+                if (isset($ddl[$dep])) $create($dep, $path + [$table => true]);
+            }
+            $this->dst->exec($ddl[$table]);
+            $done[$table] = true;
+        };
+        foreach (array_keys($ddl) as $table) {
+            $create($table, []);
+        }
+    }
+
+    private function copyRows(string $table): int
     {
         $types = $this->dstDialect->columnTypes($this->dst, $table);
         $cols = array_values(array_intersect($this->srcDialect->columns($this->src, $table), array_keys($types)));
         if (!$cols) return 0;
 
         $convert = $this->dstDialect instanceof PgsqlDialect;
-        $notNull = $convert ? $this->dstDialect->notNullColumns($this->dst, $table) : [];
-        $colTypes = array_map(static fn(string $c): string => $types[$c], $cols);
-        $colNotNull = array_map(static fn(string $c): bool => in_array($c, $notNull, true), $cols);
+        $notNull = $convert ? array_flip($this->dstDialect->notNullColumns($this->dst, $table)) : [];
 
         $qt = Dialect::quoteIdentifier($table);
         $list = implode(', ', array_map([Dialect::class, 'quoteIdentifier'], $cols));
@@ -43,20 +89,14 @@ final class TableCopier
         $count = 0;
         foreach ($this->src->query("SELECT {$list} FROM {$qt}", \PDO::FETCH_NUM) as $row) {
             if ($convert) {
-                foreach ($row as $i => $v) {
-                    $row[$i] = self::convert($v, $colTypes[$i], $colNotNull[$i]);
+                foreach ($cols as $i => $col) {
+                    $row[$i] = self::convert($row[$i], $types[$col], isset($notNull[$col]));
                 }
             }
             $insert->execute($row);
             $count++;
         }
         return $count;
-    }
-
-    /** Identity-Zähler im Ziel nach dem Kopieren nachziehen. */
-    public function finish(array $tables): void
-    {
-        $this->dstDialect->resetSequences($this->dst, $tables);
     }
 
     private static function convert(mixed $v, string $type, bool $notNull): mixed

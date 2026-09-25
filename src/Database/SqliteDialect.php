@@ -3,11 +3,6 @@ namespace App\Database;
 
 final class SqliteDialect extends Dialect
 {
-    public function name(): string
-    {
-        return 'sqlite';
-    }
-
     public function tableNames(\PDO $pdo): array
     {
         return $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

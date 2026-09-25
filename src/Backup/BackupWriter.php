@@ -2,7 +2,7 @@
 namespace App\Backup;
 
 use App\Core\ModuleLoader;
-use App\Database;
+use App\Database\ConnectionConfig;
 use App\Database\Dialect;
 use App\Database\Migrator;
 use App\Database\TableCopier;
@@ -101,42 +101,36 @@ final class BackupWriter
     {
         $tmp = $dbFile . '.tmp';
         if (is_file($tmp)) unlink($tmp);
-        self::fillSqlite($db, $tmp);
-        // Windows: Datei erst nach dem Schließen aller Verbindungen (auch in Zyklen, z. B. Phinx) umbenennbar.
-        gc_collect_cycles();
-        if (!rename($tmp, $dbFile)) {
-            throw new \RuntimeException('Datenbank-Sicherung konnte nicht abgelegt werden.');
-        }
-    }
-
-    private static function fillSqlite(\PDO $db, string $path): void
-    {
-        $lite = Database::open($path);
+        $lite = ConnectionConfig::openSqlite($tmp);
         $lite->exec('PRAGMA journal_mode=DELETE');
         Migrator::migrate($lite);
         (new ModuleLoader($lite))->migrateAll(false);
 
-        $ownTx = !$db->inTransaction();
-        if ($ownTx) {
-            $db->beginTransaction();
-            $db->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
-        }
-        try {
-            $liteDialect = Dialect::for($lite);
-            $copier = new TableCopier($db, $lite);
-            $lite->beginTransaction();
-            foreach (Dialect::for($db)->tableNames($db) as $table) {
-                if ($table === Migrator::TABLE) continue;
-                if (!$liteDialect->tableExists($lite, $table)) {
-                    error_log("[Backup] Tabelle {$table} ist in SQLite unbekannt und wird nicht gesichert.");
-                    continue;
-                }
-                $copier->clear($table);
-                $copier->copyRows($table);
+        $tables = [];
+        foreach (Dialect::for($db)->tableNames($db) as $table) {
+            if ($table === Migrator::TABLE) continue;
+            if (Dialect::for($lite)->tableExists($lite, $table)) {
+                $tables[] = $table;
+            } else {
+                error_log("[Backup] Tabelle {$table} ist in SQLite unbekannt und wird nicht gesichert.");
             }
+        }
+
+        $ownTx = !$db->inTransaction();
+        if ($ownTx) Dialect::for($db)->beginSnapshot($db);
+        try {
+            $lite->beginTransaction();
+            (new TableCopier($db, $lite))->copyAll($tables);
             $lite->commit();
         } finally {
             if ($ownTx && $db->inTransaction()) $db->commit();
+        }
+
+        // Windows: Datei erst nach dem Schließen aller Verbindungen (auch in Zyklen, z. B. Phinx) umbenennbar.
+        unset($lite);
+        gc_collect_cycles();
+        if (!rename($tmp, $dbFile)) {
+            throw new \RuntimeException('Datenbank-Sicherung konnte nicht abgelegt werden.');
         }
     }
 

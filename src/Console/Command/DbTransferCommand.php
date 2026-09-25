@@ -2,7 +2,6 @@
 namespace App\Console\Command;
 
 use App\Core\ModuleLoader;
-use App\Database;
 use App\Database\ConnectionConfig;
 use App\Database\Dialect;
 use App\Database\Migrator;
@@ -22,8 +21,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'db:transfer', description: 'Datenbestand zwischen SQLite und PostgreSQL übertragen')]
 final class DbTransferCommand extends Command
 {
-    private const SKIP = [Migrator::TABLE, 'sqlite_sequence'];
-
     protected function configure(): void
     {
         $this
@@ -45,7 +42,7 @@ final class DbTransferCommand extends Command
             return Command::FAILURE;
         }
 
-        $sqlite = Database::open($sqlitePath);
+        $sqlite = ConnectionConfig::openSqlite($sqlitePath);
         $pgsql  = ConnectionConfig::openPgsql();
         [$src, $dst] = $direction === 'to-pgsql' ? [$sqlite, $pgsql] : [$pgsql, $sqlite];
 
@@ -62,45 +59,31 @@ final class DbTransferCommand extends Command
             (new ModuleLoader($db))->migrateAll(false);
         }
 
-        $dstDialect = Dialect::for($dst);
         if (!$input->getOption('force') && (int)$dst->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0) {
             $output->writeln('<error>Das Ziel enthält bereits Daten. Mit --force überschreiben.</error>');
             return Command::FAILURE;
         }
 
-        $srcTables = array_values(array_diff(Dialect::for($src)->tableNames($src), self::SKIP));
+        $dstDialect = Dialect::for($dst);
         $tables = [];
-        foreach ($srcTables as $table) {
-            if ($dstDialect->tableExists($dst, $table)) {
-                $tables[] = $table;
-            } elseif ($direction === 'to-pgsql' && preg_match('/^[a-z][a-z0-9_]*$/', $table)) {
-                $ddl = (string)$sqlite->query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = " . $sqlite->quote($table))->fetchColumn();
-                if (!preg_match('/^\s*CREATE TABLE\b/i', $ddl) || str_contains($ddl, ';')) {
-                    $output->writeln("<comment>Übersprungen (unbekannte Definition): {$table}</comment>");
-                    continue;
-                }
-                $dst->exec($ddl);
-                $tables[] = $table;
-            } else {
+        foreach (Dialect::for($src)->tableNames($src) as $table) {
+            if ($table === Migrator::TABLE) continue;
+            // Nach SQLite nur bekannte Tabellen; nach PostgreSQL legt createMissingTables() fehlende an.
+            if ($direction === 'to-sqlite' && !$dstDialect->tableExists($dst, $table)) {
                 $output->writeln("<comment>Übersprungen (im Ziel unbekannt): {$table}</comment>");
+                continue;
             }
+            $tables[] = $table;
         }
 
         $copier = new TableCopier($src, $dst);
-        $counts = [];
         $dstDialect->beforeBulkImport($dst);
-        $src->beginTransaction();
-        if ($src === $pgsql) $src->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+        Dialect::for($src)->beginSnapshot($src);
         $dst->beginTransaction();
         try {
             $dstDialect->relaxForeignKeys($dst);
-            foreach ($tables as $table) {
-                $copier->clear($table);
-            }
-            foreach ($tables as $table) {
-                $counts[$table] = $copier->copyRows($table);
-            }
-            $copier->finish($tables);
+            if ($direction === 'to-pgsql') $copier->createMissingTables($tables);
+            $counts = $copier->copyAll($tables);
             if ($violations = $dstDialect->foreignKeyViolations($dst)) {
                 throw new \RuntimeException("{$violations} ungültige Verknüpfungen im Ziel.");
             }
@@ -116,12 +99,10 @@ final class DbTransferCommand extends Command
 
         $rows = [];
         $mismatch = false;
-        foreach ($tables as $table) {
-            $q = 'SELECT COUNT(*) FROM ' . Dialect::quoteIdentifier($table);
-            $n = (int)$dst->query($q)->fetchColumn();
-            $ok = $n === $counts[$table] && $n === (int)$src->query($q)->fetchColumn();
-            $mismatch = $mismatch || !$ok;
-            $rows[] = [$table, $counts[$table], $ok ? 'ok' : "ABWEICHUNG ({$n})"];
+        foreach ($counts as $table => $count) {
+            $n = (int)$dst->query('SELECT COUNT(*) FROM ' . Dialect::quoteIdentifier($table))->fetchColumn();
+            $mismatch = $mismatch || $n !== $count;
+            $rows[] = [$table, $count, $n === $count ? 'ok' : "ABWEICHUNG ({$n})"];
         }
         (new Table($output))->setHeaders(['Tabelle', 'Zeilen', 'Prüfung'])->setRows($rows)->render();
         if ($mismatch) {

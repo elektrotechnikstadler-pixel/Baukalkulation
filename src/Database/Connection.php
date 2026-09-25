@@ -7,7 +7,7 @@ namespace App\Database;
  */
 final class Connection extends \PDO
 {
-    public readonly Dialect $dialect;
+    private readonly Dialect $dialect;
 
     public function __construct(string $dsn, ?string $username = null, ?string $password = null, array $options = [])
     {

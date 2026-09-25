@@ -1,7 +1,7 @@
 <?php
 namespace App\Backup;
 
-use App\Database;
+use App\Database\ConnectionConfig;
 use App\Database\Dialect;
 use App\Database\Migrator;
 use App\Database\TableCopier;
@@ -54,7 +54,6 @@ final class Importer
             $result['rev'] = $res['rev'];
 
             if ($source !== null) {
-                $copier = new TableCopier($source['pdo'], $this->db);
                 $tables = [];
                 foreach ($source['tables'] as $table) {
                     if (!$this->shouldCopy($table, $mode)) {
@@ -66,23 +65,12 @@ final class Importer
                     }
                     $tables[] = $table;
                 }
-                $current = null;
+                $copier = new TableCopier($source['pdo'], $this->db);
                 try {
-                    $this->createMissingTables($source['pdo'], $tables);
-                    // Erst alles leeren, dann füllen: ON DELETE CASCADE darf bereits kopierte Zeilen nicht treffen.
-                    foreach ($tables as $current) {
-                        $copier->clear($current);
-                    }
-                    foreach ($tables as $current) {
-                        $result['tables'][$current] = $copier->copyRows($current);
-                    }
-                    $current = null;
-                    $copier->finish($tables);
-                } catch (\PDOException $e) {
-                    throw new InvalidBackupException(
-                        ($current !== null ? "Tabelle {$current} konnte nicht übernommen werden: " : 'Tabellen konnten nicht übernommen werden: ')
-                        . $e->getMessage()
-                    );
+                    $copier->createMissingTables($tables);
+                    $result['tables'] = $copier->copyAll($tables);
+                } catch (\RuntimeException $e) {
+                    throw new InvalidBackupException($e->getMessage());
                 }
             }
 
@@ -134,7 +122,7 @@ final class Importer
             throw new \RuntimeException('Sicherungs-DB konnte nicht kopiert werden.');
         }
         try {
-            $pdo = Database::open($path);
+            $pdo = ConnectionConfig::openSqlite($path);
             if (strtolower((string)$pdo->query('PRAGMA integrity_check')->fetchColumn()) !== 'ok') {
                 throw new InvalidBackupException('Die Datenbank in der Sicherung ist beschädigt.');
             }
@@ -161,37 +149,5 @@ final class Importer
         if (in_array($table, self::SKIP_TABLES, true)) return false;
         if (in_array($table, self::REPLACE_ONLY_TABLES, true)) return $mode === self::MODE_REPLACE;
         return true;
-    }
-
-    /**
-     * Legt im Ziel fehlende Tabellen (z. B. Modul noch nie geladen) nach der Definition der Sicherung an –
-     * referenzierte Tabellen zuerst, weil PostgreSQL Fremdschlüssel sofort prüft.
-     * @param list<string> $tables
-     */
-    private function createMissingTables(\PDO $src, array $tables): void
-    {
-        $dialect = Dialect::for($this->db);
-        $ddl = [];
-        foreach ($tables as $table) {
-            if ($dialect->tableExists($this->db, $table)) continue;
-            $sql = (string)$src->query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = " . $src->quote($table))->fetchColumn();
-            if (!preg_match('/^\s*CREATE TABLE\b/i', $sql) || str_contains($sql, ';')) {
-                throw new InvalidBackupException("Unerwartete Tabellendefinition für {$table}.");
-            }
-            $ddl[$table] = $sql;
-        }
-        $done = [];
-        $create = function (string $table, array $path) use (&$create, &$done, $ddl): void {
-            if (isset($done[$table]) || isset($path[$table])) return;
-            preg_match_all('/\bREFERENCES\s+"?([a-z][a-z0-9_]*)"?/i', $ddl[$table], $m);
-            foreach ($m[1] as $dep) {
-                if (isset($ddl[$dep])) $create($dep, $path + [$table => true]);
-            }
-            $this->db->exec($ddl[$table]);
-            $done[$table] = true;
-        };
-        foreach (array_keys($ddl) as $table) {
-            $create($table, []);
-        }
     }
 }
