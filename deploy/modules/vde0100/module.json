@@ -1,0 +1,16 @@
+{
+  "name": "vde0100",
+  "title": "VDE 0100 Prüfprotokolle",
+  "version": "0.2.0",
+  "icon": "⚡",
+  "tier": "professional",
+  "module_file": "backend/Module.php",
+  "module_class": "App\\Modules\\Vde0100\\Module",
+  "frontend": {
+    "js": "modules/vde0100/vde0100.js",
+    "css": "modules/vde0100/vde0100.css"
+  },
+  "permissions": ["admin", "master", "normal"],
+  "feature_flag": "vde0100",
+  "depends_on": []
+}

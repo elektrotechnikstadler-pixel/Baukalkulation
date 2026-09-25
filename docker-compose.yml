@@ -1,0 +1,113 @@
+# docker-compose.yml – Baukalkulation Elektrotechnik Stadler
+# =======================================================
+# Starten:   docker compose up -d
+# Stoppen:   docker compose down
+# Neu bauen: docker compose up -d --build
+# Logs:      docker compose logs -f
+#
+# Modulare Installation für kleine NAS:
+#   - OCR aus:  ENABLE_OCR=false im .env oder export setzen → kleineres Image
+#   - WhatsApp: docker compose --profile whatsapp up -d
+# =======================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        # Build-Flags für optionale Module (siehe Dockerfile.app)
+        ENABLE_OCR: "${ENABLE_OCR:-true}"      # NAS: "false" → kleineres Image, nur Dateiname-Erkennung
+    container_name: ${APP_NAME:-baukalkulation-es-app}
+    restart: unless-stopped
+    # Zeit für den Graceful-Shutdown (WAL-Checkpoint + Sicherung im Entrypoint),
+    # bevor Docker den Container hart beendet. Schützt vor Datenverlust bei Neustart.
+    stop_grace_period: 30s
+    # Autoheal beobachtet nur Container mit diesem Label und startet sie bei
+    # Healthcheck-Status "unhealthy" automatisch neu (siehe Service "autoheal").
+    # WICHTIG bei mehreren Instanzen auf EINEM Host: Der Label-Name muss je
+    # Instanz eindeutig sein (AUTOHEAL_LABEL), sonst wuerde der Autoheal der
+    # einen Instanz auch die App der anderen Instanz neu starten.
+    labels:
+      - "${AUTOHEAL_LABEL:-autoheal}=true"
+    ports:
+      - "${APP_PORT:-8081}:80"
+    environment:
+      # Zeitzone
+      TZ: "${TZ:-Europe/Berlin}"
+      # Laufzeit-Feature-Flags (Frontend-Gating)
+      APP_ENABLE_OCR:       "${ENABLE_OCR:-true}"
+      APP_ENABLE_WHATSAPP:  "${ENABLE_WHATSAPP:-false}"
+    volumes:
+      - ${DATA_DIR:-./data}:/var/www/html/data
+      - ${UPLOADS_DIR:-./data/uploads}:/var/www/html/data/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api.php?action=check"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Log-Rotation: verhindert, dass die Container-Logs die Platte volllaufen
+    # lassen (haeufigster Grund, warum ein NAS nach Monaten stehenbleibt).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Ressourcen-Limits: verhindern, dass ein Speicherleck oder OCR den ganzen
+    # NAS lahmlegt. Bei sehr kleiner Hardware ggf. APP_MEM_LIMIT/CPUS senken.
+    mem_limit: ${APP_MEM_LIMIT:-1g}
+    cpus: ${APP_CPUS:-1.5}
+
+  # ─── Autoheal: startet "unhealthy" Container automatisch neu ───
+  # Ein Healthcheck markiert einen haengenden Container nur als "unhealthy" –
+  # Docker startet ihn dadurch NICHT von selbst neu (restart greift nur bei
+  # echtem Prozess-Exit). Autoheal schliesst diese Luecke: es beobachtet alle
+  # Container mit Label "${AUTOHEAL_LABEL}=true" und startet sie bei "unhealthy" neu.
+  # Benoetigt Lesezugriff auf den Docker-Socket (read-only gemountet).
+  #
+  # MEHRERE INSTANZEN auf einem Host:
+  #   Pro Instanz in der .env eindeutige Werte setzen, z.B.
+  #     Instanz 1:  AUTOHEAL_NAME=erp1-autoheal   AUTOHEAL_LABEL=autoheal_erp1
+  #     Instanz 2:  AUTOHEAL_NAME=erp2-autoheal   AUTOHEAL_LABEL=autoheal_erp2
+  #   Dadurch hat jeder Autoheal einen eindeutigen Container-Namen UND beobachtet
+  #   nur die App der eigenen Instanz. (Zusaetzlich je Stack ein eigener Compose-
+  #   Projektname, z.B. "docker compose -p erp1 up -d".)
+  #   Alternativ: nur EINEN gemeinsamen Autoheal pro Host laufen lassen und ihn in
+  #   der zweiten Instanz weglassen (z.B. via "docker compose up -d app").
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: ${AUTOHEAL_NAME:-baukalkulation-es-autoheal}
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=${AUTOHEAL_LABEL:-autoheal}
+      - AUTOHEAL_INTERVAL=30        # alle 30s pruefen
+      - AUTOHEAL_START_PERIOD=60    # 60s Karenz nach Container-Start
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ─── Optional: WhatsApp-Bridge (nur mit Profil starten) ───
+  # Aktivieren: docker compose --profile whatsapp up -d
+  # Ressourcen: ~400–500 MB RAM dauerhaft (Puppeteer/Chromium)
+  whatsapp-bridge:
+    profiles: ["whatsapp"]
+    build:
+      context: ./whatsapp-bridge
+    container_name: ${WA_NAME:-baukalkulation-es-wa-bridge}
+    restart: unless-stopped
+    ports:
+      - "${WA_PORT:-3002}:3001"
+    environment:
+      - WA_API_TOKEN=${WA_API_TOKEN:-change-me}
+    volumes:
+      - wa-data:/app/data
+
+volumes:
+  wa-data:
+    driver: local

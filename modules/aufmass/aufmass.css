@@ -1,0 +1,267 @@
+/* ============================================================
+   Aufmaß-Modul – Styles (v2.1, Phase 3B)
+   ============================================================ */
+
+#aufmassView .aufmass-wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+#aufmassView .aufmass-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+#aufmassView .aufmass-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#aufmassView .aufmass-actions .btn { font-size: .85rem; }
+
+#aufmassView .aufmass-search {
+  display: grid; grid-template-columns: 1fr 180px 200px;
+  gap: 10px; margin-bottom: 12px;
+}
+
+#aufmassView .aufmass-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+#aufmassView .aufmass-card {
+  background: #fff; border: 1px solid var(--grey-100, #eee);
+  border-radius: 8px; padding: 12px; cursor: pointer;
+  transition: box-shadow .15s, transform .15s;
+}
+#aufmassView .aufmass-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.08); transform: translateY(-1px); }
+#aufmassView .aufmass-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+#aufmassView .aufmass-card-meta { font-size: .82rem; color: #666; }
+
+.aufmass-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: .72rem; font-weight: 500; white-space: nowrap;
+}
+.aufmass-status-entwurf    { background: #FFF3CD; color: #8A6D3B; }
+.aufmass-status-geprueft   { background: #D4EDDA; color: #1E6F2C; }
+.aufmass-status-uebernommen{ background: #D1ECF1; color: #0C5460; }
+
+#aufmassView .aufmass-empty {
+  padding: 24px; text-align: center; color: #999;
+  background: #fafafa; border: 1px dashed #ddd; border-radius: 8px;
+}
+
+#aufmassView .aufmass-banner {
+  background: #FFF3CD; color: #856404; padding: 10px 14px;
+  border-radius: 6px; margin-bottom: 14px; border: 1px solid #FFEAA7;
+}
+
+#aufmassView .aufmass-form-grid {
+  display: grid; grid-template-columns: 1fr 320px; gap: 10px; margin-bottom: 18px;
+}
+#aufmassView .aufmass-form-grid label {
+  display: flex; flex-direction: column; gap: 3px; font-size: .82rem;
+}
+#aufmassView .aufmass-form-grid label.full { grid-column: 1 / -1; }
+#aufmassView .aufmass-form-grid label > span { color: #555; font-weight: 500; }
+
+#aufmassView .aufmass-section { margin-top: 18px; }
+#aufmassView .aufmass-section-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+
+#aufmassView .aufmass-abschnitt-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  padding: 6px 8px; background: #fafafa; border-radius: 6px;
+}
+#aufmassView .aufmass-abschnitt-row input { flex: 1; }
+#aufmassView .aufmass-abs-handle { cursor: grab; color: #aaa; }
+
+#aufmassView .aufmass-pos-table {
+  width: 100%; border-collapse: collapse; background: #fff;
+  border: 1px solid var(--grey-100, #eee); border-radius: 8px; overflow: hidden;
+}
+#aufmassView .aufmass-pos-table th {
+  background: var(--grey-50, #fafafa); font-size: .76rem; text-transform: uppercase;
+  letter-spacing: .03em; color: #555; text-align: left; padding: 8px 8px;
+  border-bottom: 1px solid var(--grey-100, #eee);
+}
+#aufmassView .aufmass-pos-table td {
+  padding: 6px 8px; border-bottom: 1px solid var(--grey-100, #f1f1f1);
+  font-size: .85rem; vertical-align: top;
+}
+#aufmassView .aufmass-pos-table input.form-control,
+#aufmassView .aufmass-pos-table select.form-control {
+  padding: 5px 7px; font-size: .85rem;
+}
+#aufmassView .aufmass-pos-table .text-right { text-align: right; }
+#aufmassView .aufmass-formel { font-family: 'Consolas', monospace; }
+#aufmassView .aufmass-menge-out {
+  font-size: .8rem; color: #1B7A1B; margin-top: 2px; font-weight: 600;
+}
+#aufmassView .aufmass-menge-out.aufmass-menge-err { color: #C0392B; }
+
+.aufmass-ref-pill {
+  display: inline-block; margin-top: 3px;
+  background: #E0F7FA; color: #007F97;
+  padding: 1px 6px; border-radius: 10px; font-size: .7rem;
+}
+
+#aufmassView .btn-icon {
+  background: transparent; border: 1px solid var(--grey-100, #ddd);
+  padding: 3px 7px; border-radius: 5px; cursor: pointer; color: #444;
+  font-size: .85rem;
+}
+#aufmassView .btn-icon:hover { background: var(--grey-50, #f5f5f5); }
+#aufmassView .btn-icon-danger { color: #C0392B; }
+#aufmassView .btn-icon-danger:hover { background: #FFF0EF; }
+
+@media (max-width: 720px) {
+  #aufmassView .aufmass-search { grid-template-columns: 1fr; }
+  #aufmassView .aufmass-form-grid { grid-template-columns: 1fr; }
+  #aufmassView .aufmass-pos-table { display: block; overflow-x: auto; white-space: nowrap; }
+  /* Eigenständiges Scrolling wenn kein .scroll-view-Wrapper vorhanden */
+  #aufmassView .aufmass-wrap { padding: 12px; }
+
+  /* Editor-Header auf Mobile: Buttons umbrechen */
+  #aufmassView .aufmass-header { flex-direction: column; align-items: flex-start; }
+  #aufmassView .aufmass-header .aufmass-actions { width: 100%; }
+  #aufmassView .aufmass-actions .btn { flex: 1; text-align: center; font-size: .82rem; padding: 9px 8px; }
+
+  /* Aufmaß-Cards Mobile: volle Breite */
+  #aufmassView .aufmass-cards { grid-template-columns: 1fr; }
+  #aufmassView .aufmass-card { touch-action: manipulation; }
+
+  /* ── Positions-Cards auf Mobile ───────────────────────── */
+  .aufmass-pos-cards { display: flex; flex-direction: column; gap: 12px; }
+
+  .aufmass-pos-card {
+    background: #fff;
+    border: 1px solid var(--grey-100, #eee);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .aufmass-pos-card-sel { border-color: #B2DFF0; background: #F0FBFF; }
+
+  .aufmass-pos-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .aufmass-pos-chk-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+  .aufmass-pos-chk-label input[type="checkbox"] {
+    width: 20px; height: 20px; flex-shrink: 0;
+    accent-color: var(--teal-dark, #007F97);
+  }
+  .aufmass-pos-chk-label .form-control { flex: 1; min-width: 0; }
+  .aufmass-pos-del { flex-shrink: 0; padding: 8px 10px; }
+
+  .aufmass-pos-card-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .aufmass-pos-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 140px;
+    font-size: .8rem;
+  }
+  .aufmass-pos-field span { color: #666; font-weight: 500; }
+  .aufmass-pos-field-sm { flex: 0 0 calc(50% - 4px); min-width: 80px; }
+
+  .aufmass-pos-card-footer {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    border-top: 1px solid var(--grey-100, #f0f0f0);
+    padding-top: 10px;
+    flex-wrap: wrap;
+  }
+  .aufmass-pos-card-footer .form-control { flex: 1; min-width: 0; }
+  .aufmass-pos-lager-btn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: .82rem;
+    border-radius: 8px;
+    background: #E0F7FA;
+    color: #007F97;
+    border: 1px solid #B2DFF0;
+  }
+
+  .aufmass-pos-cards-sum {
+    text-align: right;
+    padding: 10px 4px 4px;
+    font-size: .9rem;
+    color: #333;
+    border-top: 1px solid var(--grey-100, #eee);
+    margin-top: 4px;
+  }
+}
+/* ============================================================
+   Aufmaß-Modul: Katalog-Picker & Foto-OCR Toolbar
+   ============================================================ */
+
+/* Positionen-Aktions-Gruppe in section-head */
+#aufmassView .aufmass-pos-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+#aufmassView .aufmass-pos-actions .btn-sm {
+  font-size: .8rem;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+/* Wenn section-head auf kleinen Screens überläuft: umbrechen */
+@media (max-width: 600px) {
+  #aufmassView .aufmass-section-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #aufmassView .aufmass-pos-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+}
+
+/* ── Dark Mode ───────────────────────────────────────────── */
+body.dark-theme #aufmassView .aufmass-card {
+  background: var(--surface, #2C2C2E);
+  border-color: var(--grey-100, #3A3A3C);
+}
+body.dark-theme #aufmassView .aufmass-card-meta {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme #aufmassView .aufmass-empty {
+  color: var(--grey-400, #98989D);
+  background: var(--surface, #2C2C2E);
+  border-color: var(--grey-200, #48484A);
+}
+body.dark-theme #aufmassView .aufmass-banner {
+  background: var(--yellow-light, #3A3020);
+  color: #ffb74d;
+  border-color: #5A4010;
+}
+body.dark-theme #aufmassView .aufmass-form-grid label > span {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme #aufmassView .btn-icon {
+  color: var(--grey-600, #AEAEB2);
+}
+body.dark-theme .aufmass-pos-card {
+  background: var(--surface, #2C2C2E);
+  border-color: var(--grey-100, #3A3A3C);
+}
+body.dark-theme .aufmass-pos-card-sel {
+  border-color: var(--blue, #00B4D8);
+  background: var(--grey-50, #252527);
+}
+body.dark-theme #aufmassView .aufmass-pos-card-meta {
+  color: var(--grey-400, #98989D);
+}

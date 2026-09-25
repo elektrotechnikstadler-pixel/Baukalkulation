@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Stundenerfassung – Light</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:         #00B4D8;
+      --blue-hover:   #0096B7;
+      --blue-light:   #E0F7FA;
+      --teal-gradient: linear-gradient(135deg, #00B4D8, #0096B7);
+      --bg:           #F5F5F7;
+      --surface:      #FFFFFF;
+      --grey-50:      #FAFAFA;
+      --grey-100:     #E8E8ED;
+      --grey-200:     #D2D2D7;
+      --grey-400:     #86868B;
+      --grey-500:     #6E6E73;
+      --grey-600:     #48484A;
+      --text:         #1D1D1F;
+      --text-light:   #86868B;
+      --danger:       #FF3B30;
+      --success:      #34C759;
+      --radius:       16px;
+      --radius-sm:    10px;
+      --radius-lg:    22px;
+      --shadow-sm:    0 2px 12px rgba(0,0,0,0.06);
+      --shadow-md:    0 8px 32px rgba(0,0,0,0.08);
+      --transition:   0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      --safe-bottom:  env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%; background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      color: var(--text); font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── App Shell ─────────────────────────────────────────── */
+    #app {
+      display: flex; flex-direction: column; height: 100%;
+      max-width: 600px; margin: 0 auto;
+    }
+
+    /* ── Topbar ────────────────────────────────────────────── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top, 0px));
+      background: rgba(255,255,255,0.88); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--grey-100); position: sticky; top: 0; z-index: 50;
+    }
+    .topbar-title { font-size: 1.15rem; font-weight: 700; }
+    .topbar-user {
+      font-size: .78rem; color: var(--grey-500); font-weight: 500;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .topbar-logout {
+      font-size: .72rem; color: var(--danger); cursor: pointer;
+      background: none; border: none; font-weight: 600; padding: 4px 8px;
+    }
+
+    /* ── Home View ─────────────────────────────────────────── */
+    .home-view {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .home-actions {
+      width: 100%; max-width: 360px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .home-btn {
+      width: 100%; padding: 28px 24px;
+      background: var(--teal-gradient); color: #fff;
+      border: none; border-radius: var(--radius-lg);
+      font-size: 1.2rem; font-weight: 700; cursor: pointer;
+      box-shadow: 0 8px 28px rgba(0,180,216,0.25);
+      transition: transform var(--transition), box-shadow var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+    }
+    .home-btn:active { transform: scale(0.97); }
+    .home-btn svg { width: 32px; height: 32px; stroke: #fff; stroke-width: 2; fill: none; }
+    .home-btn-secondary {
+      background: linear-gradient(135deg, #455A64, #607D8B);
+      box-shadow: 0 8px 24px rgba(69,90,100,0.22);
+      font-size: 1rem;
+      padding: 22px 20px;
+    }
+
+    /* ── Form View ─────────────────────────────────────────── */
+    .form-view {
+      flex: 1; display: flex; flex-direction: column;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+    }
+    .form-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px; border-bottom: 1px solid var(--grey-100);
+    }
+    .form-back {
+      background: none; border: none; font-size: 1.3rem; cursor: pointer;
+      color: var(--blue); padding: 4px; line-height: 1;
+    }
+    .form-header-title { font-size: 1rem; font-weight: 700; }
+
+    .form-scroll { flex: 1; padding: 16px; overflow-y: auto; }
+
+    .field { margin-bottom: 18px; }
+    .field-label {
+      display: block; font-size: .82rem; font-weight: 600;
+      color: var(--grey-500); margin-bottom: 6px;
+    }
+    .field-input, .field-select, .field-textarea {
+      width: 100%; padding: 14px 16px;
+      border: 1.5px solid var(--grey-200); border-radius: var(--radius-sm);
+      background: var(--surface); font-size: 1rem; color: var(--text);
+      font-family: inherit; transition: border-color var(--transition);
+      -webkit-appearance: none; appearance: none;
+    }
+    .field-input:focus, .field-select:focus, .field-textarea:focus {
+      outline: none; border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,180,216,0.12);
+    }
+    .field-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2386868B' stroke-width='2' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+    .field-textarea { min-height: 80px; resize: vertical; line-height: 1.4; }
+
+    /* Baustelle searchable dropdown */
+    .bs-wrap { position: relative; }
+    .bs-search {
+      width: 100%; padding: 14px 16px;
+      border: 1.5px solid var(--grey-200); border-radius: var(--radius-sm);
+      background: var(--surface); font-size: 1rem; color: var(--text);
+      font-family: inherit;
+    }
+    .bs-search:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,180,216,0.12); }
+    .bs-list {
+      margin-top: 4px; background: var(--surface);
+      border: 1px solid var(--grey-200); border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-md); overflow: hidden;
+    }
+    .bs-list.hidden { display: none; }
+    .bs-items { max-height: 200px; overflow-y: auto; }
+    .bs-item {
+      padding: 12px 16px; font-size: .95rem; cursor: pointer;
+      border-bottom: 1px solid var(--grey-100); color: var(--text);
+    }
+    .bs-item:last-child { border-bottom: none; }
+    .bs-item:active, .bs-item.active { background: var(--blue); color: #fff; }
+
+    /* ── Footer / Submit ───────────────────────────────────── */
+    .form-footer {
+      padding: 14px 16px; padding-bottom: calc(14px + var(--safe-bottom));
+      border-top: 1px solid var(--grey-100); background: var(--surface);
+      display: flex; gap: 10px;
+    }
+    .btn { flex: 1; padding: 14px; border: none; border-radius: var(--radius-sm);
+      font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: transform var(--transition); text-align: center; }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--teal-gradient); color: #fff; }
+    .btn-secondary { background: var(--grey-100); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; }
+
+    /* ── History List ──────────────────────────────────────── */
+    .history-section { padding: 0 16px 16px; }
+    .history-title {
+      font-size: .82rem; font-weight: 700; color: var(--grey-400);
+      text-transform: uppercase; letter-spacing: .5px;
+      margin: 20px 0 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .history-card {
+      background: var(--surface); border-radius: var(--radius-sm);
+      border: 1px solid var(--grey-100); padding: 12px 14px; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .history-left { flex: 1; }
+    .history-date { font-size: .78rem; color: var(--grey-400); margin-bottom: 2px; }
+    .history-type { font-weight: 600; font-size: .9rem; }
+    .history-detail { font-size: .82rem; color: var(--grey-500); margin-top: 2px; }
+    .history-hours {
+      font-size: 1.1rem; font-weight: 700; color: var(--blue);
+      white-space: nowrap; margin-left: 12px;
+    }
+    .history-del {
+      background: none; border: none; color: var(--danger); font-size: 1.2rem;
+      cursor: pointer; padding: 2px 6px; margin-left: 4px; opacity: .6;
+    }
+    .history-del:active { opacity: 1; }
+    .history-edit {
+      background: none; border: none; color: var(--blue); font-size: 1.05rem;
+      cursor: pointer; padding: 2px 6px; margin-left: 4px; opacity: .6;
+    }
+    .history-edit:active { opacity: 1; }
+
+    /* ── Toast ─────────────────────────────────────────────── */
+    .tages-info-strip {
+      display: flex; gap: 8px; margin-bottom: 12px; width: 100%; max-width: 360px;
+    }
+    .tages-info-tile {
+      flex: 1; background: var(--surface); border-radius: var(--radius-sm);
+      border: 1px solid var(--grey-100); padding: 10px 12px; text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .tages-info-label {
+      font-size: .72rem; font-weight: 600; color: var(--grey-400);
+      text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px;
+    }
+    .tages-info-value { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+    .toast {
+      position: fixed; bottom: calc(20px + var(--safe-bottom)); left: 50%; transform: translateX(-50%);
+      padding: 12px 24px; border-radius: 980px;
+      font-size: .88rem; font-weight: 600; color: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 999;
+      opacity: 0; transition: opacity .3s;
+    }
+    .toast.show { opacity: 1; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+
+    .hidden { display: none !important; }
+
+    /* ============================================================
+       DARK THEME
+       ============================================================ */
+    body.dark-theme {
+      --bg:         #1C1C1E; --surface: #2C2C2E;
+      --grey-50:    #242426; --grey-100: #3A3A3C; --grey-200: #48484A;
+      --grey-400:   #98989D; --grey-500: #8E8E93; --grey-600: #AEAEB2;
+      --text:       #F5F5F7; --text-light: #98989D;
+      --blue-light: #1A253A; --danger-light: #3A2020;
+    }
+    body.dark-theme .topbar {
+      background: rgba(28,28,30,0.92); border-bottom-color: rgba(255,255,255,0.08);
+    }
+    body.dark-theme .field-input, body.dark-theme .field-select, body.dark-theme .field-textarea,
+    body.dark-theme .bs-search {
+      background: var(--grey-100); color: var(--text); border-color: var(--grey-200);
+    }
+    body.dark-theme .field-input:focus, body.dark-theme .field-select:focus, body.dark-theme .field-textarea:focus,
+    body.dark-theme .bs-search:focus {
+      border-color: var(--blue); background: var(--grey-100);
+    }
+    body.dark-theme .form-footer { background: var(--surface); border-top-color: var(--grey-200); }
+    body.dark-theme .btn-secondary { background: var(--grey-100); color: var(--text); }
+    body.dark-theme .history-card { background: var(--surface); border-color: var(--grey-100); }
+    body.dark-theme .bs-list { background: var(--surface); border-color: var(--grey-200); }
+    body.dark-theme .bs-item { border-bottom-color: var(--grey-100); color: var(--text); }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- ── Topbar ──────────────────────────────────────────── -->
+  <div class="topbar">
+    <span class="topbar-title">⏱ Stundenerfassung</span>
+    <span class="topbar-user">
+      <span id="userName"></span>
+      <button class="topbar-logout" onclick="doLogout()">Logout</button>
+    </span>
+  </div>
+
+  <!-- ── VIEW: Home ──────────────────────────────────────── -->
+  <div id="viewHome" class="home-view">
+    <div class="home-actions">
+      <div class="tages-info-strip" id="lightTagesInfo" style="display:none">
+        <div class="tages-info-tile">
+          <div class="tages-info-label">Heute Ist</div>
+          <div class="tages-info-value" id="lightTagesIst">– h</div>
+        </div>
+        <div class="tages-info-tile">
+          <div class="tages-info-label">Heute Soll</div>
+          <div class="tages-info-value" id="lightTagesSoll">– h</div>
+        </div>
+      </div>
+      <button class="home-btn" onclick="showForm()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Stunden eintragen
+      </button>
+
+      <div id="appVersionFooter" style="text-align:center;margin-top:6px;font-size:.72rem;color:var(--grey-400,#86868B)"></div>
+    </div>
+  </div>
+
+  <!-- ── VIEW: Form ──────────────────────────────────────── -->
+  <div id="viewForm" class="form-view hidden">
+    <div class="form-header">
+      <button class="form-back" onclick="showHome()">‹</button>
+      <span class="form-header-title" id="formHeaderTitle">Neuer Eintrag</span>
+    </div>
+    <div class="form-scroll">
+      <!-- Datum -->
+      <div class="field">
+        <label class="field-label" id="fDatumLabel">Datum</label>
+        <input type="date" class="field-input" id="fDatum">
+      </div>
+      <!-- Datum bis (nur bei Urlaub/Krank/Sonstig als Zeitraum) -->
+      <div class="field" id="fieldDatumBis" style="display:none">
+        <label class="field-label">Datum bis</label>
+        <input type="date" class="field-input" id="fDatumBis">
+      </div>
+      <!-- Art -->
+      <div class="field">
+        <label class="field-label">Art</label>
+        <select class="field-select" id="fTyp" onchange="toggleBaustelleField()">
+          <option value="arbeit">Arbeit</option>
+          <option value="gleitzeit">Gleitzeit</option>
+          <option value="abwesend">Abwesend</option>
+          <option value="urlaub">Urlaub</option>
+          <option value="krank">Krank</option>
+          <option value="sonstig">Sonstiges</option>
+        </select>
+      </div>
+      <!-- Sonstig-Umfang -->
+      <div class="field" id="fieldSonstigModus" style="display:none">
+        <label class="field-label">Umfang</label>
+        <div style="display:flex;gap:16px;align-items:center;padding:4px 0">
+          <label style="display:flex;align-items:center;gap:5px;font-size:.95rem"><input type="radio" name="fSonstigModus" value="ganztag" checked onchange="toggleBaustelleField()"> Ganzer Tag</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:.95rem"><input type="radio" name="fSonstigModus" value="zeitspanne" onchange="toggleBaustelleField()"> Zeitspanne</label>
+        </div>
+      </div>
+      <!-- Stunden -->
+      <div class="field" id="fieldStunden">
+        <label class="field-label">Anzahl Stunden</label>
+        <input type="number" class="field-input" id="fStunden" min="0" max="24" step="0.25" placeholder="z.B. 8">
+      </div>
+      <div class="field" id="fieldVon" style="display:none">
+        <label class="field-label">Von (Uhrzeit)</label>
+        <input type="time" class="field-input" id="fVon" onchange="calcLightStunden()">
+      </div>
+      <div class="field" id="fieldBis" style="display:none">
+        <label class="field-label">Bis (Uhrzeit)</label>
+        <input type="time" class="field-input" id="fBis" onchange="calcLightStunden()">
+      </div>
+      <div class="field" id="fieldPause" style="display:none">
+        <label class="field-label">Pause (Minuten)</label>
+        <input type="number" class="field-input" id="fPause" min="0" max="120" step="5" placeholder="30" onchange="calcLightStunden()">
+      </div>
+      <!-- Baustelle -->
+      <div class="field" id="fieldBaustelle">
+        <label class="field-label">Baustelle</label>
+        <button type="button" id="fBsBtn" onclick="openLightBaustellePicker()"
+          style="display:block;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--grey-200,#e0e0e0);border-radius:10px;padding:10px 14px;font-size:.95rem;font-family:inherit;cursor:pointer;min-height:44px">
+          <span id="fBsBtnText" style="color:var(--grey-400,#aaa)">Baustelle wählen…</span>
+        </button>
+        <input type="hidden" id="fBsId" value="">
+      </div>
+      <!-- Tätigkeit / Erklärung -->
+      <div class="field">
+        <label class="field-label">Tätigkeit / Erklärung</label>
+        <textarea class="field-textarea" id="fBemerkung" placeholder="Was wurde gemacht?"></textarea>
+      </div>
+
+      <!-- History -->
+      <div class="history-section" id="historySection"></div>
+    </div>
+    <div class="form-footer">
+      <button class="btn btn-secondary" onclick="showHome()">Zurück</button>
+      <button class="btn btn-primary" onclick="saveEntry()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let currentUser = '';
+let zeitEntries = [];
+let lightZeitLoaded = false; // true erst nach erfolgreichem Laden -> Overwrite-Schutz (nur online relevant)
+let lightZeitRev = null;     // serverseitige Revision der eigenen Zeiterfassung (Optimistic Locking)
+
+// Geräteübergreifend stabile Identität; die fortlaufende entryId kollidiert offline.
+function newZeitUuid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'uuid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+let nextEntryId = 1;
+let editingLightId = null;
+let baustellenList = [];
+let kundenData       = [];
+let appSettings = {};
+let currentPerms = {};
+let lightSollTag = 8;
+let lightUrlaubProJahr = {};
+
+// Urlaub/Krank werden mit Soll/Tag (Mo–Fr) gutgeschrieben (Gleitzeit-neutral)
+function lightCreditStunden(datum) {
+  const dow = new Date(datum + 'T00:00:00').getDay();
+  return (dow >= 1 && dow <= 5) ? lightSollTag : 0;
+}
+
+// ── Datums-/Feiertags-Helfer ──────────────────────────────
+// Lokaler Datums-Key (vermeidet UTC-Verschiebung von toISOString)
+function lDateKey(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+// Bayerische Feiertage als Set von 'Y-m-d' (inkl. betrieblicher Feiertage aus den Einstellungen)
+function lGetHolidayKeys(year) {
+  const keys = new Set();
+  const fixed = [[0,1],[0,6],[4,1],[7,15],[9,3],[10,1],[11,25],[11,26]];
+  fixed.forEach(([m,d]) => keys.add(lDateKey(new Date(year, m, d))));
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4, l = (32+2*e+2*i-h-k) % 7;
+  const mm = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*mm+114)/31) - 1;
+  const day = ((h+l-7*mm+114) % 31) + 1;
+  const easter = new Date(year, month, day);
+  [-2,1,39,50,60].forEach(off => { const r = new Date(easter); r.setDate(r.getDate()+off); keys.add(lDateKey(r)); });
+  try {
+    const extra = appSettings.custom_feiertage ? JSON.parse(appSettings.custom_feiertage) : [];
+    extra.forEach(ft => { const dt = new Date((ft.datum||'') + 'T00:00:00'); if (!isNaN(dt) && dt.getFullYear() === year) keys.add(lDateKey(dt)); });
+  } catch(_) {}
+  return keys;
+}
+
+// ── Auth ───────────────────────────────────────────────────
+// Zeigt die vom Server gemeldete Software-Version in der Fußzeile.
+function setAppVersionFooter(version) {
+  if (!version) return;
+  window.appVersion = version;
+  const el = document.getElementById('appVersionFooter');
+  if (el) el.textContent = 'Version ' + version;
+}
+
+async function checkAuth() {
+  try {
+    const r = await fetch('api.php?action=check');
+    const j = await r.json();
+    if (!j.loggedIn) { window.location.replace('login.html?from=mobile_light.html'); return false; }
+    currentUser = j.username;
+    currentPerms = j.permissions || {};
+    document.getElementById('userName').textContent = currentUser;
+    setAppVersionFooter(j.version);
+    // Theme
+    const settings = j.settings || {};
+    appSettings = settings;
+    if (settings.dark_mode) document.body.classList.add('dark-theme');
+    // Custom Stundentypen in Select eintragen
+    const sel = document.getElementById('fTyp');
+    const customTypen = (settings.ze_custom_typen || []);
+    customTypen.forEach(t => {
+      const val = typeof t === 'string' ? t : t.value;
+      const lbl = typeof t === 'string' ? t : (t.label || t.value);
+      if (!sel.querySelector(`option[value="${val}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = lbl; sel.appendChild(opt);
+      }
+    });
+    return true;
+  } catch (e) {
+    window.location.replace('login.html?from=mobile_light.html');
+    return false;
+  }
+}
+
+async function doLogout() {
+  try { await fetch('api.php?action=logout'); } catch(e) {}
+  window.location.replace('login.html');
+}
+
+// ── Data Loading ───────────────────────────────────────────
+async function loadData() {
+  // Load Baustellen
+  try {
+    const r = await fetch('api.php?action=load');
+    const j = await r.json();
+    const allBs = j.data?.baustellen || j.baustellen || [];
+    baustellenList = allBs
+      .map(b => {
+        const d = typeof b.data === 'string' ? JSON.parse(b.data) : (b.data || {});
+        return { id: b.id, name: b.name || d.name || '(Ohne Name)', projektNr: b.projektNr || d.projektNr || '', kundeId: b.kundeId || d.kundeId || null };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  } catch (e) { console.warn('Baustellen laden fehlgeschlagen:', e); }
+
+  // Load existing Zeiterfassung
+  lightZeitLoaded = false;
+  try {
+    const r = await fetch('api.php?action=load_zeiterfassung');
+    if (r.status === 401) { window.location.replace('login.html?from=mobile_light.html'); return; }
+    const j = await r.json();
+    if (j.ok) {
+      zeitEntries = j.entries || [];
+      lightZeitLoaded = true;
+      lightZeitRev = typeof j.zeitRev === 'number' ? j.zeitRev : null;
+      nextEntryId = 1;
+      zeitEntries.forEach(e => { if (e.id >= nextEntryId) nextEntryId = e.id + 1; });
+    }
+  } catch (e) { console.warn('Zeiterfassung laden fehlgeschlagen:', e); }
+
+  // Load Sollstunden des Users für Tagesinfo
+  try {
+    const sr = await fetch('api.php?action=get_user_sollstunden');
+    const sj = await sr.json();
+    if (sj.ok || sj.sollstundenTag) lightSollTag = sj.sollstundenTag || 8;
+    lightUrlaubProJahr = (sj && sj.urlaubstageProJahr) || {};
+  } catch (e) { /* ignorieren */ }
+
+  renderLightTagesInfo();
+
+  // Load Kunden (für Suche im Baustellen-Picker)
+  try {
+    const kr = await fetch('api.php?action=load_kunden');
+    const kj = await kr.json();
+    if (kj.ok) kundenData = kj.kunden || [];
+  } catch (e) { console.warn('Kunden laden fehlgeschlagen:', e); }
+}
+
+// ── Navigation ─────────────────────────────────────────────
+function showHome() {
+  document.getElementById('viewHome').classList.remove('hidden');
+  document.getElementById('viewForm').classList.add('hidden');
+}
+
+function showForm() {
+  document.getElementById('viewHome').classList.add('hidden');
+  document.getElementById('viewForm').classList.remove('hidden');
+  editingLightId = null;
+  document.getElementById('formHeaderTitle').textContent = 'Neuer Eintrag';
+  // Set date to today
+  document.getElementById('fDatum').value = new Date().toISOString().split('T')[0];
+  document.getElementById('fDatumBis').value = '';
+  document.getElementById('fTyp').value = 'arbeit';
+  document.getElementById('fStunden').value = '';
+  document.getElementById('fBsId').value = '';
+  const fBsBtnTxt = document.getElementById('fBsBtnText');
+  if (fBsBtnTxt) { fBsBtnTxt.textContent = 'Baustelle wählen…'; fBsBtnTxt.style.color = 'var(--grey-400,#aaa)'; }
+  document.getElementById('fBemerkung').value = '';
+  document.getElementById('fVon').value = '';
+  document.getElementById('fBis').value = '';
+  document.getElementById('fPause').value = '';
+  const _rNew = document.querySelector('input[name="fSonstigModus"][value="ganztag"]');
+  if (_rNew) _rNew.checked = true;
+  toggleBaustelleField();
+  renderHistory();
+}
+
+// Bestehenden Eintrag in das Formular laden (nur für Einträge der letzten 5 Tage)
+function editLightEntry(id) {
+  const e = zeitEntries.find(en => en.id === id);
+  if (!e) return;
+  editingLightId = id;
+  document.getElementById('viewHome').classList.add('hidden');
+  document.getElementById('viewForm').classList.remove('hidden');
+  document.getElementById('formHeaderTitle').textContent = 'Eintrag bearbeiten';
+  document.getElementById('fDatum').value = e.datum || '';
+  document.getElementById('fDatumBis').value = '';
+  document.getElementById('fTyp').value = e.typ || 'arbeit';
+  document.getElementById('fStunden').value = e.stunden || '';
+  document.getElementById('fVon').value = e.von || '';
+  document.getElementById('fBis').value = e.bis || '';
+  document.getElementById('fPause').value = e.pause || '';
+  const _sonstigZeit = (e.typ === 'sonstig' && e.von && e.bis) ? 'zeitspanne' : 'ganztag';
+  const _rEdit = document.querySelector(`input[name="fSonstigModus"][value="${_sonstigZeit}"]`);
+  if (_rEdit) _rEdit.checked = true;
+  document.getElementById('fBemerkung').value = e.bemerkung || '';
+  document.getElementById('fBsId').value = e.baustelleId || '';
+  const btnText = document.getElementById('fBsBtnText');
+  if (btnText) {
+    const bName = e.baustelleId ? (baustellenList.find(b => b.id === e.baustelleId)?.name || '') : '';
+    if (bName) { btnText.textContent = bName; btnText.style.color = 'var(--text,#1a1a2e)'; }
+    else { btnText.textContent = 'Baustelle wählen…'; btnText.style.color = 'var(--grey-400,#aaa)'; }
+  }
+  toggleBaustelleField();
+  renderHistory();
+  document.querySelector('.form-scroll')?.scrollTo(0, 0);
+}
+
+function canDo(permission) {
+  return !!currentPerms[permission];
+}
+
+// ── Type Helper ───────────────────────────────────────────
+function isLightArbeitTyp(typ) {
+  if (typ === 'arbeit') return true;
+  const customTypen = appSettings.ze_custom_typen || [];
+  const t = customTypen.find(ct => (typeof ct === 'string' ? ct : ct.value) === typ);
+  if (!t) return false;
+  return typeof t === 'string' ? true : (t.isArbeit !== false);
+}
+
+// Custom-Arbeitstyp mit "Ist = Soll": keine Stundeneingabe, Soll/Tag als Ist.
+function lightTypIstGleichSoll(typ) {
+  const customTypen = appSettings.ze_custom_typen || [];
+  const t = customTypen.find(ct => (typeof ct === 'string' ? ct : ct.value) === typ);
+  if (!t || typeof t === 'string') return false;
+  return t.isArbeit !== false && t.istGleichSoll === true;
+}
+
+// ── Conditional Fields ─────────────────────────────────────
+function toggleBaustelleField() {
+  const typ = document.getElementById('fTyp').value;
+  const isArbeit = isLightArbeitTyp(typ);
+  const isIstSoll = lightTypIstGleichSoll(typ);
+  const isAbwesend = typ === 'abwesend';
+  const erweitert = appSettings.erweiterte_zeiterfassung;
+  const isSonstig = typ === 'sonstig';
+  const sonstigModus = document.querySelector('input[name="fSonstigModus"]:checked')?.value || 'ganztag';
+  const sonstigZeit = isSonstig && sonstigModus === 'zeitspanne';
+  const showVonBis = (isArbeit && erweitert && !isIstSoll) || sonstigZeit;
+  document.getElementById('fieldSonstigModus').style.display = isSonstig ? '' : 'none';
+  document.getElementById('fieldBaustelle').style.display = (isArbeit && !isIstSoll) ? '' : 'none';
+  document.getElementById('fieldStunden').style.display = isIstSoll ? 'none' : ((isArbeit && !erweitert) ? '' : ((sonstigZeit || isAbwesend) ? '' : 'none'));
+  document.getElementById('fieldVon').style.display = showVonBis ? '' : 'none';
+  document.getElementById('fieldBis').style.display = showVonBis ? '' : 'none';
+  document.getElementById('fieldPause').style.display = (isArbeit && erweitert && !isIstSoll) ? '' : 'none';
+  // Zeitraum (Datum bis) nur bei Urlaub/Krank/Sonstig-Ganztag – und nicht beim Bearbeiten
+  const showRange = !isArbeit && typ !== 'gleitzeit' && !isAbwesend && !sonstigZeit && editingLightId === null;
+  document.getElementById('fieldDatumBis').style.display = showRange ? '' : 'none';
+  document.getElementById('fDatumLabel').textContent = showRange ? 'Datum von' : 'Datum';
+  const bemLabel = document.querySelector('#fBemerkung')?.closest('.field')?.querySelector('.field-label');
+  if (bemLabel) bemLabel.textContent = isAbwesend ? 'Grund' : 'Tätigkeit / Erklärung';
+  const bemInput = document.getElementById('fBemerkung');
+  if (bemInput) bemInput.placeholder = isAbwesend ? 'z.B. Arztbesuch' : 'Was wurde gemacht?';
+}
+
+function calcLightStunden() {
+  const von = document.getElementById('fVon').value;
+  const bis = document.getElementById('fBis').value;
+  if (!von || !bis) return;
+  const [vh, vm] = von.split(':').map(Number);
+  const [bh, bm] = bis.split(':').map(Number);
+  let diff = (bh * 60 + bm) - (vh * 60 + vm);
+  if (diff < 0) diff += 1440;
+  const pause = parseFloat(document.getElementById('fPause').value) || 0;
+  document.getElementById('fStunden').value = Math.round(Math.max(0, (diff - pause) / 60) * 100) / 100;
+}
+
+// ── Baustelle Picker-Modal ────────────────────────────────
+function openLightBaustellePicker() {
+  document.getElementById('lightBsPickerModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'lightBsPickerModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;justify-content:flex-end';
+  modal.innerHTML = `
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,0.45)" onclick="document.getElementById('lightBsPickerModal')?.remove()"></div>
+    <div style="position:relative;background:var(--surface,#fff);border-radius:18px 18px 0 0;max-height:82vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0)">
+      <div style="display:flex;align-items:center;padding:14px 16px 10px;border-bottom:1px solid var(--grey-100,#eee)">
+        <span style="font-weight:700;font-size:1rem;flex:1">🏗️ Baustelle wählen</span>
+        <button onclick="document.getElementById('lightBsPickerModal')?.remove()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--grey-400,#aaa);padding:4px">✕</button>
+      </div>
+      <div style="padding:10px 14px">
+        <input type="text" id="lightBsPickerSearch" placeholder="🔍 Name oder Projekt-Nr…" oninput="_renderLightBsPickerList(this.value)"
+          style="width:100%;padding:9px 12px;border:1.5px solid var(--grey-200,#e0e0e0);border-radius:10px;font-size:.95rem;box-sizing:border-box">
+      </div>
+      <div id="lightBsPickerList" style="flex:1;overflow-y:auto;padding:0 8px 8px"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  _renderLightBsPickerList('');
+  setTimeout(() => document.getElementById('lightBsPickerSearch')?.focus(), 100);
+}
+
+function _renderLightBsPickerList(q) {
+  const container = document.getElementById('lightBsPickerList');
+  if (!container) return;
+  const tokens = q ? q.toLowerCase().split(/\s+/).filter(Boolean) : [];
+  const kundeHay = {};
+  kundenData.forEach(k => { kundeHay[k.id] = [k.firma, k.vorname, k.nachname].filter(Boolean).join(' ').toLowerCase(); });
+  const list = baustellenList.filter(b => {
+    if (!tokens.length) return true;
+    const kh = (b.kundeId && kundeHay[b.kundeId]) ? kundeHay[b.kundeId] : '';
+    const hay = ((b.name || '') + ' ' + (b.projektNr || '') + ' ' + kh).toLowerCase();
+    return tokens.every(t => hay.includes(t));
+  });
+  container.innerHTML = '';
+  const noneEl = document.createElement('div');
+  noneEl.style.cssText = 'padding:11px 12px;color:var(--grey-400,#aaa);font-size:.9rem;cursor:pointer;border-bottom:1px solid var(--grey-100,#eee)';
+  noneEl.textContent = '– keine Zuordnung –';
+  noneEl.onclick = () => {
+    document.getElementById('fBsId').value = '';
+    const btnText = document.getElementById('fBsBtnText');
+    if (btnText) { btnText.textContent = 'Baustelle wählen…'; btnText.style.color = 'var(--grey-400,#aaa)'; }
+    document.getElementById('lightBsPickerModal')?.remove();
+  };
+  container.appendChild(noneEl);
+  list.forEach(b => {
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:11px 12px;cursor:pointer;font-size:.9rem;border-bottom:1px solid var(--grey-100,#eee)';
+    el.textContent = (b.projektNr ? b.projektNr + ' – ' : '') + b.name;
+    el.onclick = () => {
+      document.getElementById('fBsId').value = b.id;
+      const btnText = document.getElementById('fBsBtnText');
+      if (btnText) { btnText.textContent = b.name; btnText.style.color = 'var(--text,#1a1a2e)'; }
+      document.getElementById('lightBsPickerModal')?.remove();
+    };
+    container.appendChild(el);
+  });
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:16px;text-align:center;color:var(--grey-400,#aaa);font-size:.9rem';
+    empty.textContent = 'Keine Baustellen gefunden';
+    container.appendChild(empty);
+  }
+}
+
+// ── Offline-Queue (Datenverlust-Schutz für Feldgeräte) ─────
+// Hält den letzten Zeiterfassungs-Stand in localStorage und holt ihn beim
+// `online`-Event bzw. beim App-Start automatisch nach.
+const LIGHT_OFFLINE_QUEUE_KEY = 'bk_offline_queue_light';
+
+function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms || 12000);
+  return fetch(url, { ...options, signal: ctrl.signal })
+    .finally(() => clearTimeout(timer));
+}
+function isOfflineError(err) {
+  return !navigator.onLine || (err && (err.name === 'AbortError' || err.name === 'TypeError'));
+}
+function enqueueLightOffline(body) {
+  try { localStorage.setItem(LIGHT_OFFLINE_QUEUE_KEY, JSON.stringify(body)); } catch (e) {}
+}
+function dequeueLightOffline() {
+  try { localStorage.removeItem(LIGHT_OFFLINE_QUEUE_KEY); } catch (e) {}
+}
+function readLightOffline() {
+  try { const v = localStorage.getItem(LIGHT_OFFLINE_QUEUE_KEY); return v ? JSON.parse(v) : null; }
+  catch (e) { return null; }
+}
+
+let _flushingLightQueue = false;
+async function flushLightOfflineQueue() {
+  if (_flushingLightQueue || !navigator.onLine) return;
+  const body = readLightOffline();
+  if (!body) return;
+  _flushingLightQueue = true;
+  try {
+    const r = await fetchWithTimeout('api.php?action=save_zeiterfassung', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }, 12000);
+    const j = await r.json().catch(() => ({}));
+    // Zwischenzeitlich hat ein anderes Gerät gespeichert: den Offline-Stand nicht
+    // blind darüberschreiben, sondern per clientUuid zusammenführen.
+    if (r.status === 409 && j.needsMerge) {
+      const merged = await mergeLightOfflineQueue(body);
+      if (merged) dequeueLightOffline();
+      return;
+    }
+    if (r.ok && j && j.ok) {
+      dequeueLightOffline();
+      if (typeof j.zeitRev === 'number') lightZeitRev = j.zeitRev;
+      toast('Offline-Änderungen gespeichert.', 'success');
+    }
+  } catch (e) { /* weiterhin offline → beim nächsten online-Event erneut */ }
+  finally { _flushingLightQueue = false; }
+}
+
+// Führt einen veralteten Offline-Snapshot mit dem Serverstand zusammen: Einträge
+// werden über clientUuid identifiziert, serverseitig fehlende ergänzt. Es wird
+// nichts gelöscht (fullSnapshot:false) – so geht keine fremde Buchung verloren.
+async function mergeLightOfflineQueue(offlineBody) {
+  try {
+    const r = await fetch('api.php?action=load_zeiterfassung');
+    const j = await r.json();
+    if (!j.ok) return false;
+
+    const server = j.entries || [];
+    const known = new Set(server.map(e => e.clientUuid).filter(Boolean));
+    let maxId = server.reduce((m, e) => Math.max(m, e.id || 0), 0);
+
+    const zusaetzlich = (offlineBody.entries || [])
+      .filter(e => e.clientUuid && !known.has(e.clientUuid))
+      .map(e => ({ ...e, id: ++maxId }));
+
+    if (!zusaetzlich.length) {
+      zeitEntries = server;
+      nextEntryId = maxId + 1;
+      lightZeitRev = typeof j.zeitRev === 'number' ? j.zeitRev : null;
+      renderHistory();
+      return true;
+    }
+
+    const merged = server.concat(zusaetzlich);
+    const mr = await fetchWithTimeout('api.php?action=save_zeiterfassung', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entries: merged, fullSnapshot: false, quelle: 'light',
+        baseZeitRev: typeof j.zeitRev === 'number' ? j.zeitRev : null,
+      })
+    }, 12000);
+    const mj = await mr.json().catch(() => ({}));
+    if (!mr.ok || !mj.ok) return false;
+
+    zeitEntries = merged;
+    nextEntryId = maxId + 1;
+    if (typeof mj.zeitRev === 'number') lightZeitRev = mj.zeitRev;
+    renderHistory();
+    toast(`${zusaetzlich.length} Offline-Eintrag(e) zusammengeführt.`, 'success');
+    return true;
+  } catch (e) { return false; }
+}
+window.addEventListener('online', flushLightOfflineQueue);
+
+// Zeiterfassung serverseitig speichern – bei Offline/Timeout lokale Änderung
+// behalten und einreihen (kein Rollback), bei echtem Serverfehler zurückrollen.
+async function saveLightZeitEntries({ successMsg, onSuccess, onRollback }) {
+  const body = { entries: zeitEntries, fullSnapshot: true, quelle: 'light', baseZeitRev: lightZeitRev };
+  if (navigator.onLine && !lightZeitLoaded) {
+    // Online, aber Erfassung nicht geladen -> nicht mit veraltetem Stand überschreiben.
+    if (onRollback) onRollback();
+    toast('Stundenerfassung nicht vollständig geladen – zum Schutz deiner Daten wurde nicht gespeichert. Bitte die App neu laden.', 'error');
+    return;
+  }
+  if (!navigator.onLine) {
+    enqueueLightOffline(body);
+    toast('Offline – wird nachgeholt.', 'success');
+    if (onSuccess) onSuccess();
+    return;
+  }
+  try {
+    const r = await fetchWithTimeout('api.php?action=save_zeiterfassung', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }, 12000);
+    const j = await r.json().catch(() => ({}));
+    // Ein anderes Gerät hat zwischenzeitlich gespeichert -> nichts überschreiben.
+    if (r.status === 409 && j.needsMerge) {
+      if (onRollback) onRollback();
+      await reloadLightZeit();
+      toast('Die Stunden wurden auf einem anderen Gerät geändert. Der aktuelle Stand wurde geladen.', 'error');
+      renderHistory();
+      return;
+    }
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Serverfehler');
+    dequeueLightOffline();
+    if (typeof j.zeitRev === 'number') lightZeitRev = j.zeitRev;
+    const imported = Number(j.autoImported || 0);
+    toast(imported > 0 ? `${successMsg} · ${imported} Projektbuchung(en)` : successMsg, 'success');
+    if (onSuccess) onSuccess();
+  } catch (e) {
+    if (isOfflineError(e)) {
+      enqueueLightOffline(body);
+      toast('Offline – wird nachgeholt.', 'success');
+      if (onSuccess) onSuccess();
+      return;
+    }
+    if (onRollback) onRollback();
+    toast('Fehler beim Speichern: ' + e.message, 'error');
+  }
+}
+
+// Lädt den Serverstand nach einem Sync-Konflikt neu.
+async function reloadLightZeit() {
+  try {
+    const r = await fetch('api.php?action=load_zeiterfassung');
+    const j = await r.json();
+    if (j.ok) {
+      zeitEntries = j.entries || [];
+      nextEntryId = zeitEntries.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
+      lightZeitRev = typeof j.zeitRev === 'number' ? j.zeitRev : null;
+    }
+  } catch (e) { console.warn('Neuladen fehlgeschlagen:', e); }
+}
+
+// ── Save Entry ─────────────────────────────────────────────
+async function saveEntry() {
+  const datum = document.getElementById('fDatum').value;
+  const typ = document.getElementById('fTyp').value;
+  const _isArbeit = isLightArbeitTyp(typ);
+  const _istSoll = lightTypIstGleichSoll(typ);
+  const _isAbwesend = (typ === 'abwesend');
+  const _credited = (typ === 'urlaub' || typ === 'krank');
+  const erweitert = appSettings.erweiterte_zeiterfassung;
+  const sonstigZeitspanne = (typ === 'sonstig' && (document.querySelector('input[name="fSonstigModus"]:checked')?.value === 'zeitspanne'));
+  let von = '', bis = '', pause = 0;
+
+  if (_isArbeit && erweitert && !_istSoll) {
+    von = document.getElementById('fVon').value;
+    bis = document.getElementById('fBis').value;
+    pause = parseFloat(document.getElementById('fPause').value) || 0;
+    if (!von || !bis) { toast('Bitte Von und Bis eingeben.', 'error'); return; }
+    calcLightStunden();
+  } else if (sonstigZeitspanne) {
+    von = document.getElementById('fVon').value;
+    bis = document.getElementById('fBis').value;
+    if (!von || !bis) { toast('Bitte Von und Bis eingeben.', 'error'); return; }
+    calcLightStunden();
+  }
+
+  const stunden = parseFloat(document.getElementById('fStunden').value) || 0;
+  const baustelleId = parseInt(document.getElementById('fBsId').value) || null;
+  const bemerkung = document.getElementById('fBemerkung').value.trim();
+  // Effektiv gespeicherte Stunden: "Ist = Soll" bucht automatisch Soll/Tag.
+  const effStunden = _istSoll
+    ? lightCreditStunden(datum)
+    : ((_isArbeit || _isAbwesend) ? stunden : (sonstigZeitspanne ? stunden : ((_credited || typ === 'sonstig') ? lightCreditStunden(datum) : 0)));
+
+  // Validation
+  if (!datum) { toast('Bitte Datum eingeben.', 'error'); return; }
+  if (_isArbeit && !_istSoll) {
+    if (stunden <= 0) { toast('Bitte Stunden eingeben.', 'error'); return; }
+  }
+  if (_isAbwesend) {
+    if (stunden <= 0) { toast('Bitte Stunden der Abwesenheit eingeben.', 'error'); return; }
+    if (!bemerkung)   { toast('Bitte einen Grund für die Abwesenheit angeben.', 'error'); return; }
+  }
+
+  if (_isArbeit && erweitert && !_istSoll) {
+    if (stunden > 10 && !confirm('Achtung: Über 10 Stunden Arbeitszeit (§ 3 ArbZG). Trotzdem speichern?')) return;
+    if (stunden >= 6 && pause < 30) toast('⚠ Bei >6h: mind. 30 Min. Pause (§ 4 ArbZG)', 'error');
+    if (stunden >= 9 && pause < 45) toast('⚠ Bei >9h: mind. 45 Min. Pause (§ 4 ArbZG)', 'error');
+    // Überschneidungscheck gegen bestehende Einträge desselben Tages
+    const conflicting = zeitEntries.find(e =>
+      e.datum === datum && isLightArbeitTyp(e.typ) && e.von && e.bis &&
+      e.id !== editingLightId &&
+      von < e.bis && bis > e.von
+    );
+    if (conflicting) {
+      toast(`⚠ Zeitüberschneidung mit Eintrag ${conflicting.von}–${conflicting.bis}`, 'error');
+      return;
+    }
+  } else if (_isArbeit) {
+    // Hinweis bei >10h Tagessumme im Normal-Modus
+    const tagSumme = zeitEntries.filter(e => e.datum === datum && isLightArbeitTyp(e.typ) && e.id !== editingLightId).reduce((s, e) => s + (e.stunden || 0), 0);
+    if (tagSumme + stunden > 10) {
+      toast(`⚠ Hinweis: Insgesamt ${(tagSumme + stunden).toFixed(1)}h für ${datum} – mehr als 10h (§ 3 ArbZG).`, 'error');
+    }
+  }
+
+  // Snapshot für Rollback bei Serverfehler
+  const snapshot = JSON.parse(JSON.stringify(zeitEntries));
+  const snapshotNextId = nextEntryId;
+  const wasEditing = editingLightId !== null;
+
+  if (wasEditing) {
+    // Urlaubslimit prüfen (dieser Eintrag ausgenommen)
+    if (typ === 'urlaub') {
+      const y = datum.slice(0, 4);
+      const limit = (lightUrlaubProJahr && lightUrlaubProJahr[y]) || 30;
+      const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && e.id !== editingLightId).length;
+      if (genommen + 1 > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
+    }
+    // Bestehenden Eintrag aktualisieren
+    const e = zeitEntries.find(en => en.id === editingLightId);
+    if (e) {
+      e.datum = datum; e.typ = typ;
+      e.stunden = effStunden;
+      e.baustelleId = (_isArbeit && !_istSoll) ? baustelleId : null;
+      e.bemerkung = bemerkung; e.von = von; e.bis = bis; e.pause = pause;
+    }
+    if (_isArbeit) {
+      const overlap = findLightTimeOverlap(zeitEntries);
+      if (overlap) { zeitEntries = snapshot; toast(overlap, 'error'); return; }
+    }
+  } else if (!_isArbeit && !_isAbwesend && typ !== 'gleitzeit') {
+    // Urlaub / Krank / Sonstig: optionaler Zeitraum über Werktage (Mo–Fr, ohne Feiertage)
+    const datumBis = document.getElementById('fDatumBis').value || datum;
+    const dates = [];
+    if (datumBis > datum) {
+      let cur = new Date(datum + 'T00:00:00');
+      const end = new Date(datumBis + 'T00:00:00');
+      let holidayKeys = lGetHolidayKeys(cur.getFullYear());
+      let holidayYear = cur.getFullYear();
+      while (cur <= end) {
+        if (cur.getFullYear() !== holidayYear) { holidayYear = cur.getFullYear(); holidayKeys = lGetHolidayKeys(holidayYear); }
+        const dow = cur.getDay();
+        const key = lDateKey(cur);
+        if (dow >= 1 && dow <= 5 && !holidayKeys.has(key)) dates.push(key);
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      dates.push(datum);
+    }
+    const existingDates = new Set(zeitEntries.filter(e => e.typ === typ).map(e => e.datum));
+    const neueDates = dates.filter(d => !existingDates.has(d));
+    // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30)
+    if (typ === 'urlaub') {
+      const byYear = {};
+      neueDates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; });
+      for (const y in byYear) {
+        const limit = (lightUrlaubProJahr && lightUrlaubProJahr[y]) || 30;
+        const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y)).length;
+        if (genommen + byYear[y] > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
+      }
+    }
+    neueDates.forEach(d => {
+      const _st = sonstigZeitspanne ? stunden : ((_credited || typ === 'sonstig') ? lightCreditStunden(d) : 0);
+      zeitEntries.push({ id: nextEntryId++, clientUuid: newZeitUuid(), datum: d, typ, stunden: _st, baustelleId: null, bemerkung, von: sonstigZeitspanne ? von : '', bis: sonstigZeitspanne ? bis : '', pause: 0 });
+    });
+  } else {
+    // Einzelner Arbeits-, Abwesenheits- oder Gleitzeit-Eintrag
+    const entry = { id: nextEntryId++, clientUuid: newZeitUuid(), datum, typ, stunden: effStunden, baustelleId: (_isArbeit && !_istSoll) ? baustelleId : null, bemerkung, von, bis, pause };
+    if (_isArbeit) {
+      const overlap = findLightTimeOverlap([...zeitEntries, entry]);
+      if (overlap) { nextEntryId--; toast(overlap, 'error'); return; }
+    }
+    zeitEntries.push(entry);
+  }
+
+  // Save all entries to server
+  await saveLightZeitEntries({
+    successMsg: wasEditing ? 'Aktualisiert!' : 'Gespeichert!',
+    onSuccess: () => {
+      // Bearbeitungsmodus beenden, Formular zurücksetzen
+      editingLightId = null;
+      document.getElementById('formHeaderTitle').textContent = 'Neuer Eintrag';
+      document.getElementById('fTyp').value = 'arbeit';
+      document.getElementById('fStunden').value = '';
+      document.getElementById('fDatumBis').value = '';
+      document.getElementById('fBsId').value = '';
+      const _btnTxt = document.getElementById('fBsBtnText');
+      if (_btnTxt) { _btnTxt.textContent = 'Baustelle wählen…'; _btnTxt.style.color = 'var(--grey-400,#aaa)'; }
+      document.getElementById('fBemerkung').value = '';
+      document.getElementById('fVon').value = '';
+      document.getElementById('fBis').value = '';
+      document.getElementById('fPause').value = '';
+      const _rReset = document.querySelector('input[name="fSonstigModus"][value="ganztag"]');
+      if (_rReset) _rReset.checked = true;
+      toggleBaustelleField();
+      renderHistory();
+    },
+    onRollback: () => {
+      zeitEntries = snapshot;
+      nextEntryId = snapshotNextId;
+    }
+  });
+}
+
+function findLightTimeOverlap(entries) {
+  const byDate = new Map();
+  entries.forEach(entry => {
+    if (!entry || entry.typ !== 'arbeit' || !entry.datum || !entry.von || !entry.bis) return;
+    const start = parseLightTimeToMinutes(entry.von);
+    const end = parseLightTimeToMinutes(entry.bis);
+    if (start === null || end === null || end <= start) return;
+    if (!byDate.has(entry.datum)) byDate.set(entry.datum, []);
+    byDate.get(entry.datum).push({ ...entry, start, end });
+  });
+
+  for (const entriesForDate of byDate.values()) {
+    entriesForDate.sort((left, right) => left.start - right.start);
+    for (let index = 1; index < entriesForDate.length; index++) {
+      const current = entriesForDate[index];
+      const previous = entriesForDate[index - 1];
+      if (current.start < previous.end) {
+        return `Das Zeitfenster ${current.von}-${current.bis} überschneidet sich mit ${previous.von}-${previous.bis}.`;
+      }
+    }
+  }
+  return '';
+}
+
+function parseLightTimeToMinutes(value) {
+  if (!/^\d{2}:\d{2}$/.test(value || '')) return null;
+  const [hours, minutes] = String(value).split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return (hours * 60) + minutes;
+}
+
+// ── Delete Entry ───────────────────────────────────────────
+async function deleteEntry(id) {
+  if (!confirm('Eintrag wirklich löschen?')) return;
+  const snapshot = JSON.parse(JSON.stringify(zeitEntries));
+  zeitEntries = zeitEntries.filter(e => e.id !== id);
+  await saveLightZeitEntries({
+    successMsg: 'Gelöscht.',
+    onSuccess: () => renderHistory(),
+    onRollback: () => { zeitEntries = snapshot; }
+  });
+}
+
+// ── History ────────────────────────────────────────────────
+function renderHistory() {
+  const section = document.getElementById('historySection');
+  // Show last 20 entries, newest first
+  let sorted = [...zeitEntries].sort((a, b) => b.datum.localeCompare(a.datum) || b.id - a.id);
+  // Abgeschlossene (per Jahreswechsel ausgeblendete) Jahre verbergen – Daten
+  // bleiben erhalten, nur die Anzeige ist gefiltert.
+  const lightAbschlussJahr = parseInt(appSettings.zeiterfassung_abschluss_jahr) || 0;
+  if (lightAbschlussJahr) {
+    sorted = sorted.filter(e => !e.datum || parseInt(e.datum.substring(0,4)) > lightAbschlussJahr);
+  }
+  const recent = sorted.slice(0, 20);
+  // Nur Einträge der letzten 5 Tage (datumsbasiert, inkl. Zukunft) dürfen bearbeitet/
+  // gelöscht werden – NICHT die letzten 5 Einträge, sonst blockieren z.B. Urlaubseinträge
+  // in der Zukunft die Bearbeitung aktueller Einträge.
+  const lightFiveDaysAgo = new Date(); lightFiveDaysAgo.setHours(0,0,0,0); lightFiveDaysAgo.setDate(lightFiveDaysAgo.getDate() - 5);
+  const editableIds = new Set(
+    zeitEntries
+      .filter(e => e.datum && new Date(e.datum + 'T00:00:00') >= lightFiveDaysAgo)
+      .map(e => e.id)
+  );
+
+  if (recent.length === 0) {
+    section.innerHTML = '<div class="history-title">Bisherige Einträge</div><p style="font-size:.85rem;color:var(--grey-400);text-align:center;padding:20px">Noch keine Einträge vorhanden.</p>';
+    return;
+  }
+
+  const typLabels = { arbeit: '🔧 Arbeit', gleitzeit: '⏰ Gleitzeit', abwesend: '🚪 Abwesend', urlaub: '🌴 Urlaub', krank: '🤒 Krank', sonstig: '📋 Sonstiges' };
+  let html = `<div class="history-title">Letzte Einträge (${zeitEntries.length} gesamt)</div>`;
+  // Nach Monat gruppieren und einklappbar darstellen
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const monthOrder = [];
+  const monthMap = {};
+  recent.forEach(e => {
+    const mk = (e.datum || '').substring(0, 7) || '?';
+    if (!monthMap[mk]) { monthMap[mk] = []; monthOrder.push(mk); }
+    monthMap[mk].push(e);
+  });
+  const renderCard = (e) => {
+    const bName = e.baustelleId ? (baustellenList.find(b => b.id === e.baustelleId)?.name || '') : '';
+    const datumDE = e.datum.split('-').reverse().join('.');
+    const vonBisInfo = (appSettings.erweiterte_zeiterfassung && e.von && e.bis) ? `<div class="history-detail">${e.von}–${e.bis} (${e.pause||0}′ Pause)</div>` : '';
+    return `<div class="history-card">
+      <div class="history-left">
+        <div class="history-date">${datumDE}</div>
+        <div class="history-type">${typLabels[e.typ] || e.typ}</div>
+        ${vonBisInfo}
+        ${bName ? `<div class="history-detail">${esc(bName)}</div>` : ''}
+        ${e.bemerkung ? `<div class="history-detail">${esc(e.bemerkung)}</div>` : ''}
+      </div>
+      ${e.stunden ? `<span class="history-hours">${Number(e.stunden).toFixed(2)}h</span>` : ''}
+      ${editableIds.has(e.id) ? `<button class="history-edit" onclick="editLightEntry(${e.id})" title="Bearbeiten">✎</button>` : ''}
+      ${editableIds.has(e.id) ? `<button class="history-del" onclick="deleteEntry(${e.id})" title="Löschen">×</button>` : ''}
+    </div>`;
+  };
+  monthOrder.forEach(mk => {
+    const entries = monthMap[mk];
+    const d = mk !== '?' ? new Date(mk + '-01') : null;
+    const label = d ? `${monthNames[d.getMonth()]} ${d.getFullYear()}` : 'Ohne Datum';
+    const stored = lightCollapsedMonths[mk];
+    const collapsed = stored === undefined ? (mk !== curMonth) : !!stored;
+    html += `<div onclick="toggleLightMonth('${mk}')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:.85rem;padding:8px 4px;margin-top:6px;border-bottom:1px solid #e5e5e5">
+      <span>${label} <span style="opacity:.55;font-weight:400">· ${entries.length}</span></span>
+      <span id="lightMonthChevron-${mk}">${collapsed ? '▸' : '▾'}</span>
+    </div>
+    <div id="lightMonth-${mk}"${collapsed ? ' style="display:none"' : ''}>${entries.map(renderCard).join('')}</div>`;
+  });
+  section.innerHTML = html;
+  renderLightTagesInfo();
+}
+
+// Einklappbare Monate in der Light-History (Persistenz pro Monat)
+let lightCollapsedMonths = {};
+try { lightCollapsedMonths = JSON.parse(localStorage.getItem('lightCollapsedMonths') || '{}') || {}; } catch(_) { lightCollapsedMonths = {}; }
+
+function toggleLightMonth(mk) {
+  const card = document.getElementById('lightMonth-' + mk);
+  const chev = document.getElementById('lightMonthChevron-' + mk);
+  if (!card) return;
+  const isCollapsed = card.style.display === 'none';
+  card.style.display = isCollapsed ? '' : 'none';
+  if (chev) chev.textContent = isCollapsed ? '▾' : '▸';
+  lightCollapsedMonths[mk] = !isCollapsed;
+  try { localStorage.setItem('lightCollapsedMonths', JSON.stringify(lightCollapsedMonths)); } catch(_) {}
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderLightTagesInfo() {
+  const strip = document.getElementById('lightTagesInfo');
+  const istEl = document.getElementById('lightTagesIst');
+  const sollEl = document.getElementById('lightTagesSoll');
+  if (!strip || !istEl || !sollEl) return;
+  const today = new Date().toISOString().split('T')[0];
+  const heuteIst = zeitEntries.filter(e => e.datum === today && (e.typ === 'arbeit' || e.typ === 'urlaub' || e.typ === 'krank')).reduce((s, e) => s + (e.stunden || 0), 0);
+  const dow = new Date().getDay(); // 0=So, 6=Sa
+  const heuteSoll = (dow >= 1 && dow <= 5) ? lightSollTag : 0;
+  istEl.textContent = heuteIst.toFixed(2) + ' h';
+  sollEl.textContent = heuteSoll.toFixed(2) + ' h';
+  sollEl.style.color = (heuteIst >= heuteSoll && heuteSoll > 0) ? '#28A745' : (heuteSoll === 0 ? '' : '#FF3B30');
+  strip.style.display = 'flex';
+}
+
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Init ───────────────────────────────────────────────────
+(async () => {
+  const ok = await checkAuth();
+  if (!ok) return;
+  await loadData();
+  flushLightOfflineQueue();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+    "name": "lager",
+    "title": "Lagerbestand",
+    "version": "0.1.0",
+    "icon": "📦",    "tier": "professional",    "module_file": "backend/Module.php",
+    "module_class": "App\\Modules\\Lager\\Module",
+    "frontend": {
+        "js": "modules/lager/lager.js",
+        "css": "modules/lager/lager.css"
+    },
+    "permissions": ["admin", "master", "normal"],
+    "feature_flag": "lager",
+    "depends_on": []
+}

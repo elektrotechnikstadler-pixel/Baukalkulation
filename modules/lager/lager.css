@@ -1,0 +1,382 @@
+/* ============================================================
+   Lager-Modul – Styles (v2.1, Phase 2B)
+   ============================================================ */
+
+#lagerView .lager-wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+#lagerView .lager-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+#lagerView .lager-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#lagerView .lager-actions .btn { font-size: .85rem; }
+
+#lagerView .lager-search {
+  display: grid;
+  grid-template-columns: 1fr 220px auto auto;
+  gap: 10px; margin-bottom: 12px; align-items: center;
+}
+#lagerView .lager-chk {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .85rem; color: #444; white-space: nowrap;
+}
+
+#lagerView .lager-table-wrap { overflow-x: auto; }
+#lagerView .lager-table {
+  width: 100%; border-collapse: collapse; background: #fff;
+  border: 1px solid var(--grey-100, #eee); border-radius: 8px; overflow: hidden;
+}
+#lagerView .lager-table th {
+  background: var(--grey-50, #fafafa); font-size: .78rem; text-transform: uppercase;
+  letter-spacing: .03em; color: #555; text-align: left; padding: 8px 10px;
+  border-bottom: 1px solid var(--grey-100, #eee);
+}
+#lagerView .lager-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--grey-100, #f1f1f1);
+  font-size: .88rem; vertical-align: middle;
+}
+#lagerView .lager-table .num { text-align: right; }
+#lagerView .lager-table tr:hover td { background: rgba(0, 180, 216, 0.04); }
+#lagerView .lager-row-empty td { background: rgba(255, 59, 48, 0.04); }
+#lagerView .lager-row-empty td strong { color: #999; }
+
+#lagerView .lager-bez { font-weight: 600; color: #222; }
+#lagerView .lager-kat { font-size: .75rem; color: #888; }
+#lagerView .lager-einheit { color: #888; margin-left: 4px; font-weight: 400; font-size: .8em; }
+
+#lagerView .lager-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  background: var(--blue-light, #E0F7FA); color: var(--teal-dark, #007F97);
+  font-size: .75rem; font-weight: 500;
+}
+#lagerView .lager-pill-grey { background: #eee; color: #777; }
+#lagerView .lager-pill-warn {
+  background: #FFF0EF; color: #C0392B; margin-left: 6px;
+}
+
+#lagerView .lager-empty {
+  padding: 30px; text-align: center; color: #999; background: #fafafa;
+  border: 1px dashed #ddd; border-radius: 8px;
+}
+
+#lagerView .lager-actions-cell { white-space: nowrap; }
+#lagerView .btn-icon {
+  background: transparent; border: 1px solid var(--grey-100, #ddd);
+  padding: 4px 8px; border-radius: 6px; cursor: pointer; margin-right: 2px;
+  font-size: .9rem; color: #444;
+}
+#lagerView .btn-icon:hover { background: var(--grey-50, #f5f5f5); }
+#lagerView .btn-icon-danger { color: #C0392B; }
+#lagerView .btn-icon-danger:hover { background: #FFF0EF; }
+#lagerView .btn-icon[disabled] { opacity: .35; cursor: not-allowed; }
+
+#lagerView mark { background: #FFF3A3; padding: 0 2px; border-radius: 2px; }
+
+/* Modal */
+.lager-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+  animation: lagerFade .15s ease-out;
+}
+@keyframes lagerFade { from { opacity: 0; } to { opacity: 1; } }
+.lager-modal {
+  background: #fff; border-radius: 12px; padding: 22px;
+  max-width: 520px; width: calc(100% - 32px);
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.lager-modal-wide { max-width: 820px; }
+.lager-modal h3 { margin-bottom: 14px; }
+
+.lager-form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.lager-form-grid label {
+  display: flex; flex-direction: column; gap: 3px; font-size: .82rem;
+}
+.lager-form-grid label > span { color: #555; font-weight: 500; }
+.lager-form-grid label.full { grid-column: 1 / -1; }
+.lager-form-grid input, .lager-form-grid select, .lager-form-grid textarea {
+  padding: 7px 9px; border: 1px solid var(--grey-200, #ccc);
+  border-radius: 6px; font-size: .9rem; font-family: inherit;
+}
+
+.lager-modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+  padding-top: 12px; border-top: 1px solid var(--grey-100, #eee);
+}
+.lager-modal-actions .btn { font-size: .85rem; padding: 8px 16px; }
+
+.lager-pick-results {
+  max-height: 50vh; overflow-y: auto; border: 1px solid var(--grey-100, #eee);
+  border-radius: 6px;
+}
+.lager-pick-row {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 12px; align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid var(--grey-100, #f1f1f1);
+}
+.lager-pick-row:last-child { border-bottom: none; }
+.lager-pick-row:hover { background: var(--grey-50, #fafafa); }
+.lager-pick-row .btn { padding: 5px 10px; font-size: .82rem; }
+
+/* Lager-Hinweis im Offenes Material */
+.lager-offmat-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #E8F8E8; color: #1B7A1B;
+  padding: 3px 8px; border-radius: 12px;
+  font-size: .75rem; font-weight: 500;
+  margin-left: 6px; cursor: pointer;
+  border: 1px solid #B6E2B6;
+}
+.lager-offmat-hint:hover { background: #D8F0D8; }
+.lager-offmat-hint .lager-offmat-take {
+  background: #1B7A1B; color: #fff; border: none;
+  padding: 2px 8px; border-radius: 8px; font-size: .72rem; cursor: pointer;
+  margin-left: 4px;
+}
+
+/* Mobile */
+@media (max-width: 720px) {
+  #lagerView .lager-search { grid-template-columns: 1fr; }
+  .lager-form-grid { grid-template-columns: 1fr; }
+  /* Eigenständiges Scrolling wenn kein .scroll-view-Wrapper vorhanden */
+  #lagerView .lager-wrap { padding: 12px; }
+
+  /* ── Artikel-Cards auf Mobile ─────────────────────────── */
+  .lager-cards-mobile { display: flex; flex-direction: column; gap: 10px; }
+
+  .lager-card-mobile {
+    background: #fff;
+    border: 1px solid var(--grey-100, #eee);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .lager-card-empty { border-color: #fdd; background: #fff8f8; }
+
+  .lager-card-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .lager-card-info { flex: 1; min-width: 0; }
+  .lager-card-info .lager-bez { font-weight: 600; font-size: 1rem; color: #222; }
+  .lager-card-info .lager-kat { font-size: .78rem; color: #999; margin-top: 2px; }
+
+  .lager-card-bestand {
+    text-align: right;
+    flex-shrink: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #007F97;
+    line-height: 1.2;
+  }
+  .lager-card-bestand .lager-einheit {
+    display: block;
+    font-size: .75rem;
+    font-weight: 400;
+    color: #888;
+  }
+
+  .lager-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .lager-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--grey-100, #f0f0f0);
+    padding-top: 10px;
+    margin-top: 2px;
+  }
+  .lager-card-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: .82rem;
+    font-weight: 500;
+    border: 1px solid var(--grey-100, #ddd);
+    border-radius: 8px;
+    background: #f7f7f7;
+    color: #333;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .lager-card-btn:active { background: #eee; }
+  .lager-card-btn-ghost { background: transparent; color: #555; flex: 0 0 auto; width: 44px; }
+  .lager-card-btn-danger { background: transparent; color: #C0392B; border-color: #fdd; flex: 0 0 auto; width: 44px; }
+  .lager-card-btn-danger:active { background: #FFF0EF; }
+
+  .lager-cards-count {
+    text-align: center;
+    font-size: .78rem;
+    color: #aaa;
+    padding: 8px 0 4px;
+  }
+}
+
+/* ============================================================
+   Katalog-Picker & Foto-OCR (Lager-Modul)
+   ============================================================ */
+
+/* Toolbar über dem Artikelformular */
+.lager-katalog-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--grey-50, #f7f7f7);
+  border: 1px solid var(--grey-100, #eee);
+  border-radius: 8px;
+}
+.lager-katalog-toolbar-btn {
+  font-size: .82rem;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+/* Suchzeile im Katalog-Picker */
+.lager-katalog-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lager-katalog-search-row .form-control { flex: 1; }
+
+/* Ergebniszeilen – gemeinsame Basis mit .lager-pick-row (bereits vorhanden) */
+.lager-pick-row .lager-katalog-quelle {
+  display: inline-block;
+  min-width: 72px;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--primary, #1976d2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.lager-pick-row .lager-katalog-nr {
+  font-size: .78rem;
+  color: var(--text-muted, #888);
+  margin-right: 8px;
+  font-family: monospace;
+  white-space: nowrap;
+}
+.lager-pick-row .lager-katalog-bez {
+  font-size: .9rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lager-pick-row .lager-katalog-einh {
+  font-size: .78rem;
+  color: var(--text-muted, #888);
+  min-width: 36px;
+  text-align: right;
+  margin-left: 8px;
+}
+.lager-pick-row .lager-katalog-preis {
+  font-size: .85rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: right;
+  margin-left: 8px;
+  color: var(--text-muted, #888);
+}
+
+/* OCR: Spinner */
+.lager-ocr-spinner {
+  display: inline-block;
+  width: 36px;
+  height: 36px;
+  border: 4px solid var(--grey-100, #eee);
+  border-top-color: var(--primary, #1976d2);
+  border-radius: 50%;
+  animation: lager-ocr-spin 0.8s linear infinite;
+}
+@keyframes lager-ocr-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* OCR: erkannter Text (aufklappbar) */
+.lager-ocr-text-details {
+  margin: 8px 0;
+  font-size: .82rem;
+}
+.lager-ocr-text-details summary {
+  cursor: pointer;
+  color: var(--text-muted, #888);
+  user-select: none;
+}
+.lager-ocr-text {
+  margin-top: 4px;
+  max-height: 100px;
+  overflow-y: auto;
+  font-size: .78rem;
+  background: var(--grey-50, #f7f7f7);
+  border: 1px solid var(--grey-100, #eee);
+  border-radius: 6px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Dark Mode ───────────────────────────────────────────── */
+body.dark-theme #lagerView .lager-table {
+  background: var(--surface, #2C2C2E);
+}
+body.dark-theme #lagerView .lager-table th {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme #lagerView .lager-bez {
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme #lagerView .lager-kat,
+body.dark-theme #lagerView .lager-einheit {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme #lagerView .lager-pill-grey {
+  background: var(--grey-100, #3A3A3C);
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme #lagerView .lager-empty {
+  color: var(--grey-400, #98989D);
+  background: var(--surface, #2C2C2E);
+  border-color: var(--grey-200, #48484A);
+}
+body.dark-theme #lagerView .btn-icon {
+  color: var(--grey-600, #AEAEB2);
+}
+body.dark-theme #lagerView .lager-chk {
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme .lager-modal {
+  background: var(--surface, #2C2C2E);
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme .lager-form-grid label > span {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme .lager-card-mobile {
+  background: var(--surface, #2C2C2E);
+  border-color: var(--grey-100, #3A3A3C);
+}
+body.dark-theme .lager-offmat-hint {
+  background: #1A3020;
+  color: #66bb6a;
+  border-color: #1B5E20;
+}
+

@@ -1,0 +1,828 @@
+/* ============================================================
+   VDE 0100 Prüfprotokolle – Modul-Styles
+   ============================================================ */
+
+/* ── Hauptlayout ─────────────────────────────────────────── */
+#vde0100View {
+  padding: 0 0 60px;
+}
+
+.vde-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  flex-wrap: wrap;
+}
+
+.vde-header h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+/* ── Protokollliste ──────────────────────────────────────── */
+.vde-list-container {
+  padding: 12px 16px;
+}
+
+.vde-protokoll-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vde-protokoll-card:hover {
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  border-color: var(--primary, #00B4D8);
+}
+
+.vde-protokoll-card .vde-card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.vde-protokoll-card .vde-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.vde-protokoll-card .vde-card-titel {
+  font-weight: 600;
+  font-size: .95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vde-protokoll-card .vde-card-meta {
+  font-size: .78rem;
+  color: var(--text-muted, #777);
+  margin-top: 3px;
+}
+
+.vde-protokoll-card .vde-card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Status-Badges ───────────────────────────────────────── */
+.vde-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: .73rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vde-badge-entwurf {
+  background: #FFF3E0;
+  color: #e65100;
+}
+
+.vde-badge-fixiert {
+  background: #E8F5E9;
+  color: #2e7d32;
+}
+
+/* ── Detail-View ─────────────────────────────────────────── */
+.vde-detail-container {
+  padding: 12px 16px;
+}
+
+.vde-section {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.vde-section-header {
+  background: var(--primary, #00B4D8);
+  color: #fff;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: .88rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vde-section-body {
+  padding: 12px 14px;
+}
+
+/* ── Formular-Grid ───────────────────────────────────────── */
+.vde-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.vde-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0; /* prevent grid-item overflow */
+}
+
+.vde-form-group label {
+  font-size: .78rem;
+  color: var(--text-muted, #666);
+  font-weight: 500;
+}
+
+.vde-form-group input,
+.vde-form-group select,
+.vde-form-group textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  font-size: .85rem;
+  background: var(--input-bg, #fff);
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.vde-form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.vde-form-group input:disabled,
+.vde-form-group select:disabled,
+.vde-form-group textarea:disabled {
+  background: var(--disabled-bg, #f5f5f5);
+  color: var(--text-muted, #888);
+  cursor: not-allowed;
+}
+
+.vde-form-full {
+  grid-column: 1 / -1;
+}
+
+/* ── Gebäude-Accordion ───────────────────────────────────── */
+.vde-gebaeude-block {
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 7px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.vde-gebaeude-header {
+  background: var(--blue-light, #E0F7FA);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+.vde-gebaeude-header:hover {
+  background: #b2ebf2;
+}
+
+.vde-gebaeude-body {
+  padding: 10px 12px;
+  background: var(--card-bg, #fff);
+}
+
+/* ── Verteiler-Karte ─────────────────────────────────────── */
+.vde-verteiler-block {
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.vde-verteiler-header {
+  background: #f5f5f5;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+.vde-verteiler-body {
+  padding: 8px 10px;
+}
+
+/* ── Sicherungen-Tabelle ─────────────────────────────────── */
+.vde-sicherungen-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .8rem;
+}
+
+.vde-sicherungen-table th {
+  background: var(--primary, #00B4D8);
+  color: #fff;
+  padding: 5px 6px;
+  text-align: center;
+  font-weight: 600;
+  font-size: .75rem;
+  border: 1px solid var(--blue-hover, #0096B7);
+  white-space: nowrap;
+}
+
+.vde-sicherungen-table td {
+  padding: 4px 6px;
+  border: 1px solid #e0e0e0;
+  vertical-align: middle;
+}
+
+.vde-sicherungen-table tr:nth-child(even) td {
+  background: var(--table-alt, #f9f9f9);
+}
+
+.vde-sicherungen-table td input {
+  width: 80px;
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: .78rem;
+  text-align: right;
+}
+
+.vde-sicherungen-table td input.vde-bez-input {
+  width: 120px;
+}
+
+.vde-sicherungen-table td select {
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: .78rem;
+}
+
+/* ── Status-Auswahl in Tabelle ───────────────────────────── */
+.vde-status-ok     { color: #2e7d32; font-weight: bold; }
+.vde-status-fehler { color: #c62828; font-weight: bold; }
+
+/* ── Signature-Canvas ────────────────────────────────────── */
+#vdeSignatureModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vde-sig-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  width: 420px;
+  max-width: 95vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+
+.vde-sig-box h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+#vdeSignatureCanvas {
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  cursor: crosshair;
+  touch-action: none;
+  display: block;
+  background: #fff;
+  width: 100%;
+}
+
+.vde-sig-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn-vde-primary {
+  background: var(--primary, #00B4D8);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-vde-primary:hover { background: var(--blue-hover, #0096B7); }
+
+.btn-vde-secondary {
+  background: var(--card-bg, #fff);
+  color: #333;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: .85rem;
+  cursor: pointer;
+}
+
+.btn-vde-secondary:hover { background: var(--hover-bg, #f0f0f0); }
+
+.btn-vde-danger {
+  background: #c62828;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: .83rem;
+  cursor: pointer;
+}
+
+.btn-vde-danger:hover { background: #b71c1c; }
+
+.btn-vde-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 3px 5px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.btn-vde-icon:hover { background: rgba(0,0,0,0.07); }
+
+.btn-vde-fixieren {
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-vde-fixieren:hover { background: #1b5e20; }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.vde-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* ── Leerer Zustand ──────────────────────────────────────── */
+.vde-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted, #888);
+}
+
+.vde-empty .vde-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 10px;
+}
+
+/* ── Tabellen-Scroll-Container (v2.7.1) ─────────────────── */
+.vde-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.vde-table-scroll-hint {
+  font-size: .7rem;
+  color: #aaa;
+  text-align: right;
+  margin-bottom: 3px;
+  display: none;
+}
+
+/* ── Collapsible Gebäude (v2.7.1) ───────────────────────── */
+.vde-gebaeude-body.vde-collapsed {
+  display: none;
+}
+
+.vde-gebaeude-toggle {
+  font-size: .85rem;
+  color: var(--primary, #00B4D8);
+  min-width: 14px;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.vde-gebaeude-toggle.vde-open {
+  transform: rotate(0deg); /* ▾ already points down */
+}
+
+/* ── Gruppen-Vorlagen-Modal (v2.7.1) ────────────────────── */
+.vde-template-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.vde-template-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  width: 520px;
+  max-width: 96vw;
+  max-height: 82vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+}
+
+.vde-template-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 7px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.vde-template-item:hover {
+  border-color: var(--primary, #00B4D8);
+  background: #f0fafb;
+}
+
+.vde-template-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vde-template-item-name {
+  font-weight: 600;
+  font-size: .88rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vde-template-item-desc {
+  font-size: .76rem;
+  color: #777;
+  margin-top: 3px;
+}
+
+.vde-template-badge-pre {
+  background: var(--blue-light, #E0F7FA);
+  color: var(--primary, #00B4D8);
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.vde-template-badge-user {
+  background: #f3e5f5;
+  color: #6a1b9a;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* ── Suchfeld-Kombi für Dropdown (v2.7.4) ─────────────────── */
+.vde-search-select {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vde-search-filter {
+  padding: 5px 8px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  font-size: .82rem;
+  background: var(--input-bg, #fff);
+  color: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Mobile Responsive (v2.7.1 + v2.7.4) ────────────────── */
+@media (max-width: 640px) {
+
+  .vde-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .vde-header h2 {
+    font-size: .95rem;
+  }
+
+  .vde-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Touch-Targets */
+  .btn-vde-primary,
+  .btn-vde-secondary,
+  .btn-vde-fixieren {
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+
+  .btn-vde-icon {
+    padding: 8px 8px;
+    min-height: 40px;
+    font-size: 1rem;
+  }
+
+  /* Protokoll-Karten: Titel umbrechen statt abschneiden */
+  .vde-protokoll-card {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .vde-protokoll-card .vde-card-titel {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
+  }
+
+  .vde-protokoll-card .vde-card-meta {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .vde-protokoll-card .vde-card-actions {
+    flex-shrink: 0;
+  }
+
+  .vde-detail-container {
+    padding: 8px 10px;
+    overflow-x: hidden;
+  }
+
+  .vde-form-group {
+    max-width: 100%;
+  }
+
+  .vde-form-group input,
+  .vde-form-group select,
+  .vde-form-group textarea {
+    max-width: 100%;
+  }
+
+  .vde-sig-actions .btn-vde-secondary,
+  .vde-sig-actions .btn-vde-primary {
+    flex: 1 1 auto;
+    min-width: 110px;
+    text-align: center;
+  }
+
+  .vde-toolbar {
+    gap: 5px;
+  }
+
+  .vde-verteiler-header {
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .vde-sig-box {
+    padding: 14px 12px;
+  }
+
+  /* Sicherungen-Tabelle: Card-Layout statt scroll-Tabelle */
+  .vde-table-scroll-hint {
+    display: none;
+  }
+
+  .vde-table-wrap {
+    overflow-x: visible;
+  }
+
+  .vde-sicherungen-table,
+  .vde-sicherungen-table tbody,
+  .vde-sicherungen-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .vde-sicherungen-table thead {
+    display: none;
+  }
+
+  .vde-sicherungen-table tr {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--blue-light, #E0F7FA);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 6px 8px;
+  }
+
+  .vde-sicherungen-table tr:nth-child(even) td {
+    background: transparent;
+  }
+
+  .vde-sicherungen-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 4px;
+    border: none;
+    border-bottom: 1px solid var(--border, #eee);
+    font-size: .85rem;
+  }
+
+  .vde-sicherungen-table td:last-child {
+    border-bottom: none;
+  }
+
+  .vde-sicherungen-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #555;
+    min-width: 90px;
+    font-size: .78rem;
+    flex-shrink: 0;
+  }
+
+  .vde-sicherungen-table td:empty::before {
+    display: none;
+  }
+
+  .vde-sicherungen-table td input,
+  .vde-sicherungen-table td input.vde-bez-input {
+    width: auto;
+    flex: 1;
+    min-height: 36px;
+    font-size: .85rem;
+    text-align: left;
+    padding: 4px 6px;
+  }
+
+  .vde-sicherungen-table td select {
+    flex: 1;
+    min-height: 36px;
+    font-size: .85rem;
+  }
+}
+
+/* ── RCD-Block (v2.7.2) ──────────────────────────────────── */
+.vde-rcd-block {
+  border: 1px solid #b2ebf2;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.vde-rcd-header {
+  background: var(--blue-light, #E0F7FA);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: .85rem;
+  cursor: default;
+}
+.vde-rcd-header:hover {
+  background: #b2ebf2;
+}
+.vde-rcd-body {
+  padding: 8px 10px;
+  background: var(--card-bg, #fff);
+}
+
+/* ── FI-Messzeile im RCD-Block (v2.8.0) ─────────────────── */
+.vde-rcd-mess-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 5px 6px 6px;
+  margin-bottom: 6px;
+  background: #f0f4ff;
+  border-radius: 4px;
+  font-size: .8rem;
+}
+.vde-rcd-mess-label {
+  font-weight: 600;
+  color: #3949ab;
+  flex-shrink: 0;
+}
+.vde-rcd-mess-row label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #555;
+  font-size: .78rem;
+}
+.vde-rcd-mess-row input[type="number"] {
+  border: 1px solid #c5cae9;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: .8rem;
+  background: #fff;
+}
+body.dark-theme .vde-rcd-mess-row {
+  background: #1e2240;
+}
+body.dark-theme .vde-rcd-mess-label {
+  color: #9fa8da;
+}
+body.dark-theme .vde-rcd-mess-row label {
+  color: #aaa;
+}
+body.dark-theme .vde-rcd-mess-row input[type="number"] {
+  background: #2a2f4a;
+  border-color: #3949ab;
+  color: #e0e0e0;
+}
+
+@media (max-width: 640px) {
+  .vde-rcd-header {
+    padding: 10px 10px;
+    min-height: 44px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
+/* ── Dark Mode ───────────────────────────────────────────── */
+body.dark-theme .vde-badge-entwurf {
+  background: var(--yellow-light, #3A3020);
+  color: #ffb74d;
+}
+body.dark-theme .vde-badge-fixiert {
+  background: #1A3020;
+  color: #66bb6a;
+}
+body.dark-theme .vde-verteiler-header {
+  background: var(--grey-50, #2C2C2E);
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme .vde-gebaeude-header:hover,
+body.dark-theme .vde-rcd-header:hover {
+  background: var(--grey-100, #3A3A3C);
+}
+body.dark-theme .vde-rcd-block {
+  border-color: var(--grey-100, #3A3A3C);
+}
+body.dark-theme .vde-sig-box,
+body.dark-theme .vde-template-box {
+  background: var(--surface, #2C2C2E);
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme .vde-template-item {
+  border-color: var(--grey-100, #3A3A3C);
+  background: var(--grey-50, #2C2C2E);
+}
+body.dark-theme .vde-template-item:hover {
+  border-color: var(--primary, #00B4D8);
+  background: var(--grey-100, #3A3A3C);
+}
+body.dark-theme .vde-template-item-desc {
+  color: var(--grey-400, #98989D);
+}
+body.dark-theme .vde-template-badge-user {
+  background: #3A1A4A;
+  color: #ce93d8;
+}
+body.dark-theme .btn-vde-secondary {
+  color: var(--text, #F5F5F7);
+}
+body.dark-theme .vde-sicherungen-table td::before {
+  color: var(--grey-400, #98989D);
+}

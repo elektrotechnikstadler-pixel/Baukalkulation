@@ -1,0 +1,51 @@
+# docker-compose.minimal.yml – schlanker Build für kleine NAS-Systeme
+# ====================================================================
+# Starten:  docker compose -f docker-compose.minimal.yml up -d --build
+#
+# Unterschied zur Standard-docker-compose.yml:
+#   - ENABLE_OCR=false         → kein Tesseract/poppler (~-200 MB)
+#   - WhatsApp-Bridge entfällt (separater Container/Profil)
+#   - HiCAD-Rohbibliothek via .dockerignore nicht im Image
+#     (CSV-Übersicht wird stattdessen genutzt)
+#
+# Baseline-Ressourcen mit diesen Einstellungen:
+#   Image: ~150 MB   RAM idle: ~80 MB   CPU idle: <1%
+# ====================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+      args:
+        ENABLE_OCR: "false"
+    container_name: baukalkulation-es-app
+    restart: unless-stopped
+    # Zeit für den Graceful-Shutdown (WAL-Checkpoint + Sicherung im Entrypoint).
+    stop_grace_period: 30s
+    ports:
+      - "${APP_PORT:-8081}:80"
+    environment:
+      APP_ENABLE_OCR:      "false"
+      APP_ENABLE_WHATSAPP: "false"
+    volumes:
+      - app-data:/var/www/html/data
+      - app-uploads:/var/www/html/data/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api.php?action=check"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 128M
+
+volumes:
+  app-data:
+    driver: local
+  app-uploads:
+    driver: local

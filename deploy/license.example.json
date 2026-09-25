@@ -1,0 +1,8 @@
+{
+    "_comment": "Beispiel-Lizenzdatei. Kopiere diese Datei nach 'data/license.json' und passe die Werte an. Die Datei 'data/license.json' ist in .gitignore eingetragen und wird NICHT ins Repository eingecheckt.",
+    "customer": "Mustermann GmbH",
+    "issued":   "2026-01-01",
+    "expires":  "2027-12-31",
+    "tier":     "professional",
+    "modules":  ["din1090", "lager", "aufmass"]
+}

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <title>Anmeldung – Planning Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:       #00B4D8;
+      --blue-hover: #0096B7;
+      --blue-light: #E0F7FA;
+      --bg:         #F2F2F7;
+      --surface:    #FFFFFF;
+      --grey-100:   #E5E5EA;
+      --grey-200:   #C7C7CC;
+      --grey-400:   #8E8E93;
+      --text:       #1C1C1E;
+      --danger:     #FF3B30;
+      --radius:     14px;
+      --shadow:     0 4px 24px rgba(0,0,0,0.10);
+    }
+
+    body {
+      font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 44px 40px 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .logo-block {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo-block h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .logo-block p {
+      font-size: 0.85rem;
+      color: var(--grey-400);
+      margin-top: 4px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--grey-400);
+      margin-bottom: 7px;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1.5px solid var(--grey-100);
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--bg);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,180,216,0.15);
+      background: white;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 980px;
+      font-size: 1rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--blue); color: white; }
+    .btn-primary:hover { background: var(--blue-hover); }
+    .btn-primary:disabled { background: var(--grey-200); cursor: not-allowed; transform: none; }
+
+    .alert {
+      padding: 11px 14px;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 18px;
+    }
+    .alert-error   { background: #FFF0EF; color: var(--danger); border: 1px solid #FFD5D3; }
+    .alert-success { background: #EAFAF1; color: #1A7440;      border: 1px solid #C3E6CB; }
+    .alert-info    { background: var(--blue-light); color: var(--blue); border: 1px solid #BDD8FF; }
+
+    .mode-hint {
+      font-size: 0.8rem;
+      color: var(--grey-400);
+      text-align: center;
+      margin-top: 22px;
+    }
+    .mode-hint a {
+      color: var(--blue);
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--grey-100);
+      margin: 24px 0;
+    }
+
+    #spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo-block">
+    <img src="planning-dashboard-logo.png" alt="Planning Dashboard" style="width:240px;height:auto;margin:0 auto 12px;display:block;">
+    <h1>Baukalkulation</h1>
+    <p id="modeSubtitle">Bitte melden Sie sich an</p>
+  </div>
+
+  <div id="alertBox" class="alert hidden"></div>
+
+  <!-- ── Login Form ── -->
+  <form id="loginForm" onsubmit="doLogin(event)" autocomplete="on">
+    <div class="form-group">
+      <label for="loginUser">Benutzername</label>
+      <input id="loginUser" type="text" name="username" autocomplete="username" required placeholder="Benutzername">
+    </div>
+    <div class="form-group">
+      <label for="loginPass">Passwort</label>
+      <input id="loginPass" type="password" name="password" autocomplete="current-password" required placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary" type="submit" id="loginBtn">Anmelden</button>
+  </form>
+
+  <!-- ── Setup Form (first run) ── -->
+  <form id="setupForm" class="hidden" onsubmit="doSetup(event)" autocomplete="off">
+    <div class="form-group">
+      <label for="setupUser">Benutzername wählen</label>
+      <input id="setupUser" type="text" name="new-username" autocomplete="off" required placeholder="z.B. admin" minlength="3">
+    </div>
+    <div class="form-group">
+      <label for="setupPass">Passwort wählen</label>
+      <input id="setupPass" type="password" name="new-password" autocomplete="new-password" required placeholder="Mindestens 6 Zeichen" minlength="6">
+    </div>
+    <div class="form-group">
+      <label for="setupPass2">Passwort bestätigen</label>
+      <input id="setupPass2" type="password" name="new-password2" autocomplete="new-password" required placeholder="Passwort wiederholen">
+    </div>
+    <button class="btn btn-primary" type="submit" id="setupBtn">Einrichten &amp; Anmelden</button>
+  </form>
+
+  <p class="mode-hint" id="desktopHint" style="margin-top:18px">
+    <a href="index.html">← Desktop-Ansicht öffnen</a>
+  </p>
+</div>
+
+<script>
+  let isSetupMode = false;
+
+  // Service Worker registrieren (PWA)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+
+  // Erkennt ob Mobilgerät (Displaybreite ≤ 768px)
+  function getDefaultPage() {
+    const allowed = ['index.html', 'mobile.html', 'mobile_light.html'];
+    const from = new URLSearchParams(location.search).get('from');
+    if (from && allowed.includes(from)) return from;
+    return window.innerWidth <= 768 ? 'mobile.html' : 'index.html';
+  }
+
+  async function checkStatus() {
+    // Offline mit gespeicherten Daten → direkt zur App
+    if (!navigator.onLine && localStorage.getItem('bk_appData') && localStorage.getItem('bk_user')) {
+      window.location.replace(getDefaultPage());
+      return;
+    }
+    try {
+      const r = await fetch('api.php?action=check');
+      const j = await r.json();
+      if (j.loggedIn && !j.offline) {
+        if (j.mustChangePassword) {
+          showForceChangePassword(j.username);
+          return;
+        }
+        // Already logged in (echte Server-Antwort) → redirect based on screen size
+        window.location.replace(getDefaultPage());
+        return;
+      }
+      if (j.needSetup) {
+        enterSetupMode();
+      }
+    } catch(e) {
+      // Offline: wenn lokale Daten vorhanden, direkt zur App
+      if (localStorage.getItem('bk_appData') && localStorage.getItem('bk_user')) {
+        window.location.replace(getDefaultPage());
+        return;
+      }
+      showAlert('Verbindung zum Server fehlgeschlagen. Ist das API (api.php) erreichbar?', 'error');
+    }
+  }
+
+  function enterSetupMode() {
+    isSetupMode = true;
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('setupForm').classList.remove('hidden');
+    document.getElementById('modeSubtitle').textContent = 'Ersteinrichtung – Konto anlegen';
+    showAlert('Keine Benutzer gefunden. Legen Sie jetzt den ersten Benutzer an.', 'info');
+  }
+
+  async function doLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('loginUser').value.trim();
+    const password = document.getElementById('loginPass').value;
+    const btn      = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span id="spinner"></span>Anmelden…';
+
+    try {
+      const r = await fetch('api.php?action=login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        if (j.mustChangePassword) {
+          showForceChangePassword(username);
+        } else {
+          window.location.replace(getDefaultPage());
+        }
+      } else {
+        showAlert(j.error || 'Anmeldung fehlgeschlagen.', 'error');
+        if (j.locked) {
+          btn.disabled = true;
+          btn.textContent = 'Konto gesperrt';
+          document.getElementById('loginUser').disabled = true;
+          document.getElementById('loginPass').disabled = true;
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Anmelden';
+          document.getElementById('loginPass').value = '';
+          document.getElementById('loginPass').focus();
+        }
+      }
+    } catch(ex) {
+      showAlert('Netzwerkfehler: ' + ex.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Anmelden';
+    }
+  }
+
+  async function doSetup(e) {
+    e.preventDefault();
+    const username = document.getElementById('setupUser').value.trim();
+    const password = document.getElementById('setupPass').value;
+    const password2 = document.getElementById('setupPass2').value;
+
+    if (password !== password2) {
+      showAlert('Die Passwörter stimmen nicht überein.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('setupBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span id="spinner"></span>Einrichten…';
+
+    try {
+      const r = await fetch('api.php?action=setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        window.location.replace(getDefaultPage());
+      } else {
+        showAlert(j.error || 'Einrichtung fehlgeschlagen.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Einrichten & Anmelden';
+      }
+    } catch(ex) {
+      showAlert('Netzwerkfehler: ' + ex.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Einrichten & Anmelden';
+    }
+  }
+
+  function showAlert(msg, type = 'error') {
+    const el = document.getElementById('alertBox');
+    el.textContent = msg;
+    el.className = `alert alert-${type}`;
+  }
+
+  function showForceChangePassword(username) {
+    document.getElementById('loginForm').classList.add('hidden');
+    if (!isSetupMode) {
+      document.getElementById('modeSubtitle').textContent = 'Passwort muss geändert werden';
+    }
+    showAlert('Bitte ändern Sie Ihr Passwort beim ersten Login.', 'info');
+    // Inject password change form
+    const container = document.querySelector('.card') || document.querySelector('.login-card') || document.body;
+    let form = document.getElementById('forceChangePwForm');
+    if (!form) {
+      form = document.createElement('form');
+      form.id = 'forceChangePwForm';
+      form.autocomplete = 'off';
+      form.innerHTML = `
+        <div class="form-group">
+          <label for="fcOldPw">Aktuelles Passwort</label>
+          <input id="fcOldPw" type="password" required autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label for="fcNewPw">Neues Passwort (min. 6 Zeichen)</label>
+          <input id="fcNewPw" type="password" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="fcNewPw2">Neues Passwort bestätigen</label>
+          <input id="fcNewPw2" type="password" required minlength="6" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" type="submit" id="fcBtn">Passwort ändern</button>
+      `;
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const oldPw = document.getElementById('fcOldPw').value;
+        const newPw = document.getElementById('fcNewPw').value;
+        const newPw2 = document.getElementById('fcNewPw2').value;
+        if (newPw !== newPw2) { showAlert('Passwörter stimmen nicht überein.', 'error'); return; }
+        if (newPw.length < 6) { showAlert('Neues Passwort mindestens 6 Zeichen.', 'error'); return; }
+        const btn = document.getElementById('fcBtn');
+        btn.disabled = true;
+        btn.textContent = 'Wird geändert…';
+        try {
+          const r = await fetch('api.php?action=change_password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old: oldPw, new: newPw }),
+          });
+          const j = await r.json();
+          if (j.ok) {
+            showAlert('Passwort erfolgreich geändert! Sie werden weitergeleitet…', 'info');
+            setTimeout(() => window.location.replace(getDefaultPage()), 1000);
+          } else {
+            showAlert(j.error || 'Fehler beim Ändern.', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Passwort ändern';
+          }
+        } catch(ex) {
+          showAlert('Netzwerkfehler: ' + ex.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Passwort ändern';
+        }
+      };
+      container.appendChild(form);
+    }
+    form.classList.remove('hidden');
+    document.getElementById('fcOldPw').focus();
+  }
+
+  checkStatus();
+</script>
+</body>
+</html>

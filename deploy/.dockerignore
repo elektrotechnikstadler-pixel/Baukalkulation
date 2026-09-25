@@ -1,0 +1,23 @@
+data/
+vendor/
+Datanorm/
+.git
+.gitignore
+*.md
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile.app
+.dockerignore
+.env
+node_modules/
+whatsapp-bridge/
+*.tar.gz
+*.log
+
+# dist/ wird immer frisch durch den Node-Build-Stage im Dockerfile erzeugt
+dist/
+
+# HiCAD-Rohbibliothek wird NICHT ins Image kopiert.
+# Stattdessen wird Materialbibliothek_Uebersicht.csv verwendet
+# (deutlich kleineres Image, identische Katalogdaten).
+Materialbibliothek HiCAD/

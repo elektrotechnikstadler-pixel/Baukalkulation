@@ -1,0 +1,321 @@
+- Alle Funktionen, welche nicht von der Anfrage betroffen sind beibehalten
+
+============================================================
+v2.10.86 – 2026-08-28
+============================================================
+1. Archivierte Projekte wieder sichtbar in der Stundenauswertung:
+   - Früher archivierte Projekte wurden aus der Datenbank geloescht,
+     nur die Archivdatei blieb übrig -> in der Auswertung stand nur "#188"
+   - Neue Reparatur stellt diese Projekte (ausgeblendet) wieder her,
+     Projektnamen erscheinen wieder, unnötige Warnungen verschwinden
+   - Aufruf: api.php?action=repair_archiv_projekte  (zeigt nur Vorschau)
+     Ausführen mit: ...&confirm=1
+   - Stunden werden dabei nicht verändert
+
+2. Kürzel: doppelte Vergabe ist wieder möglich
+   - Statt einer Sperre erscheint jetzt eine Warnung mit Nachfrage
+
+============================================================
+v2.10.85 – 2026-08-28
+============================================================
+1. WICHTIG – Buchungsverlust bei gleichem Kürzel behoben:
+   - Hatten zwei Mitarbeiter dasselbe Kürzel (z.B. "JR"), löschte jeder
+     beim Stundenspeichern die Projektbuchungen des anderen
+   - Zuordnung erfolgt jetzt über den Benutzer, nicht mehr über das Kürzel
+   - Kürzel müssen ab sofort eindeutig sein (Doppelvergabe wird abgelehnt)
+
+2. WICHTIG – Admin-Löschen entfernte zu viel:
+   - Beim Löschen eines einzelnen Zeiteintrags durch einen Admin wurden
+     alle Projektbuchungen des Mitarbeiters auf den betroffenen Projekten
+     mitgelöscht. Behoben.
+
+3. Diagnose erweitert:
+   - Zeigt mehrfach vergebene Kürzel an
+   - Sagt je Mitarbeiter, ob "Alle reparieren" sicher ist oder Dubletten
+     erzeugen würde
+
+============================================================
+v2.10.84 – 2026-08-28
+============================================================
+1. Neue Buchungsart "Abwesend" (Desktop, Mobile, Mobile Light):
+   - Eingabe von Stunden + Pflichtangabe eines Grundes
+   - Zählt wie Gleitzeit NICHT als Ist-Arbeitszeit (kein Einfluss auf
+     Monats-Ist, Gleitzeitsaldo oder Projektbuchungen)
+   - Einzeltag, mehrfach pro Tag erfassbar, ohne Baustellenzuordnung
+
+2. Versionsnummer in der Fußzeile:
+   - Desktop, Mobile und Mobile Light zeigen die aktuelle Softwareversion
+
+3. Fehlerhafte Warnung beim Versions-Check behoben
+
+============================================================
+v2.10.83 – 2026-08-28
+============================================================
+1. Fehlbuchungen: Ursache für "alle Buchungen rot" behoben
+   - Bei deaktiviertem Auto-Import wurde JEDE Buchung als Fehlbuchung gemeldet
+   - Ein geändertes Benutzer-Kürzel kippte den kompletten Altbestand
+   - Neuer zentraler Katalog mit Fehlercodes ZE001–ZE012 und Klartext-Begründung
+   - Anzeige nennt jetzt Code + Grund; "Reparieren" nur bei behebbaren Fällen
+
+2. Archivieren löscht keine Arbeitszeit mehr:
+   - Projekte werden archiviert statt gelöscht (Soft-Delete)
+   - Wiederherstellen behält die Projekt-ID -> Zeitbuchungen bleiben verknüpft
+   - Arbeitszeit bleibt immer gültige Leistung, egal was mit dem Projekt passiert
+
+3. Datensicherheit bei mehreren Geräten:
+   - Jeder Zeiteintrag hat eine geräteübergreifend eindeutige Kennung
+   - Speichert ein anderes Gerät zwischenzeitlich, wird nichts überschrieben
+   - Offline erfasste Stunden werden zusammengeführt statt ersetzt
+
+4. Umbuchungs-Historie:
+   - Jeder Projektwechsel wird mit altem/neuem Projekt, Zeitpunkt und Bearbeiter
+     protokolliert und ist über die Historie einsehbar
+
+5. Neu für Administratoren:
+   - Diagnose "diagnose_fehlbuchungen" erklärt je Eintrag, warum er auffällig ist
+
+============================================================
+v2.10.81 – 2026-08-07
+============================================================
+1. Globale Suche intuitiver:
+   - Filter als Chip-Toggles mit Treffer-Zähler und „Alle/Keine"-Buttons
+   - Tastatur-Navigation (ArrowDown/Up/Enter durch Ergebnisse)
+   - Relevanz-Sortierung (exakter Treffer zuerst)
+   - Multi-Token-Highlight aller Suchbegriffe
+   - Archiv-Treffer: zusätzlich „Ansehen"-Button
+
+2. Archivierte Projekte read-only ansehen:
+   - Neues Modal „Archiviertes Projekt ansehen" (ohne Wiederherstellung)
+   - Zeigt vollständige Übersicht: Material, Arbeitszeit, Pauschalen, Abschläge, Summen
+   - Über „Ansehen"-Button im Archiv und aus der globalen Suche erreichbar
+
+3. Auswertung – Filter-Panel:
+   - Neues Filter-Panel oben in der kaufmännischen Auswertung
+   - Filter: Quelle (aktive/archivierte Projekte), Jahr (nach Archivierungsdatum), Kunde
+   - Default: aktueller Stand (wie bisher) – Reset-Button erscheint nur bei Abweichung
+
+============================================================
+MINIFICATION – Nach jeder Änderung an script.js
+============================================================
+Nach JEDER Änderung an script.js MUSS script.min.js neu erzeugt werden:
+
+  node node_modules/terser/bin/terser script.js --compress passes=2 --mangle --output script.min.js
+
+Ohne diesen Schritt lädt der Browser die veraltete minifizierte Version
+(index.html + sw.js referenzieren script.min.js, NICHT script.js).
+
+Falls node_modules/terser nicht vorhanden:
+  npm install terser --no-save
+
+============================================================
+============================================================
+DATENSICHERHEIT – SPEICHERMANAGEMENT (seit v2.10.71)
+============================================================
+Die Datenbank ist durch DREI Schutzschichten vor Überschreiben geschützt.
+Bei Änderungen am Speicher-/Sync-Code diese NIEMALS umgehen:
+
+SCHICHT 1 – Client-Sperre:
+  - saveData() sendet IMMER appDataRev (baseRev) im Payload.
+  - forceSaveData() / forceSaveDataMobile() sind BLOCKIERT wenn
+    appDataRev === null (= Offline-/Cache-Daten ohne gültige Revision).
+  - „Meine Version erzwingen" im Konflikt-Dialog ist nur mit gültiger
+    Revision möglich.
+  → Bei Änderungen: appDataRev darf NIEMALS künstlich gesetzt werden.
+
+SCHICHT 2 – Server Optimistic Locking (DataService::saveAllData):
+  - baseRev === null UND curRev > 0 → 409 Conflict (v2.10.71)
+  - baseRev !== curRev → 409 Conflict (seit v2.10.50)
+  - Nur bei leerer DB (Ersteinrichtung) oder explizitem force + gültiger
+    Rev wird ohne Prüfung geschrieben.
+  → Bei Änderungen: NIEMALS den Locking-Check entfernen oder lockern.
+
+SCHICHT 3 – Server Force-Guard (letzte Verteidigung):
+  - Selbst bei force=true + baseRev=null: wenn der Payload weniger als
+    die Hälfte der bestehenden Baustellen enthält → ABGELEHNT.
+  → Fängt Bugs in Schicht 1+2 ab. Nicht entfernen.
+
+OFFLINE-VERHALTEN:
+  - loadFromLocalStorage() setzt appDataBaseline (für Auto-Merge) aber
+    appDataRev = null (signalisiert: nicht server-synchron).
+  - _scheduleOnlineRefresh() startet automatisch: sobald Netz verfügbar →
+    loadData() → frische Server-Daten laden → Re-Render.
+  - syncOfflineData() sendet baseRev mit; bei Konflikt → Auto-Merge
+    (nicht blindes Überschreiben).
+  → NIEMALS appDataRev bei Offline-Daten künstlich auf einen Wert setzen.
+
+AUTO-MERGE (resolveSaveConflict):
+  - Vergleicht Server-Stand gegen appDataBaseline (letzter bekannter Sync).
+  - Disjunkte Änderungen (verschiedene Baustellen) → lautlos zusammengeführt.
+  - Echte Überschneidung → Dialog (Nutzer entscheidet).
+  - Nach „Später entscheiden" → zyklischer Hintergrund-Retry (30s, max 5 Min).
+  → appDataBaseline MUSS bei jedem erfolgreichen Load/Save aktualisiert werden.
+
+PROJEKT-PRESENCE (seit v2.10.72):
+  - Client sendet alle 60s Heartbeat (project_heartbeat, _idle=1).
+  - Andere Nutzer sehen „🔒 XY bearbeitet gerade" im Projekt-Header.
+  - Kein harter Lock – nur Info zur Konfliktvermeidung.
+  - Heartbeats verfallen nach 120s ohne Aktualisierung.
+
+ZUSAMMENFASSUNG DER GESCHÜTZTEN SAVE-PFADE:
+  Desktop saveData()           → baseRev-Pflicht
+  Desktop forceSaveData()      → Client-Sperre + Server-Guard
+  Desktop syncOfflineData()    → baseRev + Auto-Merge
+  Desktop _applyMergedAndSave()→ frische serverRev (kein Force)
+  Mobile forceSaveDataMobile() → Client-Sperre + Server-Guard
+  Mobile normaler Save         → baseRev-Pflicht
+  Server saveAllData(null,false) → lehnt ab (curRev>0)
+  Server saveAllData(null,true)  → Force-Guard (Ratio-Check)
+
+============================================================
+============================================================
+DEPLOYMENT-WARNUNG – DATENVERLUST-RISIKO (Vorfall 2026-06-05)
+============================================================
+PROBLEM (analysiert): `sudo docker compose up -d --build` stoppt den alten
+  Container abrupt. SQLite läuft im WAL-Modus (Write-Ahead Log) und schreibt
+  Änderungen zunächst in database.sqlite-wal statt direkt in database.sqlite.
+  Beim abrupten Container-Stop kann der WAL-Checkpoint nicht mehr sauber
+  abgeschlossen werden. Nach dem Neustart fehlen die WAL-Sidecar-Dateien
+  (-wal, -shm) oder sind inkonsistent → SQLite fällt auf den letzten
+  vollständigen Checkpoint zurück → Datenverlust der nicht-checkpointed Änderungen.
+  Das automatische Tagesbackup (07:21 Uhr) lief danach und sicherte
+  die bereits leere DB. Letztes brauchbares Backup: Jun 3, 09:12 (6,5 MB).
+  Verloren: Änderungen vom 3.–5. Juni.
+
+  HINWEIS: `docker compose down -v` wäre noch schlimmer (löscht Volumes
+  komplett). Auch ohne -v kann es durch WAL-Inkonsistenz zu Datenverlust kommen.
+
+VERPFLICHTENDE SCHRITTE VOR JEDEM DEPLOYMENT:
+  1. Manuelles Backup + WAL-Checkpoint erzwingen:
+       docker exec baukalkulation-es-app php -r "
+         \$db=new PDO('sqlite:/var/www/html/data/database.sqlite');
+         \$db->exec('PRAGMA wal_checkpoint(FULL)');
+         copy('/var/www/html/data/database.sqlite',
+              '/var/www/html/data/backups/pre_deploy_'.date('Ymd_His').'.sqlite');
+         echo 'Backup + Checkpoint OK';"
+  2. Datenmengen notieren (Soll-Zustand für Post-Deploy-Vergleich):
+       docker exec baukalkulation-es-app php -r "
+         \$db=new PDO('sqlite:/var/www/html/data/database.sqlite');
+         echo 'Baustellen: '.\$db->query('SELECT COUNT(*) FROM baustellen')->fetchColumn().PHP_EOL;
+         echo 'Kunden: '.\$db->query('SELECT COUNT(*) FROM kunden')->fetchColumn().PHP_EOL;
+         echo 'User: '.\$db->query('SELECT COUNT(*) FROM users')->fetchColumn().PHP_EOL;"
+  3. Deploy ausführen:
+       cp -r deploy./* .
+       docker compose up -d --build
+  4. Post-Deploy-Check – Zahlen müssen identisch sein wie in Schritt 2:
+       docker exec baukalkulation-es-app php -r "
+         \$db=new PDO('sqlite:/var/www/html/data/database.sqlite');
+         echo 'Baustellen: '.\$db->query('SELECT COUNT(*) FROM baustellen')->fetchColumn().PHP_EOL;
+         echo 'Kunden: '.\$db->query('SELECT COUNT(*) FROM kunden')->fetchColumn().PHP_EOL;
+         echo 'User: '.\$db->query('SELECT COUNT(*) FROM users')->fetchColumn().PHP_EOL;"
+     Wenn Baustellen/Kunden = 0 → SOFORT Backup aus Schritt 1 wiederherstellen!
+
+WIEDERHERSTELLUNG falls Daten weg:
+  # Neuestes gültiges Backup ermitteln (nach Größe: >1 MB = echte Daten):
+  ls -lah /home/stadlermini/elektrotechnik-stadler/Baukalkulation/data/backups/
+  # Restore:
+  docker exec baukalkulation-es-app php -r "
+    \$src='/var/www/html/data/backups/<DATUM>/database.sqlite';
+    \$dst='/var/www/html/data/database.sqlite';
+    copy(\$dst,\$dst.'.leer'); copy(\$src,\$dst); echo 'Wiederhergestellt';"
+  # Migrationen auf wiederhergestellter DB ausführen:
+  cd /home/stadlermini/elektrotechnik-stadler/Baukalkulation && docker compose restart
+
+NIEMALS VERWENDEN:
+  docker compose down -v   (löscht Volumes unwiderruflich!)
+
+
+- Alle Icons und Sonderzeichen wie € beibehalten
+- Sollte etwas geändert werden/ gelöscht werden, aber nicht bekannt ist ob eine andere Funktion dies benötigt, vor dem ändern/ Löschen prüfen.
+- Nach jeder Änderung das Projekt debuggen.
+- Die Backups und Exportfunktionen bei jeder Änderung berücksichtigen.
+- Nach jeder Änderung an modules/<name>/<name>.js oder .css die Versionsnummer
+  (?v=NN) in script.js (loadOptionalModule) UND in mobile.html (Modul-Loader)
+  synchron anheben – sonst liefert der Browser eine veraltete gecachte Version.
+  → Beide Stellen nach jeder Modul-Änderung gezielt prüfen!
+- Versionierung folgt SemVer (MAJOR.MINOR.PATCH). Bei jedem Release:
+  * APP_VERSION in api.php anheben
+  * "version" in manifest.json anpassen
+  * CACHE_VERSION in sw.js + ?v=NN in index.html/style.css/script.js bumpen
+  * Bei Änderungen an modules/<name>/<name>.js oder .css AUCH den modulspezifischen
+    ?v=NN in script.js (loadOptionalModule) und mobile.html (Modul-Loader) anheben!
+  * Eintrag in CHANGELOG.md oben ergänzen (nicht in Änderungshinweise.txt)
+  * Git-Tag setzen: git tag -a vX.Y.Z -m "..."
+- Modularisierung beibehalten – Architektur-Regeln:
+  * Neue optionale/pluggable Features → eigenes Modul unter modules/<name>/
+    mit module.json, backend/Module.php (extends AbstractModule),
+    eigener Database-Klasse (<Name>Database.php) und eigenem IIFE-Frontend-Script.
+  * Neue Core-API-Aktionen (nicht pluggable) → src/Handlers/<Name>Actions.php
+    als Handler-Klasse; Route in der Route-Map von api.php eintragen.
+  * DB-Migrationen → ausschließlich in der zugehörigen Database-Klasse
+    des Moduls (modules/<name>/<Name>Database.php) oder im Handler – NICHT
+    in src/Database.php oder direkt in api.php.
+  * JS-Frontend: Optionale, pluggable Module → eigenes IIFE-Script in
+    modules/<name>/<name>.js mit Public-API (window.<name>Modul).
+    Core-Feature-Erweiterungen (z.B. KI-Scan als Erweiterung der Materialverwaltung)
+    → dürfen direkt in script.js / mobile.html implementiert werden.
+  * Keine Modul-Logik in script.js hinzufügen, die in ein eigenes Modul gehört.
+
+
+============================================================
+============================================================
+GELÖSTE FEHLER – PRÄVENTION (damit sie nicht erneut passieren)
+============================================================
+
+1) CSP BLOCKIERT EXTERNE CDNs (cdnjs.cloudflare.com)  [Vorfall 2026-06]
+   SYMPTOME: PDF-Report (mobil) schlägt fehl, Auswertungs-Diagramme bleiben
+     leer, Excel-Export tut nichts – aber KEINE offensichtliche Fehlermeldung.
+   URSACHE: .htaccess setzt `Content-Security-Policy: script-src 'self'
+     'unsafe-inline' 'unsafe-eval'` → ALLE Skripte von externen CDNs werden
+     blockiert. Chart.js / xlsx / html2pdf wurden nie geladen
+     → `typeof Chart/XLSX/html2pdf === 'undefined'` → Funktionen brechen
+     still ab (z.B. `if (typeof Chart === 'undefined') return;`).
+   REGEL: NIEMALS Dritt-Bibliotheken per `<script src="https://cdnjs...">`
+     oder dynamischem CDN-Loader einbinden. IMMER lokal in `lib/` hosten und
+     per relativer URL `lib/<datei>.min.js` laden ('self' ist CSP-erlaubt).
+     Aktuell lokal: lib/chart.umd.min.js, lib/xlsx.full.min.js,
+     lib/html2pdf.bundle.min.js.
+   WICHTIG: Statische Web-Bibliotheken gehören nach `lib/` – NICHT nach
+     `vendor/` (das ist via .dockerignore für Composer ausgeschlossen und
+     landet NICHT im Image!).
+   WICHTIG: Neue lib/-Dateien IMMER auch in sw.js PRECACHE_URLS aufnehmen.
+     Achtung: cache.addAll() schlägt KOMPLETT fehl, wenn nur eine URL nicht
+     erreichbar ist (war der Grund, warum Offline-Support mit CDN-URL brach).
+
+2) HTML2CANVAS / HTML2PDF ERZEUGT WEISSE / LEERE SEITE
+   SYMPTOME: PDF wird gespeichert, aber das Dokument ist eine leere weiße Seite.
+   URSACHE: Render-Container stand auf `position:fixed; left:-9999px;
+     top:-9999px` (doppelt aus dem Viewport) → html2canvas erfasst in manchen
+     Browsern eine leere Fläche.
+   REGEL: Off-Screen-Container für html2pdf/html2canvas mit `left:-9999px;
+     top:0` positionieren (nur horizontal aus dem Bild, top:0). So in der
+     funktionierenden Mobil-Variante und in _saveRechnungPdfBackground.
+   MERKHILFE: Wird trotzdem eine Datei (aber leer) gespeichert, lief html2pdf
+     – dann ist es ein RENDER-Problem (top:0), kein Lade-Problem (CSP/lib).
+
+3) NEUE EINSTELLUNG WIRD NICHT GESPEICHERT (still verworfen)
+   SYMPTOME: save_settings meldet ok, aber der Wert ist nach Reload weg.
+   URSACHE: AdminActions::saveSettingsAction() übernimmt NUR Schlüssel, die
+     bereits in Auth::loadSettings()-DEFAULTS existieren (`$allowed`).
+     Unbekannte Keys werden ignoriert.
+   REGEL: Jede neue Einstellung ZUERST mit Default-Wert in Auth.php (Array in
+     loadSettings) eintragen, sonst greift der Allowlist-Filter. Typ beachten:
+     bool/array/string werden je nach Default-Typ gecastet (Zahl als string!).
+   Beispiele dieser Art: zeiterfassung_abschluss_jahr,
+     auswertung_archiv_abschluss_jahr.
+
+4) MOBILE MODUL-CACHE-VERSIONEN WEICHEN VON DESKTOP AB
+   SYMPTOME: Modul verhält sich mobil anders / veraltet (z.B. lager, aufmass).
+   URSACHE: ?v=NN in mobile.html (Modul-Loader) hinkte hinter script.js
+     (loadOptionalModule) zurück.
+   REGEL: Nach JEDER Änderung an modules/<name>/*.js|*.css die ?v=NN an BEIDEN
+     Stellen synchron anheben (script.js UND mobile.html), css UND js getrennt.
+
+5) DATENINTEGRITÄT BEI „AUSBLENDEN"-FEATURES
+   REGEL: Funktionen wie Jahreswechsel-Abschluss blenden Daten NUR per
+     Anzeigefilter (Einstellung) aus – NIE löschen/mutieren. Immer umkehrbar
+     halten (Reset-Option) und einen Schalter zum Wieder-Einblenden anbieten.
+     Salden/Aggregationen (Gleitzeit, Urlaub) weiterhin aus der VOLLEN
+     Historie berechnen – nur die Listendarstellung filtern.
+
+
+# Changelog → siehe CHANGELOG.md (nur bei Release-Anfragen lesen)
