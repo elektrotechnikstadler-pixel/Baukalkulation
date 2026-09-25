@@ -1,0 +1,13 @@
+{
+    "altadmin": {
+        "entries": [
+            {"id": 1, "datum": "2023-05-02", "typ": "arbeit", "baustelleId": 1, "stunden": 8, "bemerkung": "Leitungen verlegt"},
+            {"id": 2, "datum": "2023-05-03", "typ": "urlaub", "baustelleId": null, "stunden": 8, "bemerkung": ""}
+        ]
+    },
+    "geselle": {
+        "entries": [
+            {"id": 1, "datum": "2023-05-02", "typ": "arbeit", "baustelleId": 1, "stunden": 7.5, "bemerkung": ""}
+        ]
+    }
+}

@@ -1,0 +1,18 @@
+[
+    {
+        "username": "altadmin",
+        "password": "$2y$10$LA0C2lx3di4Cj1SY37thKejcy98iC5VMisrT/DOu528ToSXNLGnze",
+        "role": "admin",
+        "kuerzel": "AA",
+        "visibleBaustellen": "all",
+        "sollstundenTag": 8,
+        "urlaubstageProJahr": {"2023": 30}
+    },
+    {
+        "username": "geselle",
+        "password": "$2y$10$LA0C2lx3di4Cj1SY37thKejcy98iC5VMisrT/DOu528ToSXNLGnze",
+        "role": "normal",
+        "kuerzel": "GE",
+        "visibleBaustellen": [1]
+    }
+]

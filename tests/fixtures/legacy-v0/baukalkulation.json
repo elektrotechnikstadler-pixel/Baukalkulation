@@ -1,0 +1,28 @@
+{
+    "baustellen": [
+        {
+            "id": 1,
+            "name": "Altbau Musterstraße 5",
+            "kundeId": 1,
+            "projektNr": "P-2023-017",
+            "material": [
+                {"id": 1, "bezeichnung": "NYM-J 3x1,5", "menge": 120, "einheit": "m", "ek": 0.89}
+            ],
+            "arbeitszeit": []
+        },
+        {
+            "id": 2,
+            "name": "Garage Huber",
+            "kundeId": null
+        }
+    ],
+    "pauschalen": [
+        {"id": 1, "name": "Anfahrt", "preis": 45.5}
+    ],
+    "stundenKatalog": [
+        {"id": 1, "kategorie": "Geselle", "preis": 58, "fixkosten": 12.25}
+    ],
+    "materialKatalog": [
+        {"id": 1, "bezeichnung": "Schalter", "einheit": "Stk", "ek": 3.99, "aufschlag": 25, "artikelNr": "S-1"}
+    ]
+}

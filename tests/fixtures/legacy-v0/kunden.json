@@ -1,0 +1,13 @@
+[
+    {
+        "id": 1,
+        "firma": "Muster GmbH",
+        "nachname": "Muster",
+        "strasse": "Musterstraße 5",
+        "plz": "86150",
+        "ort": "Augsburg",
+        "erstellt": "2023-04-01 09:00",
+        "geaendert": "2023-04-01 09:00",
+        "kundennummer": "000001"
+    }
+]

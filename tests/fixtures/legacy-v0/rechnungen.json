@@ -1,0 +1,15 @@
+[
+    {
+        "id": "1683700000123",
+        "typ": "rechnung",
+        "nummer": "RE-2023-0001",
+        "kundeId": 1,
+        "baustelleId": 1,
+        "datum": "2023-05-10",
+        "status": "offen",
+        "absender": {"firma": "Elektro Beispiel"},
+        "positionen": [{"bezeichnung": "Montage", "menge": 8, "einheit": "h", "einzelpreis": 58}],
+        "createdAt": "2023-05-10T10:00:00+02:00",
+        "createdBy": "altadmin"
+    }
+]

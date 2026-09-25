@@ -21,7 +21,8 @@ require_once __DIR__ . '/vendor/autoload.php';
 use App\Database;
 
 // ── Konstanten ───────────────────────────────────────────────
-define('DATA_DIR', __DIR__ . '/data/');
+// BK_DATA_DIR erlaubt ein abweichendes Datenverzeichnis (z. B. für Tests).
+define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
 $_pathsCfg = file_exists(DATA_DIR . 'paths_config.json')
     ? (json_decode(file_get_contents(DATA_DIR . 'paths_config.json'), true) ?? [])
     : [];
