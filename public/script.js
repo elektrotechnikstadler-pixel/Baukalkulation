@@ -10947,8 +10947,9 @@ function renderAllgemeinSettings(view, s) {
       </p>
       <div style="display:flex;gap:8px;align-items:center;max-width:480px">
         <input type="password" id="settGeminiKey" class="form-control" style="flex:1;font-size:.9rem"
-               value="${esc(s.gemini_api_key || '')}"
-               placeholder="AIza…"
+               value=""
+               placeholder="${s.gemini_api_key_gesetzt ? '•••••• gespeichert – neu eingeben zum Ändern' : 'AIza…'}"
+               autocomplete="new-password"
                onchange="updateSetting('gemini_api_key',this.value)">
         <button class="btn btn-secondary btn-sm" style="white-space:nowrap"
                 onclick="const i=document.getElementById('settGeminiKey');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Anzeigen':'Verbergen'">Anzeigen</button>
@@ -10987,7 +10988,8 @@ function renderAllgemeinSettings(view, s) {
         <input type="text" class="form-control" value="${esc(s.smtp_user||'')}" placeholder="user@example.com"
                style="font-size:.85rem;width:100%" onchange="updateSetting('smtp_user',this.value)"></div>
       <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">SMTP-Passwort</label>
-        <input type="password" class="form-control" value="${esc(s.smtp_pass||'')}"
+        <input type="password" class="form-control" value="" autocomplete="new-password"
+               placeholder="${s.smtp_pass_gesetzt ? '•••••• gespeichert – neu eingeben zum Ändern' : ''}"
                style="font-size:.85rem;width:100%" onchange="updateSetting('smtp_pass',this.value)"></div>
       <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Absender-E-Mail</label>
         <input type="email" class="form-control" value="${esc(s.smtp_from_email||'')}" placeholder="no-reply@firma.de"
@@ -11854,7 +11856,13 @@ async function updateSetting(key, value) {
     });
     const j = await r.json();
     if (j.ok) {
-      appSettings[key] = value;
+      if (key === 'smtp_pass' || key === 'gemini_api_key') {
+        // Geheimnisse bleiben nur auf dem Server
+        appSettings[key + '_gesetzt'] = value !== '';
+        appSettings[key] = '';
+      } else {
+        appSettings[key] = value;
+      }
       if (statusEl) { statusEl.textContent = 'Gespeichert'; setTimeout(() => statusEl.textContent = '', 2000); }
       applyModuleSettings();
     }

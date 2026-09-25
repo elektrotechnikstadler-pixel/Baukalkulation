@@ -66,7 +66,7 @@ class AuthActions
             'isSubunternehmer'   => $isSubunternehmer,
             'dienstleisterId'    => $dienstleisterId,
             'stundenKategorie'   => $stundenKategorie,
-            'settings'           => Auth::loadSettings($this->db),
+            'settings'           => Auth::publicSettings(Auth::loadSettings($this->db)),
             'modules'            => !empty($_SESSION['authenticated'])
                                         ? (new ModuleLoader($this->db))->listForFrontend()
                                         : [],

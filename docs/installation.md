@@ -198,10 +198,20 @@ sudo chown www-data:www-data data/audit_pepper.txt
 ### Erster Login
 
 - **URL:** `http://SERVER-IP:8081`
-- **Benutzer:** `admin`
-- **Passwort:** `admin`
+- Beim ersten Aufruf wird der erste Administrator angelegt (Benutzername + Passwort frei wählbar).
+- Zusätzlich entsteht das Support-Konto **`Systemadmin`**. Sein Startpasswort ist je Installation
+  individuell: aus `BK_SYSTEMADMIN_PASSWORD` in der `.env` (min. 12 Zeichen) oder – wenn leer –
+  zufällig erzeugt:
 
-> ⚠️ **Sofort nach dem ersten Login das Passwort ändern!**
+  ```bash
+  docker exec baukalkulation-KÜRZEL-app cat /var/www/html/data/systemadmin-passwort.txt
+  ```
+
+  Bei der ersten Anmeldung muss es geändert werden. Vergessen / gesperrt:
+
+  ```bash
+  docker exec -it baukalkulation-KÜRZEL-app php bin/console user:reset-password Systemadmin
+  ```
 
 ---
 

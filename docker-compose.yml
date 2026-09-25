@@ -38,6 +38,9 @@ services:
       # Laufzeit-Feature-Flags (Frontend-Gating)
       APP_ENABLE_OCR:       "${ENABLE_OCR:-true}"
       APP_ENABLE_WHATSAPP:  "${ENABLE_WHATSAPP:-false}"
+      # Optional: Startpasswort des Support-Kontos "Systemadmin" (min. 12 Zeichen).
+      # Leer = zufällig, abgelegt in data/systemadmin-passwort.txt
+      BK_SYSTEMADMIN_PASSWORD: "${BK_SYSTEMADMIN_PASSWORD:-}"
     volumes:
       - ${DATA_DIR:-./data}:/var/www/html/data
       - ${UPLOADS_DIR:-./data/uploads}:/var/www/html/data/uploads

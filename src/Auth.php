@@ -9,6 +9,9 @@ class Auth
     private static ?array $settingsCache = null;
     private static ?array $permissionsCache = null;
 
+    /** In der DB verschlüsselte Einstellungen (SecretBox); werden nie an den Browser geliefert. */
+    public const SECRET_SETTINGS = ['smtp_pass', 'gemini_api_key'];
+
     // ── Auth-Checks ──────────────────────────────────────────
     public static function requireAuth(): void
     {
@@ -57,11 +60,11 @@ class Auth
         $exists->execute();
         if ($exists->fetchColumn()) return;
 
-        // Systemadmin mit bekanntem Default-Passwort erstellen.
+        // Passwort je Installation (Env oder zufällig, siehe SystemadminPassword).
         // mustChangePassword=1 erzwingt Änderung beim ersten Login.
         $db->prepare(
             "INSERT OR IGNORE INTO users (username, password, role, kuerzel, visibleBaustellen, mustChangePassword) VALUES (?, ?, 'admin', 'SA', 'all', 1)"
-        )->execute(['Systemadmin', password_hash('Stadler2580!', PASSWORD_BCRYPT)]);
+        )->execute([Services\SystemadminPassword::USERNAME, Services\SystemadminPassword::newHash()]);
     }
 
     // ── Einstellungen laden (mit Defaults) ───────────────────
@@ -143,13 +146,36 @@ class Auth
         ];
         $row   = $db->query("SELECT data FROM settings WHERE id = 1")->fetch();
         $saved = $row ? (json_decode($row['data'], true) ?? []) : [];
-        self::$settingsCache = array_merge($defaults, $saved);
-        return self::$settingsCache;
+        $settings = array_merge($defaults, $saved);
+        foreach (self::SECRET_SETTINGS as $key) {
+            try {
+                $settings[$key] = \App\Services\SecretBox::decrypt((string)$settings[$key]);
+            } catch (\Throwable $e) {
+                // z. B. Sicherung einer anderen Installation eingespielt (anderer Schlüssel)
+                error_log("[Auth] Einstellung {$key} nicht entschlüsselbar: " . $e->getMessage());
+                $settings[$key] = '';
+            }
+        }
+        return self::$settingsCache = $settings;
+    }
+
+    /** Einstellungen für den Browser: Geheimnisse nie ausliefern, nur ob sie gesetzt sind. */
+    public static function publicSettings(array $settings): array
+    {
+        foreach (self::SECRET_SETTINGS as $key) {
+            $settings[$key . '_gesetzt'] = ($settings[$key] ?? '') !== '';
+            $settings[$key] = '';
+        }
+        return $settings;
     }
 
     // ── Einstellungen speichern ──────────────────────────────
     public static function saveSettings(\PDO $db, array $settings): void
     {
+        foreach (self::SECRET_SETTINGS as $key) {
+            $value = (string)($settings[$key] ?? '');
+            $settings[$key] = $value === '' ? '' : \App\Services\SecretBox::encrypt($value);
+        }
         $db->prepare("UPDATE settings SET data = ? WHERE id = 1")
            ->execute([json_encode($settings, JSON_UNESCAPED_UNICODE)]);
         self::$settingsCache = null;

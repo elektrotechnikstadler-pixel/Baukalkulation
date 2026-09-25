@@ -2,6 +2,9 @@
 /node_modules/
 /data/
 /public/dist/
+# Belege/Rechnungen nie im Projektordner ablegen (Kundendaten)
+/*.pdf
+/public/*.pdf
 /site/
 .php-cs-fixer.cache
 .env

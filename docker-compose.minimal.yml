@@ -28,6 +28,7 @@ services:
     environment:
       APP_ENABLE_OCR:      "false"
       APP_ENABLE_WHATSAPP: "false"
+      BK_SYSTEMADMIN_PASSWORD: "${BK_SYSTEMADMIN_PASSWORD:-}"
     volumes:
       - app-data:/var/www/html/data
       - app-uploads:/var/www/html/data/uploads

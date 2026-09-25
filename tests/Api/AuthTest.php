@@ -124,16 +124,52 @@ final class AuthTest extends ApiTestCase
         $this->assertStatus(403, $monteur->get('backups'));
     }
 
-    /**
-     * Hält den heutigen Stand fest: nach dem Setup existiert "Systemadmin" mit fest
-     * eingebautem Passwort. Wird mit der geplanten Sicherheitskorrektur angepasst.
-     */
-    public function testSystemadminWirdNachSetupMitStandardpasswortAngelegt(): void
+    public function testSystemadminBekommtIndividuellesStartpasswort(): void
     {
         $this->setupAdmin();
         $this->api->get('check');
 
-        $login = $this->assertOk($this->server->client()->post('login', ['username' => 'Systemadmin', 'password' => 'Stadler2580!']));
+        $client = $this->server->client();
+        $this->assertStatus(401, $client->post('login', ['username' => 'Systemadmin', 'password' => 'Stadler2580!']));
+
+        $file = $this->server->dataPath('systemadmin-passwort.txt');
+        $this->assertFileExists($file);
+        $password = trim((string) file($file)[1]);
+        $this->assertSame(20, strlen($password));
+        $login = $this->assertOk($client->post('login', ['username' => 'Systemadmin', 'password' => $password]));
         $this->assertTrue($login['mustChangePassword']);
+    }
+
+    public function testGeheimeEinstellungenWerdenNieAusgeliefert(): void
+    {
+        $this->setupAdmin();
+        $this->assertOk($this->api->post('save_settings', ['smtp_pass' => 'Smtp-Geheim-1', 'gemini_api_key' => 'AIza-geheim']));
+        $monteur = $this->createActiveUser('monteur', 'Monteur-Pass-1');
+
+        foreach ([$this->api->get('check'), $monteur->get('check'), $this->api->get('load_settings')] as $r) {
+            $this->assertStringNotContainsString('Smtp-Geheim-1', $r->body);
+            $this->assertStringNotContainsString('AIza-geheim', $r->body);
+            $settings = $r->json()['settings'];
+            $this->assertSame('', $settings['smtp_pass']);
+            $this->assertTrue($settings['smtp_pass_gesetzt']);
+            $this->assertTrue($settings['gemini_api_key_gesetzt']);
+        }
+
+        $pdo = new \PDO('sqlite:' . $this->server->dataPath('database.sqlite'));
+        $raw = (string) $pdo->query('SELECT data FROM settings WHERE id = 1')->fetchColumn();
+        $this->assertStringNotContainsString('Smtp-Geheim-1', $raw);
+        $this->assertStringStartsWith('enc:v1:', json_decode($raw, true)['smtp_pass']);
+    }
+
+    public function testGeheimeEinstellungBleibtBeiAnderenAenderungenErhalten(): void
+    {
+        $this->setupAdmin();
+        $this->assertOk($this->api->post('save_settings', ['smtp_pass' => 'Smtp-Geheim-1']));
+
+        $this->assertOk($this->api->post('save_settings', ['firma_name' => 'Elektro Muster']));
+        $this->assertTrue($this->api->get('load_settings')->json()['settings']['smtp_pass_gesetzt']);
+
+        $this->assertOk($this->api->post('save_settings', ['smtp_pass' => '']));
+        $this->assertFalse($this->api->get('load_settings')->json()['settings']['smtp_pass_gesetzt']);
     }
 }

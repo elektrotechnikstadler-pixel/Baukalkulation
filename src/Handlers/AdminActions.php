@@ -30,7 +30,7 @@ class AdminActions
     public function loadSettingsAction(): void
     {
         Auth::requireRole('admin', 'master');
-        jsonOut(['ok' => true, 'settings' => Auth::loadSettings($this->db)]);
+        jsonOut(['ok' => true, 'settings' => Auth::publicSettings(Auth::loadSettings($this->db))]);
     }
 
     public function saveSettingsAction(): void

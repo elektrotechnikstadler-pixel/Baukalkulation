@@ -57,6 +57,27 @@ final class MigrationTest extends ApiTestCase
         $this->assertNotFalse($db->query("SELECT 1 FROM sqlite_master WHERE name = 'idx_zeit_uuid'")->fetchColumn());
     }
 
+    public function testAltesStandardpasswortUndKlartextGeheimnisseWerdenErsetzt(): void
+    {
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open(__DIR__ . '/../fixtures/backups/v2.10.99.zip'));
+        file_put_contents($this->server->dataPath('database.sqlite'), $zip->getFromName('database.sqlite'));
+        $zip->close();
+        $db = $this->db();
+        $db->exec("UPDATE settings SET data = json_set(data, '$.smtp_pass', 'Alt-Klartext-1') WHERE id = 1");
+        $db = null;
+
+        $client = $this->server->client();
+        $this->assertStatus(401, $client->post('login', ['username' => 'Systemadmin', 'password' => 'Stadler2580!']));
+
+        $password = trim((string) file($this->server->dataPath('systemadmin-passwort.txt'))[1]);
+        $this->assertOk($client->post('login', ['username' => 'Systemadmin', 'password' => $password]));
+
+        $raw = (string) $this->db()->query('SELECT data FROM settings WHERE id = 1')->fetchColumn();
+        $this->assertStringNotContainsString('Alt-Klartext-1', $raw);
+        $this->assertStringStartsWith('enc:v1:', json_decode($raw, true)['smtp_pass']);
+    }
+
     public function testNeueresSchemaAlsDerCodeWirdAbgelehnt(): void
     {
         $this->setupAdmin();

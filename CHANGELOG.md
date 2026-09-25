@@ -11,6 +11,20 @@
 
 ## Unveröffentlicht
 
+### Sicherheit
+- **Support-Konto „Systemadmin" ohne festes Passwort.** Bisher hatte es in jeder Installation
+  dasselbe, im Quellcode stehende Startpasswort. Neu: `BK_SYSTEMADMIN_PASSWORD` (Env, min. 12
+  Zeichen) oder ein zufälliges Passwort in `data/systemadmin-passwort.txt`. Bestehende
+  Installationen, in denen das alte Passwort noch galt, bekommen beim Update automatisch ein
+  neues (auch beim Einspielen alter Sicherungen). Zurücksetzen:
+  `php bin/console user:reset-password Systemadmin`.
+- **SMTP-Passwort und Gemini-API-Key** werden verschlüsselt gespeichert (vorhandene Klartextwerte
+  werden beim Update umgestellt) und **nicht mehr an den Browser ausgeliefert** – bisher erhielt
+  jeder angemeldete Benutzer beide Werte über `api.php?action=check`. Die Einstellungen zeigen nur
+  noch „gespeichert"; leer lassen = unverändert.
+- Wird eine Sicherung einer **anderen** Installation eingespielt, lassen sich diese Werte dort nicht
+  entschlüsseln (anderer `data/secret.key`) und müssen neu eingegeben werden.
+
 ### Neu – Datenbank-Migrationen und Sicherungen (Phase 2)
 - **Versionierte Schema-Migrationen** (Phinx, Tabelle `schema_migrations`). Der bisherige
   Schema-Stand ist als Basis-Migration eingefroren und hebt auch alte Datenbanken an.
