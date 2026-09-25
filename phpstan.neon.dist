@@ -1,0 +1,22 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - src
+        - modules
+        - public/api.php
+        - public/din1090_api.php
+        - migrate.php
+        - cron_backup_email.php
+        - cron_material_erinnerung.php
+        - cron_stunden_erinnerung.php
+        - cron_stundenauswertung_email.php
+        - tests
+    excludePaths:
+        - src/frontend
+        - tests/phpstan
+    bootstrapFiles:
+        - tests/phpstan/constants.php

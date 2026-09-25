@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Support;
@@ -49,7 +50,7 @@ final class TestServer
             '-d', 'upload_max_filesize=50M',
             '-d', 'post_max_size=50M',
             '-S', "127.0.0.1:{$port}",
-            '-t', $this->appRoot,
+            '-t', $this->appRoot . DIRECTORY_SEPARATOR . 'public',
         ];
         $serverLog = $this->workDir . DIRECTORY_SEPARATOR . 'server.log';
         $process = proc_open(
@@ -87,7 +88,9 @@ final class TestServer
 
     public function errorLogTail(int $lines = 20): string
     {
-        if (!is_file($this->errorLog)) return '';
+        if (!is_file($this->errorLog)) {
+            return '';
+        }
         $all = file($this->errorLog, FILE_IGNORE_NEW_LINES) ?: [];
         return $all ? "\n--- PHP-Fehlerlog ---\n" . implode("\n", array_slice($all, -$lines)) : '';
     }
@@ -102,15 +105,16 @@ final class TestServer
         $env['BK_DATA_DIR'] = $this->dataDir;
         $proc = proc_open(
             array_merge([PHP_BINARY, $this->appRoot . DIRECTORY_SEPARATOR . $script], $args),
-            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]],
+            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             $this->appRoot,
             $env,
         );
         fclose($pipes[0]);
-        $out = stream_get_contents($pipes[1]);
+        $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         fclose($pipes[1]);
-        return [proc_close($proc), (string)$out];
+        fclose($pipes[2]);
+        return [proc_close($proc), (string) $out];
     }
 
     public function stop(): void
@@ -139,15 +143,19 @@ final class TestServer
     private static function freePort(): int
     {
         $sock = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
-        if (!$sock) throw new \RuntimeException("Kein freier Port: {$errstr}");
+        if (!$sock) {
+            throw new \RuntimeException("Kein freier Port: {$errstr}");
+        }
         $name = stream_socket_get_name($sock, false);
         fclose($sock);
-        return (int)substr((string)strrchr((string)$name, ':'), 1);
+        return (int) substr((string) strrchr((string) $name, ':'), 1);
     }
 
     private static function removeDir(string $dir): void
     {
-        if (!is_dir($dir)) return;
+        if (!is_dir($dir)) {
+            return;
+        }
         $it = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST,

@@ -14,8 +14,20 @@ whatsapp-bridge/
 *.tar.gz
 *.log
 
-# dist/ wird immer frisch durch den Node-Build-Stage im Dockerfile erzeugt
-dist/
+# Entwicklung/CI – nicht im Produktiv-Image
+tests/
+docs/
+.github/
+.phpunit.cache/
+phpunit.xml.dist
+phpstan*.neon*
+.php-cs-fixer*
+.pre-commit-config.yaml
+Makefile
+mkdocs.yml
+
+# public/dist/ wird immer frisch durch den Node-Build-Stage im Dockerfile erzeugt
+public/dist/
 
 # HiCAD-Rohbibliothek wird NICHT ins Image kopiert.
 # Stattdessen wird Materialbibliothek_Uebersicht.csv verwendet

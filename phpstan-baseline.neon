@@ -1,0 +1,253 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: cron_backup_email.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 2
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Constant IMG_FILTER_SHARPEN not found\.$#'
+			identifier: constant.notFound
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Offset ''image/bmp''\|''image/gif''\|''image/jpeg''\|''image/png''\|''image/tiff''\|''image/webp'' on array\{''image/jpeg''\: ''jpg'', ''image/png''\: ''png'', ''image/webp''\: ''webp'', ''image/gif''\: ''gif'', ''image/bmp''\: ''bmp'', ''image/tiff''\: ''tiff''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Offset 2 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Result of && is always true\.$#'
+			identifier: booleanAnd.alwaysTrue
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between GdImage and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 3
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: modules/aufmass/backend/Module.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 6
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Constant IMG_FILTER_SHARPEN not found\.$#'
+			identifier: constant.notFound
+			count: 1
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 2
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Offset ''image/bmp''\|''image/gif''\|''image/jpeg''\|''image/png''\|''image/tiff''\|''image/webp'' on array\{''image/jpeg''\: ''jpg'', ''image/png''\: ''png'', ''image/webp''\: ''webp'', ''image/gif''\: ''gif'', ''image/bmp''\: ''bmp'', ''image/tiff''\: ''tiff''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Offset 2 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Result of && is always true\.$#'
+			identifier: booleanAnd.alwaysTrue
+			count: 3
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between GdImage and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-empty\-string and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: modules/lager/backend/Module.php
+
+		-
+			message: '#^Method App\\Modules\\Vde0100\\Module\:\:h\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: modules/vde0100/backend/Module.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 6
+			path: modules/vde0100/backend/Module.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: modules/vde0100/backend/Module.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: src/Handlers/AdminActions.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Handlers/AiActions.php
+
+		-
+			message: '#^Offset ''baustelleId'' on array\{baustelleId\: int, name\: mixed, parentId\: mixed, file\: string, reactivated\?\: true\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Handlers/BaustelleActions.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<\(int\|string\)\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Handlers/BaustelleActions.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Handlers/BaustelleActions.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Handlers/CatalogActions.php
+
+		-
+			message: '#^Offset ''kgProM'' on array\{kategoriePfad\: non\-empty\-string\|string, kategorie\: string, tabelle\: string, bezeichnung\: non\-empty\-string, typ\: ''halbzeug''\|''profil'', kgProM\: float, material\: non\-falsy\-string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Handlers/CatalogActions.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 2
+			path: src/Handlers/CatalogActions.php
+
+		-
+			message: '#^Parameter \#1 \$string of function str_pad expects string, int\<1, max\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Handlers/CrudActions.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Handlers/DashboardActions.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 15
+			path: src/Handlers/DashboardActions.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: src/Handlers/DataActions.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: src/Handlers/GruppenActions.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 5
+			path: src/Handlers/TerminActions.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Handlers/UserActions.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<mixed\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Handlers/ZeiterfassungActions.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 6
+			path: src/Handlers/ZeiterfassungActions.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 4
+			path: src/Handlers/ZeiterfassungActions.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Services/BuchungValidator.php

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Api;
@@ -53,7 +54,7 @@ final class BackupTest extends ApiTestCase
         $this->assertTrue($zip->open($zipPath));
         $this->assertNotFalse($zip->locateName('baukalkulation.json'));
         $this->assertNotFalse($zip->locateName('database.sqlite'));
-        $snap = json_decode((string)$zip->getFromName('baukalkulation.json'), true);
+        $snap = json_decode((string) $zip->getFromName('baukalkulation.json'), true);
         $zip->close();
         @unlink($zipPath);
 

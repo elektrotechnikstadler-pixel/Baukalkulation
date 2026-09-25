@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+*.sh    text eol=lf
+*.ps1   text eol=crlf
+Makefile text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.zip   binary
+*.sqlite binary
+
+# Generierte/minifizierte Dateien nicht in Diffs aufblähen
+public/script.min.js linguist-generated=true -diff
+public/lib/**        linguist-vendored=true

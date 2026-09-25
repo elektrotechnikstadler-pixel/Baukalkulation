@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Api;
@@ -12,6 +13,7 @@ final class AuthTest extends ApiTestCase
         $this->assertFalse($json['loggedIn']);
         $this->assertTrue($json['needSetup']);
         $this->assertMatchesRegularExpression('/^\d+\.\d+\.\d+$/', $json['version']);
+        $this->assertSame(trim((string) file_get_contents($this->server->appRoot . '/VERSION')), $json['version']);
     }
 
     public function testSetupLegtAdminAnUndMeldetIhnAn(): void

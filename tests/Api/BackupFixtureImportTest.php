@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Api;
@@ -21,7 +22,7 @@ final class BackupFixtureImportTest extends ApiTestCase
     #[DataProvider('fixtures')]
     public function testFixtureLaesstSichEinspielen(string $zip, string $expectedFile): void
     {
-        $expected = json_decode((string)file_get_contents($expectedFile), true);
+        $expected = json_decode((string) file_get_contents($expectedFile), true);
         $this->assertOk($this->api->post('setup', ['username' => $expected['adminUser'], 'password' => $expected['adminPass']]));
 
         $this->assertOk($this->api->upload('backup_upload', 'backup', $zip));

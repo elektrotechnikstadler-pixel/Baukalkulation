@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Support;
@@ -35,7 +36,9 @@ final class ApiClient
         $url = $this->baseUrl . '/api.php?' . http_build_query(['action' => $action] + $query);
         if ($this->cookies) {
             $pairs = [];
-            foreach ($this->cookies as $k => $v) $pairs[] = "{$k}={$v}";
+            foreach ($this->cookies as $k => $v) {
+                $pairs[] = "{$k}={$v}";
+            }
             $headers[] = 'Cookie: ' . implode('; ', $pairs);
         }
         $respHeaders = [];
@@ -51,7 +54,9 @@ final class ApiClient
                     $name  = strtolower(trim($parts[0]));
                     $value = trim($parts[1]);
                     $respHeaders[$name][] = $value;
-                    if ($name === 'set-cookie') $this->storeCookie($value);
+                    if ($name === 'set-cookie') {
+                        $this->storeCookie($value);
+                    }
                 }
                 return strlen($line);
             },
@@ -60,8 +65,8 @@ final class ApiClient
         if ($body === false) {
             throw new \RuntimeException("HTTP-Fehler bei {$action}: " . curl_error($ch));
         }
-        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        return new ApiResponse($action, $status, (string)$body, $respHeaders);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        return new ApiResponse($action, $status, (string) $body, $respHeaders);
     }
 
     private function storeCookie(string $header): void

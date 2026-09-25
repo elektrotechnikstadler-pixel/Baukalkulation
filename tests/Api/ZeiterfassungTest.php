@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Api;
@@ -14,7 +15,7 @@ final class ZeiterfassungTest extends ApiTestCase
             'baustelleId' => 1,
             'stunden'     => $stunden,
             'von'         => '07:00',
-            'bis'         => sprintf('%02d:00', 7 + (int)$stunden),
+            'bis'         => sprintf('%02d:00', 7 + (int) $stunden),
             'pause'       => 0,
             'bemerkung'   => '',
         ];
@@ -38,7 +39,7 @@ final class ZeiterfassungTest extends ApiTestCase
         $this->assertEquals(8, $byUuid['uuid-1']['stunden']);
         $this->assertSame('2026-03-02', $byUuid['uuid-1']['datum']);
         $this->assertSame('Leitungen verlegt', $byUuid['uuid-1']['bemerkung']);
-        $this->assertSame(1, (int)$byUuid['uuid-1']['baustelleId']);
+        $this->assertSame(1, (int) $byUuid['uuid-1']['baustelleId']);
         $this->assertSame('Neubau', $byUuid['uuid-1']['baustelleName']);
     }
 

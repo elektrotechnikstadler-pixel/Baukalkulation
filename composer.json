@@ -2,6 +2,7 @@
     "name": "baukalkulation/api",
     "description": "Baukalkulation REST-API – SQLite Backend mit ZUGFeRD E-Rechnung",
     "type": "project",
+    "license": "proprietary",
     "require": {
         "php": ">=8.2",
         "ext-pdo_sqlite": "*",
@@ -21,6 +22,8 @@
         ]
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.75",
+        "phpstan/phpstan": "^2.1",
         "phpunit/phpunit": "^11.5"
     },
     "autoload-dev": {

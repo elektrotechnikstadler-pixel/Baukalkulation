@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Api;
@@ -68,7 +69,9 @@ abstract class ApiTestCase extends TestCase
     {
         $client ??= $this->api;
         $body = ['data' => ['baustellen' => $baustellen]];
-        if ($baseRev !== null) $body['baseRev'] = $baseRev;
+        if ($baseRev !== null) {
+            $body['baseRev'] = $baseRev;
+        }
         return $this->assertOk($client->post('save', $body));
     }
 }

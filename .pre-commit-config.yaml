@@ -1,0 +1,47 @@
+# Pre-commit-Hooks (kompatibel mit prek und pre-commit):
+#   prek install   bzw.   pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '^public/(lib|script\.min\.js)|\.md$'
+      - id: end-of-file-fixer
+        exclude: '^public/(lib|script\.min\.js)|^tests/fixtures/'
+      - id: check-yaml
+      - id: check-json
+        exclude: '^(tsconfig.*\.json)$'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=2000']
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: php-lint
+        name: php -l
+        entry: php -l
+        language: system
+        files: '\.php$'
+      - id: php-cs-fixer
+        name: php-cs-fixer
+        entry: php vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php
+        language: system
+        files: '^tests/.*\.php$'
+      - id: phpstan
+        name: phpstan
+        entry: php vendor/bin/phpstan analyse --memory-limit=2G --no-progress
+        language: system
+        pass_filenames: false
+        files: '\.php$'
+      - id: check-versions
+        name: check-versions
+        entry: node scripts/check-versions.mjs --strict
+        language: system
+        pass_filenames: false
+        files: '^(VERSION|package\.json|public/(index\.html|sw\.js|script\.js|mobile\.html|manifest\.json))$'

@@ -1,7 +1,9 @@
 /vendor/
 /node_modules/
 /data/
-/dist/
+/public/dist/
+/site/
+.php-cs-fixer.cache
 .env
 *.log
 /.phpunit.cache/

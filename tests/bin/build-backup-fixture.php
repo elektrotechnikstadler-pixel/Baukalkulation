@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 /**
@@ -41,7 +42,7 @@ $kunde2 = ok($api->post('save_kunde', ['nachname' => 'Huber', 'vorname' => 'Anna
 ok($api->post('save', ['data' => [
     'baustellen' => [
         ['id' => 1, 'name' => 'Neubau Musterstraße', 'kundeId' => $kunde1, 'projektNr' => 'P-001',
-         'material' => [['id' => 1, 'bezeichnung' => 'NYM-J 3x1,5', 'menge' => 100, 'ek' => 0.89]]],
+            'material' => [['id' => 1, 'bezeichnung' => 'NYM-J 3x1,5', 'menge' => 100, 'ek' => 0.89]]],
         ['id' => 2, 'name' => 'Garage Huber', 'kundeId' => $kunde2],
     ],
     'pauschalen'      => [['id' => 1, 'name' => 'Anfahrt', 'preis' => 45.5]],
@@ -68,7 +69,9 @@ if ($zip->status !== 200 || $zip->header('Content-Type') !== 'application/zip') 
 }
 
 $outDir = __DIR__ . '/../fixtures/backups';
-if (!is_dir($outDir)) mkdir($outDir, 0777, true);
+if (!is_dir($outDir)) {
+    mkdir($outDir, 0777, true);
+}
 file_put_contents("{$outDir}/v{$version}.zip", $zip->body);
 file_put_contents("{$outDir}/v{$version}.expected.json", json_encode([
     'appVersion'    => $version,
