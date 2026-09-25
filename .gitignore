@@ -1,6 +1,7 @@
 /vendor/
 /node_modules/
 /data/
+/deploy/
 /secrets/
 /pgdata/
 /public/dist/

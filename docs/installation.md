@@ -53,7 +53,8 @@ Das Skript fragt Ports, OCR und WhatsApp ab, schreibt `.env` und startet anschli
 
 ## 1. Dateien auf den Server kopieren
 
-Das komplette Repository (ohne `tests/`, `docs/`, `.github/`) in ein Verzeichnis auf dem Server kopieren (z.B. `/opt/baukalkulation/`). Aufbau:
+Das komplette Repository (ohne `tests/`, `docs/`, `.github/`) in ein Verzeichnis auf dem Server kopieren (z.B. `/opt/baukalkulation/`).
+Fertig zusammengestellt liegt es nach `npm run deploy:sync` im Ordner `deploy/` – diesen Ordner hochladen. Aufbau:
 
 ```
 ├── public/                      ← einziger Webroot (DocumentRoot)

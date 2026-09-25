@@ -3,7 +3,7 @@ COMPOSER ?= composer
 NPM      ?= npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install verify lint fix type-check test test-unit test-api test-pgsql test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
+.PHONY: help install verify lint fix type-check test test-unit test-api test-pgsql test-cov audit build check-versions version-sync deploy fixture migrate db-status docs docs-serve docker-build
 
 help: ## Diese Übersicht
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -58,6 +58,9 @@ check-versions: ## Versions-/Cache-Busting-Konsistenz prüfen
 
 version-sync: ## Version aus VERSION nach manifest.json/package.json übertragen
 	node scripts/sync-version.mjs
+
+deploy: ## Upload-Ordner deploy/ aktualisieren (Spiegel ohne Entwicklungsdateien)
+	node scripts/sync-deploy.mjs
 
 fixture: ## Backup-Fixture der aktuellen Version erzeugen
 	$(PHP) tests/bin/build-backup-fixture.php
