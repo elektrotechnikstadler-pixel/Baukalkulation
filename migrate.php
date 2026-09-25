@@ -62,13 +62,31 @@ function readJson(string $path): mixed
 function info(string $msg): void { echo "[INFO]  $msg\n"; }
 function warn(string $msg): void { echo "[WARN]  $msg\n"; }
 
+/** UPSERT, das in SQLite und PostgreSQL gleich funktioniert (ersetzt INSERT OR REPLACE). */
+function upsertSql(string $table, string $cols, string $key): string
+{
+    $list = array_map('trim', explode(',', $cols));
+    $set  = implode(', ', array_map(fn($c) => "$c = excluded.$c", array_diff($list, [$key])));
+    return "INSERT INTO $table ($cols) VALUES (" . implode(',', array_fill(0, count($list), '?')) . ") ON CONFLICT($key) DO UPDATE SET $set";
+}
+
 // ══════════════════════════════════════════════════════════════
 echo "=== Baukalkulation: JSON → SQLite Migration ===\n\n";
 
 $dbPath = DATA_DIR . 'database.sqlite';
 $force  = in_array('--force', $argv ?? [], true);
+$isPg   = \App\Database\ConnectionConfig::driver() === 'pgsql';
 
-if (file_exists($dbPath) && !$force) {
+if ($isPg) {
+    if ($force) {
+        echo "[ERROR] --force wird bei PostgreSQL nicht unterstützt. Bitte eine leere Datenbank verwenden.\n";
+        exit(1);
+    }
+    if ((int)Database::connect()->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0) {
+        echo "Datenbank existiert bereits (PostgreSQL enthält Daten) – kein JSON-Import nötig.\n";
+        exit(0);
+    }
+} elseif (file_exists($dbPath) && !$force) {
     echo "Datenbank existiert bereits: $dbPath\n";
     echo "Verwende --force um die Datenbank neu zu erstellen.\n";
     echo "ACHTUNG: --force löscht alle bestehenden SQLite-Daten!\n";
@@ -109,7 +127,7 @@ try {
     // ── 1) Benutzer ──────────────────────────────────────────
     $usersData = readJson($USERS_FILE);
     if (is_array($usersData)) {
-        $stmt = $db->prepare("INSERT OR REPLACE INTO users (username, password, role, kuerzel, personalnummer, visibleBaustellen, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, showInZeitverwaltung, showInWochenplanung, sollstunden, sollstundenTag, sollTageWoche, urlaubstageProJahr) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $stmt = $db->prepare(upsertSql('users', 'username, password, role, kuerzel, personalnummer, visibleBaustellen, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, showInZeitverwaltung, showInWochenplanung, sollstunden, sollstundenTag, sollTageWoche, urlaubstageProJahr', 'username'));
         foreach ($usersData as $u) {
             $vb = $u['visibleBaustellen'] ?? 'all';
             $vbStr = is_array($vb) ? json_encode($vb) : (string)$vb;
@@ -143,7 +161,7 @@ try {
     $appData = readJson($DATA_FILE);
     if (is_array($appData)) {
         // Baustellen
-        $bStmt = $db->prepare("INSERT OR REPLACE INTO baustellen (id, name, kundeId, data) VALUES (?,?,?,?)");
+        $bStmt = $db->prepare(upsertSql('baustellen', 'id, name, kundeId, data', 'id'));
         foreach ($appData['baustellen'] ?? [] as $b) {
             $id      = (int)($b['id'] ?? 0);
             $name    = $b['name'] ?? '';
@@ -214,7 +232,7 @@ try {
     // ── 4) Kunden ────────────────────────────────────────────
     $kundenData = readJson($KUNDEN_FILE);
     if (is_array($kundenData)) {
-        $kStmt = $db->prepare("INSERT OR REPLACE INTO kunden (id, firma, anrede, vorname, nachname, strasse, plz, ort, telefon, mobil, email, notizen, erstellt, geaendert, kundennummer) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $kStmt = $db->prepare(upsertSql('kunden', 'id, firma, anrede, vorname, nachname, strasse, plz, ort, telefon, mobil, email, notizen, erstellt, geaendert, kundennummer', 'id'));
         foreach ($kundenData as $k) {
             $kStmt->execute([
                 $k['id'] ?? null, $k['firma'] ?? '', $k['anrede'] ?? '',
@@ -233,7 +251,7 @@ try {
     // ── 5) Dienstleister ─────────────────────────────────────
     $dlData = readJson($DIENSTLEISTER_FILE);
     if (is_array($dlData)) {
-        $dStmt = $db->prepare("INSERT OR REPLACE INTO dienstleister (id, firma, kontakt, telefon, email, notizen) VALUES (?,?,?,?,?,?)");
+        $dStmt = $db->prepare(upsertSql('dienstleister', 'id, firma, kontakt, telefon, email, notizen', 'id'));
         foreach ($dlData as $d) {
             $dStmt->execute([$d['id'] ?? null, $d['firma'] ?? '', $d['kontakt'] ?? '', $d['telefon'] ?? '', $d['email'] ?? '', $d['notizen'] ?? '']);
         }
@@ -290,7 +308,7 @@ try {
     // ── 8) Rechnungen ────────────────────────────────────────
     $rechnungen = readJson($RECHNUNGEN_FILE);
     if (is_array($rechnungen)) {
-        $rStmt = $db->prepare("INSERT OR REPLACE INTO rechnungen (id, typ, nummer, kundeId, baustelleId, datum, faelligAm, status, absender, positionen, notizen, beschreibung, zahlungsziel, createdAt, createdBy, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $rStmt = $db->prepare(upsertSql('rechnungen', 'id, typ, nummer, kundeId, baustelleId, datum, faelligAm, status, absender, positionen, notizen, beschreibung, zahlungsziel, createdAt, createdBy, updatedAt', 'id'));
         foreach ($rechnungen as $r) {
             $rStmt->execute([
                 $r['id'] ?? '', $r['typ'] ?? 'rechnung', $r['nummer'] ?? '',
@@ -335,7 +353,7 @@ try {
     $calFile = DATA_DIR . 'cal_tokens.json';
     $calData = readJson($calFile);
     if (is_array($calData)) {
-        $ctStmt = $db->prepare("INSERT OR REPLACE INTO cal_tokens (token, username, role, created) VALUES (?,?,?,?)");
+        $ctStmt = $db->prepare(upsertSql('cal_tokens', 'token, username, role, created', 'token'));
         foreach ($calData as $token => $info) {
             if (is_array($info)) {
                 $ctStmt->execute([$token, $info['username'] ?? '', $info['role'] ?? 'normal', $info['created'] ?? '']);
@@ -354,9 +372,13 @@ try {
     }
 
     $db->commit();
+    $dialect = \App\Database\Dialect::for($db);
+    $dialect->resetSequences($db, $dialect->tableNames($db));
     echo "\n=== Migration erfolgreich abgeschlossen! ===\n";
-    echo "Datenbank: $dbPath\n";
-    echo "Größe: " . round(filesize($dbPath) / 1024, 1) . " KB\n";
+    if (!$isPg) {
+        echo "Datenbank: $dbPath\n";
+        echo "Größe: " . round(filesize($dbPath) / 1024, 1) . " KB\n";
+    }
 
 } catch (\Exception $e) {
     $db->rollBack();

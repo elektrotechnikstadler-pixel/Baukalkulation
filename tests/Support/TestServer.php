@@ -7,6 +7,9 @@ namespace Tests\Support;
 /**
  * Startet api.php im PHP-Built-in-Server mit eigenem Datenverzeichnis (BK_DATA_DIR).
  * Ein Server pro PHPUnit-Prozess; resetData() sorgt für Isolation zwischen Tests.
+ *
+ * PostgreSQL: BK_DB_DRIVER=pgsql und BK_DB_* setzen (werden an Server/CLI vererbt).
+ * BK_TEST_PHP_ARGS (z. B. "-d extension=pdo_pgsql") wird jedem Kindprozess übergeben.
  */
 final class TestServer
 {
@@ -17,6 +20,7 @@ final class TestServer
     public readonly string $baseUrl;
     public readonly string $appRoot;
     public readonly string $dataDir;
+    public readonly string $driver;
     private readonly string $workDir;
     private readonly string $errorLog;
 
@@ -28,6 +32,7 @@ final class TestServer
     private function __construct()
     {
         $this->appRoot  = dirname(__DIR__, 2);
+        $this->driver   = (string) (getenv('BK_DB_DRIVER') ?: 'sqlite');
         $this->workDir  = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'bk-test-' . bin2hex(random_bytes(4));
         $this->dataDir  = $this->workDir . DIRECTORY_SEPARATOR . 'data';
         $this->errorLog = $this->workDir . DIRECTORY_SEPARATOR . 'php_errors.log';
@@ -42,7 +47,7 @@ final class TestServer
         $env['BK_DATA_DIR'] = $this->dataDir;
 
         $cmd = [
-            PHP_BINARY,
+            ...self::phpCommand(),
             '-d', 'session.save_path=' . $sessionDir,
             '-d', 'display_errors=0',
             '-d', 'log_errors=1',
@@ -66,6 +71,38 @@ final class TestServer
         $this->process = $process;
         register_shutdown_function([$this, 'stop']);
         $this->waitUntilReachable($port);
+        $this->resetDatabase();
+    }
+
+    public function isPgsql(): bool
+    {
+        return $this->driver === 'pgsql';
+    }
+
+    /** Verbindung zur Test-Datenbank der App (SQLite-Datei bzw. PostgreSQL), ohne Migration. */
+    public function db(): \PDO
+    {
+        return $this->isPgsql()
+            ? \App\Database\ConnectionConfig::openPgsql()
+            : \App\Database\ConnectionConfig::openSqlite($this->dataPath('database.sqlite'));
+    }
+
+    /** @return list<string> */
+    private static function phpCommand(): array
+    {
+        $extra = trim((string) getenv('BK_TEST_PHP_ARGS'));
+        return array_merge([PHP_BINARY], $extra === '' ? [] : (preg_split('/\s+/', $extra) ?: []));
+    }
+
+    /** PostgreSQL: Schema leeren (SQLite: nichts zu tun, resetData() löscht die Datei). */
+    public function resetDatabase(): void
+    {
+        if (!$this->isPgsql()) {
+            return;
+        }
+        $pdo = \App\Database\ConnectionConfig::openPgsql();
+        $pdo->exec('DROP SCHEMA IF EXISTS public CASCADE');
+        $pdo->exec('CREATE SCHEMA public');
     }
 
     public function client(): ApiClient
@@ -79,6 +116,7 @@ final class TestServer
         self::removeDir($this->dataDir);
         mkdir($this->dataDir, 0777, true);
         @file_put_contents($this->errorLog, '');
+        $this->resetDatabase();
     }
 
     public function dataPath(string $relative = ''): string
@@ -104,7 +142,7 @@ final class TestServer
         $env = getenv();
         $env['BK_DATA_DIR'] = $this->dataDir;
         $proc = proc_open(
-            array_merge([PHP_BINARY, $this->appRoot . DIRECTORY_SEPARATOR . $script], $args),
+            array_merge(self::phpCommand(), [$this->appRoot . DIRECTORY_SEPARATOR . $script], $args),
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             $this->appRoot,

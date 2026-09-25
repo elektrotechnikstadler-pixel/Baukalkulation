@@ -1,7 +1,10 @@
 <?php
 namespace App\Backup;
 
+use App\Database;
+use App\Database\Dialect;
 use App\Database\Migrator;
+use App\Database\TableCopier;
 use App\DataService;
 
 /**
@@ -36,9 +39,11 @@ final class Importer
         $source = $archive->sqlitePath !== null ? $this->prepareSource($archive->sqlitePath) : null;
 
         $result = ['rev' => 0, 'tables' => [], 'skipped' => []];
-        $this->db->exec('PRAGMA foreign_keys = OFF');
+        $dialect = Dialect::for($this->db);
+        $dialect->beforeBulkImport($this->db);
         $this->db->beginTransaction();
         try {
+            $dialect->relaxForeignKeys($this->db);
             if ($inTransaction !== null) $inTransaction();
             $oldZeitRev = (int)$this->db->query('SELECT COALESCE(MAX(rev), 0) FROM zeiterfassung_meta')->fetchColumn();
 
@@ -49,6 +54,8 @@ final class Importer
             $result['rev'] = $res['rev'];
 
             if ($source !== null) {
+                $copier = new TableCopier($source['pdo'], $this->db);
+                $tables = [];
                 foreach ($source['tables'] as $table) {
                     if (!$this->shouldCopy($table, $mode)) {
                         continue;
@@ -57,30 +64,50 @@ final class Importer
                         $result['skipped'][] = $table;
                         continue;
                     }
-                    try {
-                        $result['tables'][$table] = $this->copyTable($source['pdo'], $table);
-                    } catch (\PDOException $e) {
-                        throw new InvalidBackupException("Tabelle {$table} konnte nicht übernommen werden: " . $e->getMessage());
+                    $tables[] = $table;
+                }
+                $current = null;
+                try {
+                    $this->createMissingTables($source['pdo'], $tables);
+                    // Erst alles leeren, dann füllen: ON DELETE CASCADE darf bereits kopierte Zeilen nicht treffen.
+                    foreach ($tables as $current) {
+                        $copier->clear($current);
                     }
+                    foreach ($tables as $current) {
+                        $result['tables'][$current] = $copier->copyRows($current);
+                    }
+                    $current = null;
+                    $copier->finish($tables);
+                } catch (\PDOException $e) {
+                    throw new InvalidBackupException(
+                        ($current !== null ? "Tabelle {$current} konnte nicht übernommen werden: " : 'Tabellen konnten nicht übernommen werden: ')
+                        . $e->getMessage()
+                    );
                 }
             }
 
             // Offene Clients mit altem Stand müssen neu laden statt die Sicherung zu überschreiben.
             $this->db->prepare('UPDATE zeiterfassung_meta SET rev = rev + ?')->execute([$oldZeitRev + 1]);
 
-            $violations = $this->db->query('PRAGMA foreign_key_check')->fetchAll();
+            $violations = $dialect->foreignKeyViolations($this->db);
             if ($violations) {
-                throw new InvalidBackupException('Sicherung enthält ungültige Verknüpfungen (' . count($violations) . ' Datensätze).');
+                throw new InvalidBackupException('Sicherung enthält ungültige Verknüpfungen (' . $violations . ' Datensätze).');
             }
-            $this->db->commit();
+            try {
+                $this->db->commit();
+            } catch (\PDOException $e) {
+                // PostgreSQL prüft verzögerte Fremdschlüssel erst hier.
+                throw new InvalidBackupException('Sicherung enthält ungültige Verknüpfungen: ' . $e->getMessage());
+            }
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;
         } finally {
-            $this->db->exec('PRAGMA foreign_keys = ON');
+            $dialect->afterBulkImport($this->db);
             if ($source !== null) {
                 $path = $source['path'];
-                $source = null;
+                $source = $copier = null;
+                gc_collect_cycles();
                 self::removeFile($path);
             }
         }
@@ -107,9 +134,7 @@ final class Importer
             throw new \RuntimeException('Sicherungs-DB konnte nicht kopiert werden.');
         }
         try {
-            $pdo = new \PDO('sqlite:' . $path);
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-            $pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
+            $pdo = Database::open($path);
             if (strtolower((string)$pdo->query('PRAGMA integrity_check')->fetchColumn()) !== 'ok') {
                 throw new InvalidBackupException('Die Datenbank in der Sicherung ist beschädigt.');
             }
@@ -117,7 +142,7 @@ final class Importer
                 throw new InvalidBackupException('Die Sicherung stammt aus einer neueren App-Version und kann hier nicht eingespielt werden.');
             }
             // Nur Tabellen übernehmen, die die Sicherung selbst enthielt – nicht die beim Anheben ergänzten.
-            $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")->fetchAll(\PDO::FETCH_COLUMN);
+            $tables = Dialect::for($pdo)->tableNames($pdo);
             Migrator::migrate($pdo);
             return ['pdo' => $pdo, 'path' => $path, 'tables' => array_values($tables)];
         } catch (\PDOException $e) {
@@ -138,47 +163,35 @@ final class Importer
         return true;
     }
 
-    private function copyTable(\PDO $src, string $table): int
+    /**
+     * Legt im Ziel fehlende Tabellen (z. B. Modul noch nie geladen) nach der Definition der Sicherung an –
+     * referenzierte Tabellen zuerst, weil PostgreSQL Fremdschlüssel sofort prüft.
+     * @param list<string> $tables
+     */
+    private function createMissingTables(\PDO $src, array $tables): void
     {
-        $qt = self::quote($table);
-        if (!$this->tableExists($table)) {
-            // Tabelle fehlt im Ziel (z. B. Modul noch nie geladen): Definition aus der Sicherung übernehmen.
-            $ddl = (string)$src->query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = " . $src->quote($table))->fetchColumn();
-            if (!preg_match('/^\s*CREATE TABLE\b/i', $ddl) || str_contains($ddl, ';')) {
+        $dialect = Dialect::for($this->db);
+        $ddl = [];
+        foreach ($tables as $table) {
+            if ($dialect->tableExists($this->db, $table)) continue;
+            $sql = (string)$src->query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = " . $src->quote($table))->fetchColumn();
+            if (!preg_match('/^\s*CREATE TABLE\b/i', $sql) || str_contains($sql, ';')) {
                 throw new InvalidBackupException("Unerwartete Tabellendefinition für {$table}.");
             }
-            $this->db->exec($ddl);
+            $ddl[$table] = $sql;
         }
-
-        $cols = array_values(array_intersect($this->columns($src, $table), $this->columns($this->db, $table)));
-        $this->db->exec("DELETE FROM {$qt}");
-        if (!$cols) return 0;
-
-        $list = implode(', ', array_map([self::class, 'quote'], $cols));
-        $insert = $this->db->prepare("INSERT INTO {$qt} ({$list}) VALUES (" . implode(', ', array_fill(0, count($cols), '?')) . ')');
-        $count = 0;
-        foreach ($src->query("SELECT {$list} FROM {$qt}", \PDO::FETCH_NUM) as $row) {
-            $insert->execute($row);
-            $count++;
+        $done = [];
+        $create = function (string $table, array $path) use (&$create, &$done, $ddl): void {
+            if (isset($done[$table]) || isset($path[$table])) return;
+            preg_match_all('/\bREFERENCES\s+"?([a-z][a-z0-9_]*)"?/i', $ddl[$table], $m);
+            foreach ($m[1] as $dep) {
+                if (isset($ddl[$dep])) $create($dep, $path + [$table => true]);
+            }
+            $this->db->exec($ddl[$table]);
+            $done[$table] = true;
+        };
+        foreach (array_keys($ddl) as $table) {
+            $create($table, []);
         }
-        return $count;
-    }
-
-    private function tableExists(string $table): bool
-    {
-        $stmt = $this->db->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?");
-        $stmt->execute([$table]);
-        return (bool)$stmt->fetchColumn();
-    }
-
-    /** @return list<string> */
-    private function columns(\PDO $pdo, string $table): array
-    {
-        return array_column($pdo->query('PRAGMA table_info(' . self::quote($table) . ')')->fetchAll(\PDO::FETCH_ASSOC), 'name');
-    }
-
-    private static function quote(string $identifier): string
-    {
-        return '"' . str_replace('"', '""', $identifier) . '"';
     }
 }

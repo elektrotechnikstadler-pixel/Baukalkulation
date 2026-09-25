@@ -1,8 +1,11 @@
 {
     "name": "baukalkulation/api",
-    "description": "Baukalkulation REST-API – SQLite Backend mit ZUGFeRD E-Rechnung",
+    "description": "Baukalkulation REST-API – SQLite/PostgreSQL-Backend mit ZUGFeRD E-Rechnung",
     "type": "project",
     "license": "proprietary",
+    "suggest": {
+        "ext-pdo_pgsql": "Betrieb mit PostgreSQL (BK_DB_DRIVER=pgsql)"
+    },
     "require": {
         "php": ">=8.2",
         "ext-pdo_sqlite": "*",

@@ -83,7 +83,7 @@ class UserActions
     {
         Auth::requireRole('admin');
         $this->ensurePersonalnummerAutofill();
-        $rows = $this->db->query("SELECT username, role, kuerzel, personalnummer, visibleBaustellen, showInZeitverwaltung, showInWochenplanung, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, isLocked, failedLoginAttempts, lastLoginAt, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY username COLLATE NOCASE")->fetchAll();
+        $rows = $this->db->query("SELECT username, role, kuerzel, personalnummer, visibleBaustellen, showInZeitverwaltung, showInWochenplanung, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, isLocked, failedLoginAttempts, lastLoginAt, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
         $list = array_map(fn($r) => [
             'username'             => $r['username'],
             'role'                 => $r['role'],
@@ -123,7 +123,7 @@ class UserActions
     {
         Auth::requireAuth();
         $this->ensurePersonalnummerAutofill();
-        $rows = $this->db->query("SELECT username, kuerzel, showInWochenplanung, isSubunternehmer, dienstleisterId, stundenKategorie, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY username COLLATE NOCASE")->fetchAll();
+        $rows = $this->db->query("SELECT username, kuerzel, showInWochenplanung, isSubunternehmer, dienstleisterId, stundenKategorie, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
         $list = array_map(fn($r) => [
             'username'            => $r['username'],
             'kuerzel'             => $r['kuerzel'] ?? '',
@@ -164,7 +164,7 @@ class UserActions
         if ($kz !== '' && empty($this->body['confirmKuerzelDuplicate'])) {
             $dupe = \App\Database::fetchOne(
                 $this->db,
-                "SELECT username FROM users WHERE kuerzel = ? AND username <> ? COLLATE NOCASE",
+                "SELECT username FROM users WHERE kuerzel = ? AND LOWER(username) <> LOWER(?)",
                 [$kz, $target]
             );
             if ($dupe) {

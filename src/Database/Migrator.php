@@ -66,13 +66,18 @@ final class Migrator
                 throw new \RuntimeException("Migrations-Sperre nicht verfügbar: {$lockFile}");
             }
         }
+        $pg = $db->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql';
         try {
+            // Sperrt auch gegen weitere Container/Hosts an derselben PostgreSQL-Datenbank.
+            if ($pg) $db->query("SELECT pg_advisory_lock(hashtext('bk_schema_migrate'))");
             // Nach dem Warten auf die Sperre kann ein anderer Prozess bereits migriert haben.
             if (self::currentVersion($db) >= self::latestVersion()) return;
+            Dialect::for($db)->prepareSchema($db);
             self::manager($db, $output ?? new NullOutput())->migrate('app');
         } finally {
             $db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
             $db->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
+            if ($pg) $db->query("SELECT pg_advisory_unlock(hashtext('bk_schema_migrate'))");
             if ($lock) {
                 flock($lock, LOCK_UN);
                 fclose($lock);
@@ -108,7 +113,9 @@ final class Migrator
                 'default_environment'     => 'app',
                 'app' => [
                     'connection' => $db,
-                    'name'       => 'app',
+                    'name'       => $db->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql'
+                        ? (string)$db->query('SELECT current_database()')->fetchColumn()
+                        : 'app',
                 ],
             ],
             'version_order' => 'creation',

@@ -78,7 +78,7 @@ class Module extends AbstractModule
     // ── Lagerorte ────────────────────────────────────────
     private function orteList(): void
     {
-        $rows = $this->db->query("SELECT id, name, beschreibung, aktiv FROM lager_orte ORDER BY name COLLATE NOCASE")->fetchAll(\PDO::FETCH_ASSOC);
+        $rows = $this->db->query("SELECT id, name, beschreibung, aktiv FROM lager_orte ORDER BY LOWER(name)")->fetchAll(\PDO::FETCH_ASSOC);
         $counts = [];
         foreach ($this->db->query("SELECT lagerort_id, COUNT(*) c FROM lager_artikel GROUP BY lagerort_id")->fetchAll(\PDO::FETCH_ASSOC) as $c) {
             $counts[(int)$c['lagerort_id']] = (int)$c['c'];
@@ -102,7 +102,7 @@ class Module extends AbstractModule
         if ($name === '') \jsonOut(['error' => 'Name ist erforderlich.'], 400);
         if (mb_strlen($name) > 100) \jsonOut(['error' => 'Name zu lang (max. 100).'], 400);
 
-        $stmt = $this->db->prepare("SELECT id FROM lager_orte WHERE name = ? COLLATE NOCASE AND id != ?");
+        $stmt = $this->db->prepare("SELECT id FROM lager_orte WHERE LOWER(name) = LOWER(?) AND id != ?");
         $stmt->execute([$name, $id]);
         if ($stmt->fetch()) \jsonOut(['error' => 'Lagerort mit diesem Namen existiert bereits.'], 400);
 
@@ -162,7 +162,7 @@ class Module extends AbstractModule
         if ($lagerortId > 0) { $sql .= " AND a.lagerort_id = ?"; $params[] = $lagerortId; }
         if ($nurMitBest)     { $sql .= " AND a.menge > 0"; }
         if ($unterMin)       { $sql .= " AND a.mindestbestand > 0 AND a.menge < a.mindestbestand"; }
-        $sql .= " ORDER BY a.bezeichnung COLLATE NOCASE LIMIT 1000";
+        $sql .= " ORDER BY LOWER(a.bezeichnung) LIMIT 1000";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
@@ -484,7 +484,7 @@ class Module extends AbstractModule
                 FROM lager_artikel a
                 LEFT JOIN lager_orte o ON o.id = a.lagerort_id
                 WHERE " . implode(' OR ', $sqlParts) . "
-                ORDER BY a.bezeichnung COLLATE NOCASE
+                ORDER BY LOWER(a.bezeichnung)
                 LIMIT 10";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($sqlParams);
@@ -790,7 +790,7 @@ PROMPT;
                  FROM lager_artikel a
                  LEFT JOIN lager_orte o ON o.id = a.lagerort_id
                  WHERE " . implode(' OR ', $sqlParts) .
-                " ORDER BY a.bezeichnung COLLATE NOCASE LIMIT 8"
+                " ORDER BY LOWER(a.bezeichnung) LIMIT 8"
             );
             $stmt->execute($sqlParams);
             $lagerTreffer = array_map(fn($r) => [

@@ -10,6 +10,16 @@ final class LegacySchema
 {
     public static function apply(\PDO $db): void
     {
+        // PostgreSQL: immer neue, leere DB – jeder Fehler bricht die Migration sichtbar ab
+        // (eine fehlgeschlagene Anweisung würde die Transaktion ohnehin unbrauchbar machen).
+        if ($db->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            foreach (self::statements() as $sql) {
+                $db->exec($sql);
+            }
+            self::upgrade($db);
+            return;
+        }
+
         // Ältere DBs: Indizes auf später ergänzte Spalten erst nach dem Upgrade anlegen.
         $deferred = [];
         foreach (self::statements() as $sql) {

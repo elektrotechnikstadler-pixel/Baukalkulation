@@ -1,4 +1,6 @@
 data/
+secrets/
+pgdata/
 vendor/
 Datanorm/
 .git

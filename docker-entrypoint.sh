@@ -6,7 +6,13 @@
 
 set -e
 
-echo "[entrypoint] Starte DB-Migration..."
+# cron startet Jobs ohne die Container-Umgebung: relevante Variablen für die
+# Cron-Zeilen ablegen (nur root und www-data lesbar, kann Zugangsdaten enthalten).
+export -p | grep -E '^export (BK_|APP_|TZ=)' > /etc/baukalkulation.env || true
+chown root:www-data /etc/baukalkulation.env
+chmod 0640 /etc/baukalkulation.env
+
+echo "[entrypoint] Starte DB-Migration (Treiber: ${BK_DB_DRIVER:-sqlite})..."
 # migrate.php zuerst: importiert bei fehlender DB einen evtl. vorhandenen JSON-Altbestand.
 php /var/www/html/migrate.php || true
 # Schema-Migrationen; bei Fehler oder zu neuem Schema startet die App nicht.
@@ -46,6 +52,7 @@ fi
 DB_PATH=/var/www/html/data/database.sqlite
 
 checkpoint_db() {  # $1 = "backup" → zusätzlich Sicherheitskopie ablegen
+    [ "${BK_DB_DRIVER:-sqlite}" = "sqlite" ] || return 0
     [ -f "$DB_PATH" ] || return 0
     php -r '
         $p = "/var/www/html/data/database.sqlite";

@@ -45,16 +45,12 @@ logMsg("=== Backup-E-Mail gestartet" . ($force ? " [FORCE]" : "") . " ===");
 
 // -- DB verbinden --
 $dbPath = DATA_DIR . 'database.sqlite';
-if (!file_exists($dbPath)) {
+if (\App\Database\ConnectionConfig::driver() === 'sqlite' && !file_exists($dbPath)) {
     logMsg("FEHLER: Datenbank nicht gefunden: $dbPath");
     exit(1);
 }
 try {
-    $db = new PDO('sqlite:' . $dbPath, null, null, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
-    $db->exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
+    $db = \App\Database\ConnectionConfig::open();
 } catch (PDOException $e) {
     logMsg("FEHLER: DB-Verbindung fehlgeschlagen: " . $e->getMessage());
     exit(1);

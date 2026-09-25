@@ -37,6 +37,8 @@ final class ZeiterfassungTest extends ApiTestCase
         $byUuid = array_column($loaded['entries'], null, 'clientUuid');
         $this->assertCount(2, $byUuid);
         $this->assertEquals(8, $byUuid['uuid-1']['stunden']);
+        // Zahlen kommen als JSON-Zahl, nicht als String (PostgreSQL liefert REAL sonst als Text).
+        $this->assertIsNotString($byUuid['uuid-1']['stunden']);
         $this->assertSame('2026-03-02', $byUuid['uuid-1']['datum']);
         $this->assertSame('Leitungen verlegt', $byUuid['uuid-1']['bemerkung']);
         $this->assertSame(1, (int) $byUuid['uuid-1']['baustelleId']);

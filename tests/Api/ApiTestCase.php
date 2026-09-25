@@ -36,6 +36,14 @@ abstract class ApiTestCase extends TestCase
         return $this->api;
     }
 
+    /** Für Tests, die bewusst eine SQLite-Datei im Datenverzeichnis erwarten (Altbestände). */
+    protected function requireSqlite(): void
+    {
+        if ($this->server->isPgsql()) {
+            $this->markTestSkipped('Nur mit SQLite als Betriebsdatenbank.');
+        }
+    }
+
     /** Legt einen Benutzer an und erledigt den erzwungenen Passwortwechsel. */
     protected function createActiveUser(string $username, string $password, string $role = 'normal'): ApiClient
     {

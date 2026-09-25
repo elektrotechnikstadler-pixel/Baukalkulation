@@ -22,10 +22,10 @@ class GruppenActions
         Auth::requireRole('admin', 'master');
 
         $gruppen    = $this->db->query(
-            "SELECT * FROM gruppen ORDER BY name COLLATE NOCASE"
+            "SELECT * FROM gruppen ORDER BY LOWER(name)"
         )->fetchAll();
         $mitglieder = $this->db->query(
-            "SELECT * FROM gruppen_mitglieder ORDER BY username COLLATE NOCASE"
+            "SELECT * FROM gruppen_mitglieder ORDER BY LOWER(username)"
         )->fetchAll();
 
         $result = array_map(function ($g) use ($mitglieder) {
@@ -53,7 +53,7 @@ class GruppenActions
 
         if (in_array($role, ['admin', 'master'], true)) {
             $gruppen = $this->db->query(
-                "SELECT id, name, farbe FROM gruppen ORDER BY name COLLATE NOCASE"
+                "SELECT id, name, farbe FROM gruppen ORDER BY LOWER(name)"
             )->fetchAll();
         } else {
             $stmt = $this->db->prepare(
@@ -61,7 +61,7 @@ class GruppenActions
                    FROM gruppen g
                    JOIN gruppen_mitglieder gm ON gm.gruppen_id = g.id
                   WHERE gm.username = ?
-                  ORDER BY g.name COLLATE NOCASE"
+                  ORDER BY LOWER(g.name)"
             );
             $stmt->execute([$username]);
             $gruppen = $stmt->fetchAll();
@@ -109,7 +109,7 @@ class GruppenActions
         // Mitglieder komplett ersetzen
         $this->db->prepare("DELETE FROM gruppen_mitglieder WHERE gruppen_id = ?")->execute([$id]);
         $stmt = $this->db->prepare(
-            "INSERT OR IGNORE INTO gruppen_mitglieder (gruppen_id, username) VALUES (?, ?)"
+            "INSERT INTO gruppen_mitglieder (gruppen_id, username) VALUES (?, ?) ON CONFLICT DO NOTHING"
         );
         foreach ($mitglieder as $u) {
             $u = trim((string)$u);

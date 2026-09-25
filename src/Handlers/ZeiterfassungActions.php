@@ -679,7 +679,7 @@ class ZeiterfassungActions
 
         $userRows = $filterUser !== ''
             ? Database::fetchAll($this->db, "SELECT username, kuerzel FROM users WHERE username = ?", [$filterUser])
-            : Database::fetchAll($this->db, "SELECT username, kuerzel FROM users ORDER BY username COLLATE NOCASE");
+            : Database::fetchAll($this->db, "SELECT username, kuerzel FROM users ORDER BY LOWER(username)");
 
         $result = [];
         foreach ($userRows as $u) {
@@ -990,7 +990,7 @@ class ZeiterfassungActions
             INSERT INTO zeiterfassung_meta (username, rev, updatedAt, updatedBy)
             VALUES (?, 1, ?, ?)
             ON CONFLICT(username) DO UPDATE SET
-                rev       = rev + 1,
+                rev       = zeiterfassung_meta.rev + 1,
                 updatedAt = excluded.updatedAt,
                 updatedBy = excluded.updatedBy
         ")->execute([$username, date('Y-m-d H:i:s'), (string)($_SESSION['username'] ?? '')]);
@@ -1165,7 +1165,7 @@ class ZeiterfassungActions
     public function getSollstunden(): void
     {
         Auth::requireRole('admin', 'master');
-        $rows = $this->db->query("SELECT username, role, sollstunden FROM users ORDER BY username COLLATE NOCASE")->fetchAll();
+        $rows = $this->db->query("SELECT username, role, sollstunden FROM users ORDER BY LOWER(username)")->fetchAll();
         $result = array_map(fn($r) => [
             'username'     => $r['username'],
             'role'         => $r['role'],
@@ -1224,7 +1224,7 @@ class ZeiterfassungActions
     public function getSollstundenExtended(): void
     {
         Auth::requireRole('admin', 'master');
-        $rows = $this->db->query("SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollstunden, urlaubstageProJahr, showInZeitverwaltung, showInWochenplanung FROM users ORDER BY username COLLATE NOCASE")->fetchAll();
+        $rows = $this->db->query("SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollstunden, urlaubstageProJahr, showInZeitverwaltung, showInWochenplanung FROM users ORDER BY LOWER(username)")->fetchAll();
         $result = array_map(fn($r) => [
             'username'             => $r['username'],
             'role'                 => $r['role'],
@@ -1581,7 +1581,7 @@ class ZeiterfassungActions
             "SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr
                FROM users
               WHERE LOWER(username) != 'systemadmin'
-              ORDER BY username COLLATE NOCASE"
+              ORDER BY LOWER(username)"
         )->fetchAll();
 
         $users = [];

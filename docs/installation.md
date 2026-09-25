@@ -318,6 +318,48 @@ Beim Start migriert der Container das Schema automatisch (`bin/console db:migrat
 Migration fehl oder ist die Datenbank neuer als die App (Downgrade), startet der Container nicht –
 die Meldung steht in `docker logs`.
 
+### Datenbank: SQLite oder PostgreSQL
+
+Standard ist **SQLite** (`data/database.sqlite`) – ideal für eine Instanz auf einem NAS.
+**PostgreSQL** empfiehlt sich bei vielen gleichzeitigen Benutzern oder wenn die Datenbank
+getrennt vom App-Container betrieben und gesichert werden soll. Beide Varianten werden dauerhaft
+unterstützt; Sicherungen (ZIP) lassen sich in beiden Betriebsarten einspielen.
+
+```bash
+# Einmalig: Datenbank-Passwort erzeugen (Datei nie ins Repository!)
+mkdir -p secrets && openssl rand -base64 32 > secrets/db_password.txt && chmod 644 secrets/db_password.txt
+
+# Neue Installation mit PostgreSQL
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+
+# Bestehende SQLite-Installation umstellen (data/database.sqlite bleibt als Rückfallebene erhalten)
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d db
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml run --rm app \
+    php bin/console db:transfer to-pgsql
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+
+# Zurück zu SQLite: Daten in eine SQLite-Datei übertragen, dann ohne Overlay starten
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml run --rm app \
+    php bin/console db:transfer to-sqlite --force
+```
+
+| Variable | Bedeutung |
+|----------|-----------|
+| `BK_DB_DRIVER` | `sqlite` (Standard) oder `pgsql` |
+| `BK_DB_HOST`, `BK_DB_PORT` | PostgreSQL-Server (Standard-Port 5432) |
+| `BK_DB_NAME`, `BK_DB_USER` | Datenbank und Benutzer |
+| `BK_DB_PASSWORD_FILE` | Datei mit dem Passwort (Docker-Secret); alternativ `BK_DB_PASSWORD` |
+
+Sicherheit und Sicherung bei PostgreSQL:
+
+- Die Datenbank hat **keinen** nach außen veröffentlichten Port; nur der App-Container erreicht sie.
+- Das Passwort kommt als Docker-Secret, nicht als Umgebungsvariable im Klartext.
+- Der Dienst `db-backup` legt täglich ein `pg_dump` in `data/pg-backups/` ab (14 Tage).
+  Zusätzlich erstellt die App ihre gewohnten Sicherungen (inkl. portabler `database.sqlite`).
+- Datenprüfsummen (`--data-checksums`) erkennen Schäden auf dem Speichermedium.
+- Beim Wechsel der PostgreSQL-Hauptversion (z. B. 17 → 18): vorher `pg_dump`, neues Volume,
+  dann einspielen – das Datenverzeichnis ist nicht zwischen Hauptversionen kompatibel.
+
 ---
 
 ## 8. Ports-Übersicht (Mehrere Installationen auf einem Host)

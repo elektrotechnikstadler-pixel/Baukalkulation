@@ -1,0 +1,103 @@
+# docker-compose.postgres.yml – Betrieb mit PostgreSQL statt SQLite
+# =======================================================
+# Ergänzt docker-compose.yml (oder docker-compose.minimal.yml):
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# Vorbereitung (einmalig):
+#   mkdir -p secrets && openssl rand -base64 32 > secrets/db_password.txt
+#   chmod 644 secrets/db_password.txt   # Datei wird in die Container eingebunden
+#
+# Umstieg einer bestehenden SQLite-Installation (Daten bleiben in data/ erhalten):
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d db
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml run --rm app \
+#       php bin/console db:transfer to-pgsql
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# Die Datenbank ist nur im internen Netz erreichbar (kein Port nach außen).
+# =======================================================
+
+services:
+  app:
+    environment:
+      BK_DB_DRIVER: pgsql
+      BK_DB_HOST: db
+      BK_DB_PORT: "5432"
+      BK_DB_NAME: "${BK_DB_NAME:-baukalkulation}"
+      BK_DB_USER: "${BK_DB_USER:-baukalkulation}"
+      BK_DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    container_name: ${PG_CONTAINER_NAME:-baukalkulation-es-db}
+    restart: unless-stopped
+    # Genug Zeit für einen sauberen Checkpoint beim Stoppen.
+    stop_grace_period: 60s
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      POSTGRES_DB: "${BK_DB_NAME:-baukalkulation}"
+      POSTGRES_USER: "${BK_DB_USER:-baukalkulation}"
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      # Prüfsummen erkennen stille Datenkorruption auf dem Speichermedium.
+      POSTGRES_INITDB_ARGS: "--data-checksums --auth-host=scram-sha-256"
+    secrets:
+      - db_password
+    volumes:
+      - ${PG_DATA_DIR:-./pgdata}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: ${PG_MEM_LIMIT:-512m}
+
+  # ─── Nächtlicher pg_dump (zusätzlich zu den App-Sicherungen) ───
+  # Legt täglich ein komprimiertes Dump in ${PG_BACKUP_DIR} ab, behält 14 Tage.
+  # Wiederherstellen: pg_restore --clean --if-exists -d <db> <datei>.dump
+  db-backup:
+    image: postgres:17-alpine
+    container_name: ${PG_BACKUP_CONTAINER_NAME:-baukalkulation-es-db-backup}
+    restart: unless-stopped
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      PGHOST: db
+      PGDATABASE: "${BK_DB_NAME:-baukalkulation}"
+      PGUSER: "${BK_DB_USER:-baukalkulation}"
+      PGPASSFILE: /tmp/.pgpass
+    secrets:
+      - db_password
+    volumes:
+      - ${PG_BACKUP_DIR:-./data/pg-backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'db:5432:*:%s:%s\n' "$$PGUSER" "$$(cat /run/secrets/db_password)" > /tmp/.pgpass
+        while true; do
+          f="/backups/baukalkulation-$$(date +%F).dump"
+          if pg_dump -Fc -f "$$f.tmp"; then mv "$$f.tmp" "$$f"; echo "pg_dump ok: $$f"; else rm -f "$$f.tmp"; echo "pg_dump FEHLER" >&2; fi
+          find /backups -name 'baukalkulation-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+secrets:
+  db_password:
+    file: ${BK_DB_PASSWORD_HOST_FILE:-./secrets/db_password.txt}

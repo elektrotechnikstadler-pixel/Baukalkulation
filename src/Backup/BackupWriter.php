@@ -1,12 +1,18 @@
 <?php
 namespace App\Backup;
 
+use App\Core\ModuleLoader;
+use App\Database;
+use App\Database\Dialect;
 use App\Database\Migrator;
+use App\Database\TableCopier;
 use App\DataService;
 
 /**
  * Schreibt Sicherungen im Format 2: baukalkulation.json (lesbar auch für ältere
  * App-Versionen), database.sqlite (konsistenter Snapshot) und manifest.json.
+ * Auch bei PostgreSQL enthält die Sicherung eine SQLite-Datei – so bleibt jede
+ * Sicherung in beiden Betriebsarten einlesbar.
  */
 final class BackupWriter
 {
@@ -29,14 +35,11 @@ final class BackupWriter
 
         $dbFile = $destDir . BackupArchive::FILE_DB;
         if (is_file($dbFile)) unlink($dbFile);
-        // VACUUM INTO liefert einen konsistenten Snapshot inkl. WAL-Inhalt, auch bei laufenden Schreibzugriffen.
-        // Eigene Verbindung, weil VACUUM bei offenen Statements der Request-Verbindung scheitert.
-        $source = (string)$db->query('PRAGMA database_list')->fetch(\PDO::FETCH_ASSOC)['file'];
-        $snapshotDb = new \PDO('sqlite:' . $source);
-        $snapshotDb->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $snapshotDb->exec('PRAGMA busy_timeout=15000');
-        $snapshotDb->exec('VACUUM INTO ' . $snapshotDb->quote($dbFile));
-        $snapshotDb = null;
+        if ($db->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            self::exportToSqlite($db, $dbFile);
+        } else {
+            self::snapshotSqlite($db, $dbFile);
+        }
         self::verifySqlite($dbFile);
 
         $manifest = [
@@ -78,6 +81,62 @@ final class BackupWriter
         }
         if (!$zip->close()) {
             throw new \RuntimeException('ZIP konnte nicht geschrieben werden.');
+        }
+    }
+
+    private static function snapshotSqlite(\PDO $db, string $dbFile): void
+    {
+        // VACUUM INTO liefert einen konsistenten Snapshot inkl. WAL-Inhalt, auch bei laufenden Schreibzugriffen.
+        // Eigene Verbindung, weil VACUUM bei offenen Statements der Request-Verbindung scheitert.
+        $source = (string)$db->query('PRAGMA database_list')->fetch(\PDO::FETCH_ASSOC)['file'];
+        $snapshotDb = new \PDO('sqlite:' . $source);
+        $snapshotDb->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $snapshotDb->exec('PRAGMA busy_timeout=15000');
+        $snapshotDb->exec('VACUUM INTO ' . $snapshotDb->quote($dbFile));
+        $snapshotDb = null;
+    }
+
+    /** PostgreSQL → neue SQLite-Datei mit gleichem Schema-Stand, aus einem konsistenten Lese-Snapshot. */
+    private static function exportToSqlite(\PDO $db, string $dbFile): void
+    {
+        $tmp = $dbFile . '.tmp';
+        if (is_file($tmp)) unlink($tmp);
+        self::fillSqlite($db, $tmp);
+        // Windows: Datei erst nach dem Schließen aller Verbindungen (auch in Zyklen, z. B. Phinx) umbenennbar.
+        gc_collect_cycles();
+        if (!rename($tmp, $dbFile)) {
+            throw new \RuntimeException('Datenbank-Sicherung konnte nicht abgelegt werden.');
+        }
+    }
+
+    private static function fillSqlite(\PDO $db, string $path): void
+    {
+        $lite = Database::open($path);
+        $lite->exec('PRAGMA journal_mode=DELETE');
+        Migrator::migrate($lite);
+        (new ModuleLoader($lite))->migrateAll(false);
+
+        $ownTx = !$db->inTransaction();
+        if ($ownTx) {
+            $db->beginTransaction();
+            $db->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+        }
+        try {
+            $liteDialect = Dialect::for($lite);
+            $copier = new TableCopier($db, $lite);
+            $lite->beginTransaction();
+            foreach (Dialect::for($db)->tableNames($db) as $table) {
+                if ($table === Migrator::TABLE) continue;
+                if (!$liteDialect->tableExists($lite, $table)) {
+                    error_log("[Backup] Tabelle {$table} ist in SQLite unbekannt und wird nicht gesichert.");
+                    continue;
+                }
+                $copier->clear($table);
+                $copier->copyRows($table);
+            }
+            $lite->commit();
+        } finally {
+            if ($ownTx && $db->inTransaction()) $db->commit();
         }
     }
 

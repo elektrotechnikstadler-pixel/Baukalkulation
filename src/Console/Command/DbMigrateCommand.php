@@ -1,7 +1,7 @@
 <?php
 namespace App\Console\Command;
 
-use App\Database;
+use App\Database\ConnectionConfig;
 use App\Database\Migrator;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -13,7 +13,7 @@ final class DbMigrateCommand extends Command
 {
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $db = Database::open(DATA_DIR . 'database.sqlite');
+        $db = ConnectionConfig::open();
         $before = Migrator::currentVersion($db);
         $latest = Migrator::latestVersion();
 

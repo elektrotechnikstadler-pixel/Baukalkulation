@@ -3,7 +3,7 @@ COMPOSER ?= composer
 NPM      ?= npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install verify lint fix type-check test test-unit test-api test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
+.PHONY: help install verify lint fix type-check test test-unit test-api test-pgsql test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
 
 help: ## Diese Übersicht
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -31,6 +31,16 @@ test-unit: ## Nur Unit-Tests
 
 test-api: ## Nur API-Tests
 	$(PHP) vendor/bin/phpunit --testsuite api
+
+PG_TEST_PORT ?= 55432
+test-pgsql: ## Alle Tests gegen PostgreSQL (Wegwerf-Container per Docker)
+	docker rm -f bk-pg-test >/dev/null 2>&1 || true
+	docker run -d --rm --name bk-pg-test -p 127.0.0.1:$(PG_TEST_PORT):5432 \
+		-e POSTGRES_USER=bk -e POSTGRES_PASSWORD=bk-test-pw -e POSTGRES_DB=bk_test postgres:17-alpine >/dev/null
+	until docker exec bk-pg-test pg_isready -U bk -d bk_test >/dev/null 2>&1; do sleep 1; done
+	BK_DB_DRIVER=pgsql BK_DB_HOST=127.0.0.1 BK_DB_PORT=$(PG_TEST_PORT) BK_DB_NAME=bk_test \
+		BK_DB_USER=bk BK_DB_PASSWORD=bk-test-pw $(PHP) vendor/bin/phpunit; \
+		status=$$?; docker rm -f bk-pg-test >/dev/null; exit $$status
 
 test-cov: ## Tests mit Coverage (benötigt Xdebug oder PCOV)
 	$(PHP) vendor/bin/phpunit --coverage-text --coverage-html coverage

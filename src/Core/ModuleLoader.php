@@ -94,7 +94,7 @@ final class ModuleLoader
     }
 
     // ── Migration ────────────────────────────────────────────
-    public function migrateAll(): void
+    public function migrateAll(bool $registerEvents = true): void
     {
         if ($this->migrated) return;
         foreach ($this->modules as $m) {
@@ -103,7 +103,7 @@ final class ModuleLoader
                 if (method_exists($cls, 'migrate')) {
                     $cls::migrate($this->db);
                 }
-                if (method_exists($cls, 'registerEvents')) {
+                if ($registerEvents && method_exists($cls, 'registerEvents')) {
                     $cls::registerEvents($this->db);
                 }
             } catch (\Throwable $e) {

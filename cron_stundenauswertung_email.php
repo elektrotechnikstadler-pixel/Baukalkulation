@@ -31,12 +31,9 @@ function saLog(string $msg): void {
 saLog('=== Stundenauswertung-E-Mail gestartet' . ($force ? ' [FORCE]' : '') . ' ===');
 
 $dbPath = DATA_DIR . 'database.sqlite';
-if (!file_exists($dbPath)) { saLog('FEHLER: Datenbank nicht gefunden.'); exit(1); }
+if (\App\Database\ConnectionConfig::driver() === 'sqlite' && !file_exists($dbPath)) { saLog('FEHLER: Datenbank nicht gefunden.'); exit(1); }
 try {
-    $db = new PDO('sqlite:' . $dbPath, null, null, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+    $db = \App\Database\ConnectionConfig::open();
 } catch (PDOException $e) { saLog('FEHLER: DB-Verbindung: ' . $e->getMessage()); exit(1); }
 
 // -- Einstellungen --
@@ -89,7 +86,7 @@ $feiertage = bayerischeFeiertage($jahr);
 $feiertagSet = array_flip($feiertage);
 
 // -- Nutzer laden --
-$users = $db->query("SELECT username, kuerzel, role, sollstundenTag, sollTageWoche, arbeitstage, showInZeitverwaltung FROM users ORDER BY username COLLATE NOCASE")->fetchAll();
+$users = $db->query("SELECT username, kuerzel, role, sollstundenTag, sollTageWoche, arbeitstage, showInZeitverwaltung FROM users ORDER BY LOWER(username)")->fetchAll();
 $users = array_filter($users, fn($u) => ($u['role'] ?? '') !== 'admin' && (int)($u['showInZeitverwaltung'] ?? 1) !== 0);
 
 // -- Zeiterfassung des Monats --

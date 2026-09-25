@@ -42,7 +42,7 @@ class LagerDatabase
                 FOREIGN KEY(lagerort_id) REFERENCES lager_orte(id) ON DELETE SET NULL
             )
         ");
-        $db->exec("CREATE INDEX IF NOT EXISTS idx_lager_art_bez ON lager_artikel(bezeichnung COLLATE NOCASE)");
+        $db->exec("CREATE INDEX IF NOT EXISTS idx_lager_art_bez ON lager_artikel(LOWER(bezeichnung))");
         $db->exec("CREATE INDEX IF NOT EXISTS idx_lager_art_nr  ON lager_artikel(artikelnr)");
         $db->exec("CREATE INDEX IF NOT EXISTS idx_lager_art_ort ON lager_artikel(lagerort_id)");
     }

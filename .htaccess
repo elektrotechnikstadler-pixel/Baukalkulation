@@ -1,7 +1,11 @@
 # Webroot ist public/. Falls der Webserver auf die Projektwurzel zeigt,
 # wird intern nach public/ umgeleitet – Code und data/ bleiben unerreichbar.
+# Apache wertet diese Datei auch aus, wenn DocumentRoot schon public/ ist
+# (übergeordnetes Verzeichnis) – daher Anfragen unter public/ nicht erneut umschreiben,
+# sonst entsteht eine Redirect-Schleife (HTTP 500).
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteRule ^public(/|$) - [L]
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 <IfModule !mod_rewrite.c>

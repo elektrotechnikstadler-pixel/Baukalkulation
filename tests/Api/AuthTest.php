@@ -155,7 +155,7 @@ final class AuthTest extends ApiTestCase
             $this->assertTrue($settings['gemini_api_key_gesetzt']);
         }
 
-        $pdo = new \PDO('sqlite:' . $this->server->dataPath('database.sqlite'));
+        $pdo = $this->server->db();
         $raw = (string) $pdo->query('SELECT data FROM settings WHERE id = 1')->fetchColumn();
         $this->assertStringNotContainsString('Smtp-Geheim-1', $raw);
         $this->assertStringStartsWith('enc:v1:', json_decode($raw, true)['smtp_pass']);

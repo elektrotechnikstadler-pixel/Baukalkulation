@@ -21,6 +21,7 @@
 |---|---|---|
 | Abhängigkeiten | `make install` | `composer install && npm ci` |
 | Tests | `make test` | `vendor/bin/phpunit` |
+| Tests gegen PostgreSQL | `make test-pgsql` | siehe unten |
 | Statische Analyse | `make type-check` | `vendor/bin/phpstan analyse --memory-limit=2G` |
 | Formatierung prüfen / korrigieren | `make lint` / `make fix` | `vendor/bin/php-cs-fixer check` / `fix` |
 | Frontend bauen | `make build` | `npm run minify && npm run build` |
@@ -47,9 +48,36 @@ Versionen stehen in der Tabelle `schema_migrations`.
 ```bash
 php bin/console db:status      # ausgeführt / offen
 php bin/console db:migrate     # Schema anheben
+php bin/console db:transfer to-pgsql|to-sqlite [--sqlite=datei] [--force]
 php bin/console backup:create  # Sicherung in data/backups/
 php bin/console backup:import <zip|ordner|json> [--mode=replace] [--password=…]
 ```
+
+## SQLite und PostgreSQL
+
+`BK_DB_DRIVER` wählt die Datenbank (`sqlite` Standard, `pgsql`); `App\Database\ConnectionConfig`
+liest die Zugangsdaten. Beide Treiber liefern eine `App\Database\Connection`; Unterschiede
+bündelt `App\Database\Dialect` (`SqliteDialect`, `PgsqlDialect`).
+
+Regeln für neues SQL:
+
+- Spaltennamen bleiben camelCase. `PgsqlDialect::translate()` setzt sie für PostgreSQL
+  automatisch in Anführungszeichen und übersetzt die SQLite-DDL der Migrationen
+  (`INTEGER PRIMARY KEY AUTOINCREMENT`, `REAL`, `COLLATE NOCASE` → `CITEXT`, `LIKE` → `ILIKE`,
+  `INSERT OR IGNORE`, `PRAGMA table_info`).
+- Nicht verwenden: `COLLATE NOCASE` in Abfragen (→ `LOWER(x)`), `INSERT OR REPLACE`
+  (→ `ON CONFLICT(…) DO UPDATE`), `JSON_*`-Funktionen (in PHP), `GROUP_CONCAT`
+  (→ `Dialect::groupConcat()`), `BEGIN IMMEDIATE` (→ `Dialect::beginExclusive()`),
+  SQLite-Datumsfunktionen (in PHP formatieren).
+- In `ON CONFLICT … DO UPDATE SET` Spalten der Zieltabelle qualifizieren (`tabelle.spalte + 1`).
+- Sicherungen enthalten immer eine SQLite-Datei; bei PostgreSQL erzeugt `BackupWriter` sie
+  über `App\Database\TableCopier` aus einem konsistenten Lese-Snapshot.
+
+Tests gegen PostgreSQL: `make test-pgsql` (startet einen Wegwerf-Container) oder manuell mit
+`BK_DB_DRIVER=pgsql BK_DB_HOST=… BK_DB_PORT=… BK_DB_NAME=… BK_DB_USER=… BK_DB_PASSWORD=…`.
+Ist `pdo_pgsql` nicht in der `php.ini` aktiv, zusätzlich `BK_TEST_PHP_ARGS="-d extension=pdo_pgsql"`
+setzen und PHPUnit mit `php -d extension=pdo_pgsql vendor/bin/phpunit` starten. Achtung: Die
+Tests leeren das Schema `public` der angegebenen Datenbank.
 
 ## Sicherungen (Format 2)
 

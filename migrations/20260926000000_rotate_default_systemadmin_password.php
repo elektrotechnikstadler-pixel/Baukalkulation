@@ -16,7 +16,7 @@ final class RotateDefaultSystemadminPassword extends AbstractMigration
         if (!defined('DATA_DIR')) return; // nur zur Laufzeit der App, nicht über die Phinx-CLI
 
         $pdo = $this->getAdapter()->getConnection();
-        $stmt = $pdo->prepare('SELECT id, password FROM users WHERE username = ? COLLATE NOCASE');
+        $stmt = $pdo->prepare('SELECT id, password FROM users WHERE LOWER(username) = LOWER(?)');
         $stmt->execute([SystemadminPassword::USERNAME]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
         if (!$row || !password_verify(self::LEGACY_DEFAULT, (string)$row['password'])) return;

@@ -1,44 +1,31 @@
 <?php
 namespace App;
 
+use App\Database\Connection;
+use App\Database\ConnectionConfig;
 use App\Database\Migrator;
 
 /**
- * SQLite-Datenbankverbindung (Singleton). Das Schema verwalten die Migrationen in migrations/.
+ * Datenbankverbindung (Singleton, SQLite oder PostgreSQL per BK_DB_DRIVER).
+ * Das Schema verwalten die Migrationen in migrations/.
  */
 class Database
 {
-    private static ?\PDO $pdo = null;
+    private static ?Connection $pdo = null;
 
-    public static function connect(): \PDO
+    public static function connect(): Connection
     {
         if (self::$pdo !== null) return self::$pdo;
 
-        $pdo = self::open(DATA_DIR . 'database.sqlite');
+        $pdo = ConnectionConfig::open();
         Migrator::ensureCurrent($pdo, DATA_DIR . 'migrate.lock');
         return self::$pdo = $pdo;
     }
 
-    /** Öffnet eine SQLite-Datei mit den Standard-Einstellungen der App (ohne Migration). */
-    public static function open(string $dbPath): \PDO
+    /** Öffnet eine SQLite-Datei (z. B. Sicherung) mit den Standard-Einstellungen der App, ohne Migration. */
+    public static function open(string $dbPath): Connection
     {
-        $pdo = new \PDO('sqlite:' . $dbPath);
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
-
-        $pdo->exec("PRAGMA journal_mode=WAL");
-        // Datensicherheit: FULL fsync't das WAL bei JEDEM Commit auf das Volume.
-        // Verhindert Verlust zuletzt gespeicherter Daten (neue Kunden/Projekte) bei
-        // abruptem Container-Stop/Neustart (WAL-Frames sonst evtl. nicht persistiert).
-        $pdo->exec("PRAGMA synchronous=FULL");
-        $pdo->exec("PRAGMA foreign_keys=ON");
-        // H6 (v1.8.0): busy_timeout von 5s auf 15s erhöht, da
-        // gleichzeitige Schreiber (Backup, OCR-Job, Cron) bei Last
-        // länger blockieren können als 5s.
-        $pdo->exec("PRAGMA busy_timeout=15000");
-        $pdo->exec("PRAGMA cache_size=-8000");
-        $pdo->exec("PRAGMA temp_store=MEMORY");
-        return $pdo;
+        return ConnectionConfig::openSqlite($dbPath);
     }
 
     // ── Hilfs-Queries ────────────────────────────────────────

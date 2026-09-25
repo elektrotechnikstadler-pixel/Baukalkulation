@@ -3,6 +3,7 @@ namespace App\Handlers;
 
 use App\Auth;
 use App\Database;
+use App\Database\Dialect;
 use App\Services\AuditService;
 
 class CrudActions
@@ -85,7 +86,7 @@ class CrudActions
             while (true) {
                 $tries++;
                 try {
-                    $this->db->exec("BEGIN IMMEDIATE");
+                    Dialect::for($this->db)->beginExclusive($this->db, 'kunden_nummer');
                     if ($needsAuto) {
                         $clean['kundennummer'] = $this->nextFormattedNumber('kunden', 'kundennummer', $kundennummerLen);
                     }
@@ -99,7 +100,10 @@ class CrudActions
                     $this->db->exec("COMMIT");
                     break;
                 } catch (\Throwable $e) {
-                    @$this->db->exec("ROLLBACK");
+                    try {
+                        $this->db->exec("ROLLBACK");
+                    } catch (\PDOException) {
+                    }
                     if ($tries >= 3) throw $e;
                     usleep(50_000); // 50ms backoff
                 }
@@ -186,7 +190,15 @@ class CrudActions
         if (!$kunde) jsonOut(['error' => 'Kunde nicht gefunden.'], 404);
 
         // Kundendaten aus Rechnungen anonymisieren (Aufbewahrungspflicht: Rechnungsdaten 10 Jahre)
-        $this->db->prepare("UPDATE rechnungen SET absender = JSON_SET(COALESCE(absender,'{}'), '$.kundeAnonymisiert', 1) WHERE kundeId = ?")->execute([$id]);
+        $re = $this->db->prepare("SELECT id, absender FROM rechnungen WHERE kundeId = ?");
+        $re->execute([$id]);
+        $updAbs = $this->db->prepare("UPDATE rechnungen SET absender = ? WHERE id = ?");
+        foreach ($re->fetchAll() as $r) {
+            $abs = json_decode((string)($r['absender'] ?? ''), true);
+            if (!is_array($abs)) $abs = [];
+            $abs['kundeAnonymisiert'] = 1;
+            $updAbs->execute([json_encode($abs, JSON_UNESCAPED_UNICODE), $r['id']]);
+        }
         $this->db->prepare("UPDATE rechnungen SET kundeId = NULL WHERE kundeId = ?")->execute([$id]);
 
         // Kundenreferenz aus Baustellen entfernen

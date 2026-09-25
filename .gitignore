@@ -1,6 +1,8 @@
 /vendor/
 /node_modules/
 /data/
+/secrets/
+/pgdata/
 /public/dist/
 # Belege/Rechnungen nie im Projektordner ablegen (Kundendaten)
 /*.pdf

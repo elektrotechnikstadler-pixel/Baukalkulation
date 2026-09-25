@@ -274,7 +274,8 @@ class PlanActions
 
         // ── Stundenerfassung: Urlaub / Krank / Arbeit ───────────────────────────
         $seStmt = $this->db->prepare(
-            "SELECT username, datum, typ, baustelleId, SUM(stunden) AS stunden, GROUP_CONCAT(bemerkung, ' / ') AS bemerkungen
+            "SELECT username, datum, typ, baustelleId, SUM(stunden) AS stunden, "
+             . \App\Database\Dialect::for($this->db)->groupConcat('bemerkung', "' / '") . " AS bemerkungen
              FROM zeiterfassung
              WHERE typ IN ('urlaub','krank','arbeit')
              " . (!$seeAll ? "AND username = ?" : "") . "

@@ -5,6 +5,7 @@ use App\Console\Command\BackupCreateCommand;
 use App\Console\Command\BackupImportCommand;
 use App\Console\Command\DbMigrateCommand;
 use App\Console\Command\DbStatusCommand;
+use App\Console\Command\DbTransferCommand;
 use App\Console\Command\UserResetPasswordCommand;
 use Symfony\Component\Console\Application;
 
@@ -16,6 +17,7 @@ final class Kernel extends Application
         $this->addCommands([
             new DbMigrateCommand(),
             new DbStatusCommand(),
+            new DbTransferCommand(),
             new BackupCreateCommand(),
             new BackupImportCommand(),
             new UserResetPasswordCommand(),

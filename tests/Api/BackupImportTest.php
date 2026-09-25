@@ -95,7 +95,7 @@ final class BackupImportTest extends ApiTestCase
         $manifest = json_decode($entries['manifest.json'], true);
         $this->assertSame(2, $manifest['format']);
         $this->assertSame(Migrator::latestVersion(), $manifest['schemaVersion']);
-        $this->assertSame('sqlite', $manifest['driver']);
+        $this->assertSame($this->server->driver, $manifest['driver']);
         $this->assertSame(hash('sha256', $entries['database.sqlite']), $manifest['files']['database.sqlite']['sha256']);
         $this->assertSame(hash('sha256', $entries['baukalkulation.json']), $manifest['files']['baukalkulation.json']['sha256']);
     }

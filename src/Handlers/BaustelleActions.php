@@ -909,17 +909,18 @@ class BaustelleActions
             jsonOut(['error' => 'Ungültige Parameter.'], 400);
         }
 
-        $stmt = $this->db->prepare("SELECT id, data FROM baustellen WHERE id = ? AND JSON_EXTRACT(data,'$.parentId') = ?");
+        $stmt = $this->db->prepare("SELECT id, data FROM baustellen WHERE id = ?");
         $upd  = $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?");
 
         $this->db->beginTransaction();
         try {
             foreach ($order as $pos => $subId) {
                 $subId = (int)$subId;
-                $stmt->execute([$subId, $parentId]);
+                $stmt->execute([$subId]);
                 $row = $stmt->fetch();
                 if (!$row) continue;
                 $d = json_decode($row['data'], true) ?: [];
+                if ((int)($d['parentId'] ?? 0) !== $parentId) continue;
                 $d['sortPos'] = $pos;
                 $upd->execute([json_encode($d, JSON_UNESCAPED_UNICODE), $subId]);
             }
@@ -967,7 +968,7 @@ class BaustelleActions
             $old = \App\Database::fetchOne(
                 $this->db,
                 "SELECT datum, baustelleId, baustelleName FROM zeiterfassung
-                  WHERE entryId = ? AND username = ? COLLATE NOCASE",
+                  WHERE entryId = ? AND LOWER(username) = LOWER(?)",
                 [$zeitEntryId, $zeitUser]
             );
             $neuName = '';
@@ -979,7 +980,7 @@ class BaustelleActions
 
             $stmt = $this->db->prepare(
                 "UPDATE zeiterfassung SET baustelleId = :bid, baustelleName = :bname, updatedAt = :now
-                  WHERE entryId = :eid AND username = :user COLLATE NOCASE"
+                  WHERE entryId = :eid AND LOWER(username) = LOWER(:user)"
             );
             $stmt->execute([
                 ':bid'   => $destBaustelleId,

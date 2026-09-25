@@ -240,8 +240,12 @@ class AdminActions
         if (!in_array($format, ['csv', 'txt'], true)) $format = 'csv';
 
         $rows = $this->db->query(
-            "SELECT datetime(ts,'unixepoch','localtime') AS zeit, username, action, details FROM audit_log ORDER BY id ASC"
+            "SELECT ts, username, action, details FROM audit_log ORDER BY id ASC"
         )->fetchAll(\PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['zeit'] = date('Y-m-d H:i:s', (int)$r['ts']);
+        }
+        unset($r);
 
         $filename = 'audit_log_' . date('Y-m-d_His') . '.' . $format;
         header('Content-Type: ' . ($format === 'csv' ? 'text/csv' : 'text/plain') . '; charset=utf-8');

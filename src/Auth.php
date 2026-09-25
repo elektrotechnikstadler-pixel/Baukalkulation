@@ -56,14 +56,14 @@ class Auth
         $userCount = (int)$db->query("SELECT COUNT(*) FROM users")->fetchColumn();
         if ($userCount === 0) return; // Setup-Endpoint soll zuerst den Admin anlegen
 
-        $exists = $db->prepare("SELECT 1 FROM users WHERE username = 'Systemadmin' COLLATE NOCASE");
+        $exists = $db->prepare("SELECT 1 FROM users WHERE LOWER(username) = 'systemadmin'");
         $exists->execute();
         if ($exists->fetchColumn()) return;
 
         // Passwort je Installation (Env oder zufällig, siehe SystemadminPassword).
         // mustChangePassword=1 erzwingt Änderung beim ersten Login.
         $db->prepare(
-            "INSERT OR IGNORE INTO users (username, password, role, kuerzel, visibleBaustellen, mustChangePassword) VALUES (?, ?, 'admin', 'SA', 'all', 1)"
+            "INSERT INTO users (username, password, role, kuerzel, visibleBaustellen, mustChangePassword) VALUES (?, ?, 'admin', 'SA', 'all', 1) ON CONFLICT DO NOTHING"
         )->execute([Services\SystemadminPassword::USERNAME, Services\SystemadminPassword::newHash()]);
     }
 

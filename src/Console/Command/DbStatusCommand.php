@@ -1,7 +1,7 @@
 <?php
 namespace App\Console\Command;
 
-use App\Database;
+use App\Database\ConnectionConfig;
 use App\Database\Migrator;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -14,7 +14,7 @@ final class DbStatusCommand extends Command
 {
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $db = Database::open(DATA_DIR . 'database.sqlite');
+        $db = ConnectionConfig::open();
         $rows = array_map(
             fn(array $r) => [$r['version'], $r['name'], $r['applied'] ? 'ausgeführt' : 'offen'],
             Migrator::status($db),

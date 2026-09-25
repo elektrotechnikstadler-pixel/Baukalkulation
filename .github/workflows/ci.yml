@@ -31,6 +31,41 @@ jobs:
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/phpunit
 
+  tests-pgsql:
+    name: Tests (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['15', '17']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_USER: bk
+          POSTGRES_PASSWORD: bk-ci-pw
+          POSTGRES_DB: bk_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bk -d bk_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BK_DB_DRIVER: pgsql
+      BK_DB_HOST: 127.0.0.1
+      BK_DB_PORT: '5432'
+      BK_DB_NAME: bk_test
+      BK_DB_USER: bk
+      BK_DB_PASSWORD: bk-ci-pw
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, pdo_pgsql, mbstring, fileinfo, gd, zip, curl, sodium
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - run: vendor/bin/phpunit
+
   static:
     name: Statische Analyse
     runs-on: ubuntu-latest

@@ -10,9 +10,7 @@ final class MigrationTest extends ApiTestCase
 {
     private function db(): \PDO
     {
-        $pdo = new \PDO('sqlite:' . $this->server->dataPath('database.sqlite'));
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        return $pdo;
+        return $this->server->db();
     }
 
     /** @return list<string> */
@@ -30,6 +28,7 @@ final class MigrationTest extends ApiTestCase
 
     public function testAlteDatenbankOhneVersionWirdBeimStartAngehoben(): void
     {
+        $this->requireSqlite();
         $zip = new \ZipArchive();
         $this->assertTrue($zip->open(__DIR__ . '/../fixtures/backups/v2.10.99.zip'));
         file_put_contents($this->server->dataPath('database.sqlite'), $zip->getFromName('database.sqlite'));
@@ -59,6 +58,7 @@ final class MigrationTest extends ApiTestCase
 
     public function testAltesStandardpasswortUndKlartextGeheimnisseWerdenErsetzt(): void
     {
+        $this->requireSqlite();
         $zip = new \ZipArchive();
         $this->assertTrue($zip->open(__DIR__ . '/../fixtures/backups/v2.10.99.zip'));
         file_put_contents($this->server->dataPath('database.sqlite'), $zip->getFromName('database.sqlite'));

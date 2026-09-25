@@ -10,7 +10,8 @@ VDE 0100 und DIN EN 1090.
 
 ## Installation
 
-Betrieb per Docker – siehe [docs/installation.md](docs/installation.md).
+Betrieb per Docker – siehe [docs/installation.md](docs/installation.md). Datenbank: SQLite
+(Standard) oder PostgreSQL (`docker-compose.postgres.yml`), Umstieg per `bin/console db:transfer`.
 
 ```bash
 ./install.sh            # Linux / NAS
@@ -33,7 +34,8 @@ VERSION        App-Version (einzige Quelle)
 
 ## Entwicklung
 
-Voraussetzungen: PHP ≥ 8.2 (pdo_sqlite, mbstring, fileinfo, gd, zip, curl), Composer, Node.js LTS.
+Voraussetzungen: PHP ≥ 8.2 (pdo_sqlite, mbstring, fileinfo, gd, zip, curl, sodium; für PostgreSQL
+zusätzlich pdo_pgsql), Composer, Node.js LTS.
 
 ```bash
 make install     # composer install + npm ci

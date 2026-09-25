@@ -11,6 +11,39 @@
 
 ## Unveröffentlicht
 
+### Neu – PostgreSQL (Phase 3)
+- **Wahlweise PostgreSQL statt SQLite** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`,
+  Passwort bevorzugt als Datei/Docker-Secret). SQLite bleibt Standard und wird weiter unterstützt.
+- `docker-compose.postgres.yml`: PostgreSQL 17 ohne veröffentlichten Port, Passwort als Secret,
+  Datenprüfsummen, Healthcheck, nächtlicher `pg_dump` (14 Tage).
+- `bin/console db:transfer to-pgsql|to-sqlite`: kompletter Umzug in beide Richtungen in einer
+  Transaktion, mit Zeilenzahl-Prüfung; befüllte Ziele nur mit `--force`.
+- Sicherungen enthalten auch unter PostgreSQL eine `database.sqlite` – jede Sicherung lässt sich in
+  beiden Betriebsarten einspielen, alte Sicherungen und JSON-Altbestände weiterhin auch.
+- Cron-Jobs erhalten die Container-Umgebung (`/etc/baukalkulation.env`), damit sie die
+  konfigurierte Datenbank nutzen.
+- CI testet zusätzlich gegen PostgreSQL 15 und 17; lokal `make test-pgsql`.
+
+### Behoben
+- Docker-Image seit der Umstellung auf `public/`: Die `.htaccess` der Projektwurzel erzeugte eine
+  Redirect-Schleife (HTTP 500 auf alle Anfragen).
+
+### Neu – PostgreSQL als Alternative zu SQLite (Phase 3)
+- **Wahlweise PostgreSQL** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`, Passwort als
+  Docker-Secret). SQLite bleibt Standard und wird weiter voll unterstützt.
+- `docker-compose.postgres.yml`: PostgreSQL 17 ohne veröffentlichten Port, Datenprüfsummen,
+  Healthcheck und nächtlichem `pg_dump` (14 Tage).
+- **`bin/console db:transfer to-pgsql|to-sqlite`** überträgt den kompletten Datenbestand in
+  beide Richtungen und prüft die Zeilenzahlen; ein befülltes Ziel wird nur mit `--force`
+  überschrieben.
+- **Sicherungen bleiben austauschbar:** auch unter PostgreSQL enthält jedes Backup eine
+  `database.sqlite` (aus einem konsistenten Lese-Snapshot); alle bisherigen Sicherungen lassen
+  sich in beide Betriebsarten einspielen.
+- Cron-Jobs im Container erhalten jetzt die `BK_*`-Umgebung (vorher unsichtbar für cron).
+- SQLite-spezifisches SQL im Code portabel gemacht (Groß-/Kleinschreibung, UPSERT, JSON,
+  Audit-Export, Kalender-Export); Verhalten unter SQLite unverändert.
+- CI testet zusätzlich gegen PostgreSQL 15 und 17.
+
 ### Sicherheit
 - **Support-Konto „Systemadmin" ohne festes Passwort.** Bisher hatte es in jeder Installation
   dasselbe, im Quellcode stehende Startpasswort. Neu: `BK_SYSTEMADMIN_PASSWORD` (Env, min. 12

@@ -8,7 +8,7 @@ final class BackupMailSettingsTest extends ApiTestCase
 {
     private function gespeicherterWert(): string
     {
-        $pdo = new \PDO('sqlite:' . $this->server->dataPath('database.sqlite'));
+        $pdo = $this->server->db();
         $data = json_decode((string) $pdo->query('SELECT data FROM erinnerung_settings WHERE id = 1')->fetchColumn(), true);
         return (string) ($data['backup_email_passwort'] ?? '');
     }
