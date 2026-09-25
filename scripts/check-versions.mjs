@@ -57,10 +57,10 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const indexHtml = read('index.html');
-const swJs = read('sw.js');
-const scriptJs = read('script.js');
-const mobileHtml = read('mobile.html');
+const indexHtml = read('public/index.html');
+const swJs = read('public/sw.js');
+const scriptJs = read('public/script.js');
+const mobileHtml = read('public/mobile.html');
 
 // ── A) Asset-Versionen: index.html <-> sw.js ────────────────
 // Seit v2.10.70 wird die minifizierte Bundle-Datei ausgeliefert, nicht script.js.
@@ -122,6 +122,15 @@ for (const mod of [...allMods].sort()) {
 
 // ── C) Info: aktuelle CACHE_VERSION ─────────────────────────
 const cacheVer = (swJs.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1];
+
+// ── D) App-Version: VERSION <-> manifest.json <-> package.json ──
+const appVersion = read('VERSION').trim();
+for (const [file, ver] of [
+  ['public/manifest.json', JSON.parse(read('public/manifest.json') || '{}').version],
+  ['package.json', JSON.parse(read('package.json') || '{}').version],
+]) {
+  if (ver !== appVersion) warn(`D) ${file}: version=${ver} <-> VERSION=${appVersion} (npm run version:sync)`);
+}
 
 // ── Ausgabe ─────────────────────────────────────────────────
 const TAG = '[check-versions]';

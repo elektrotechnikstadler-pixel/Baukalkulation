@@ -20,7 +20,9 @@ set_exception_handler(function (\Throwable $e) {
 });
 
 // ── Composer Autoloader (Hauptapp) ───────────────────────────
-require_once __DIR__ . '/vendor/autoload.php';
+// Webroot ist public/, Code und Daten liegen eine Ebene darüber.
+define('APP_ROOT', dirname(__DIR__));
+require_once APP_ROOT . '/vendor/autoload.php';
 
 use App\Database;
 use App\Auth;
@@ -74,7 +76,7 @@ if (empty($_SESSION['authenticated'])) {
 
 // ── Konstanten (benötigt für Database::connect()) ────────────
 if (!defined('DATA_DIR')) {
-    define('DATA_DIR', __DIR__ . '/data/');
+    define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: APP_ROOT . '/data', '/\\') . '/');
 }
 $_pathsCfg = file_exists(DATA_DIR . 'paths_config.json')
     ? (json_decode(file_get_contents(DATA_DIR . 'paths_config.json'), true) ?? [])
@@ -121,7 +123,7 @@ foreach ($_GET as $k => $v) {
 session_write_close();
 
 // ── Dispatcher ───────────────────────────────────────────────
-require_once __DIR__ . '/modules/din1090/Din1090Actions.php';
+require_once APP_ROOT . '/modules/din1090/Din1090Actions.php';
 
 $handler = new Din1090Actions($db, $body);
 $handler->dispatch();

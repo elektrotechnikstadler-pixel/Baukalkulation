@@ -6,9 +6,10 @@
 // alle Aktionen an die passenden Handler-Klassen.
 // ============================================================
 
-// ── Anwendungs-Version (SemVer) ────────────────────────────────────────────────────────
+// ── Anwendungs-Version (SemVer) – einzige Quelle: Datei VERSION ───────────────────────
 if (!defined('APP_VERSION')) {
-    define('APP_VERSION', '2.10.99');
+    $_vf = dirname(__DIR__) . '/VERSION';
+    define('APP_VERSION', is_file($_vf) ? trim((string)file_get_contents($_vf)) : '0.0.0');
 }
 
 // ── Deprecation-Warnungen unterdrücken (PHP 8.4 + Dompdf) ───
@@ -31,12 +32,14 @@ set_exception_handler(function (\Throwable $e) {
 });
 
 // ── Composer Autoloader ──────────────────────────────────────
-if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
+// Webroot ist public/, Code und Daten liegen eine Ebene darüber.
+define('APP_ROOT', dirname(__DIR__));
+if (!file_exists(APP_ROOT . '/vendor/autoload.php')) {
     http_response_code(500);
     echo json_encode(['error' => 'vendor/ fehlt. Bitte "composer install" ausführen.']);
     exit;
 }
-require_once __DIR__ . '/vendor/autoload.php';
+require_once APP_ROOT . '/vendor/autoload.php';
 
 use App\Database;
 use App\Auth;
@@ -97,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_ORIGIN'])
 
 // ── Konstanten ───────────────────────────────────────────────
 // BK_DATA_DIR erlaubt ein abweichendes Datenverzeichnis (z. B. für Tests).
-define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
+define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: APP_ROOT . '/data', '/\\') . '/');
 
 $_pathsCfg = file_exists(DATA_DIR . 'paths_config.json')
     ? (json_decode(file_get_contents(DATA_DIR . 'paths_config.json'), true) ?? [])
@@ -145,7 +148,7 @@ if (!empty($_SESSION['authenticated'])) {
 // stellt die Aktionen ?action=list_modules / ?action=module bereit.
 // Bestehende Routen + din1090_api.php bleiben parallel verfügbar.
 if (!defined('MODULES_DIR')) {
-    define('MODULES_DIR', __DIR__ . '/modules/');
+    define('MODULES_DIR', APP_ROOT . '/modules/');
 }
 try {
     $moduleLoader = new \App\Core\ModuleLoader($db);

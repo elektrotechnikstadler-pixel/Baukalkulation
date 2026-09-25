@@ -21,7 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT      = resolve(__dirname, '..');
 
 // ── Manifest lesen ────────────────────────────────────────────────────────────
-const manifestPath = resolve(ROOT, 'dist/.vite/manifest.json');
+const manifestPath = resolve(ROOT, 'public/dist/.vite/manifest.json');
 if (!existsSync(manifestPath)) {
     console.error('[sync-manifest] dist/.vite/manifest.json nicht gefunden.');
     console.error('                → Zuerst `npm run build` (nur vite build) ausführen.');
@@ -58,7 +58,7 @@ for (const [srcPath, name] of Object.entries(ENTRIES)) {
     const oldLegacy= new RegExp(`dist/${name}\\.js\\?v=[0-9]+`, 'g');
 
     // ── index.html aktualisieren ──────────────────────────────────────────────
-    const indexPath = resolve(ROOT, 'index.html');
+    const indexPath = resolve(ROOT, 'public/index.html');
     let   indexHtml = readFileSync(indexPath, 'utf8');
     const indexPrev = indexHtml;
 
@@ -77,7 +77,7 @@ for (const [srcPath, name] of Object.entries(ENTRIES)) {
 
     // ── mobile.html aktualisieren (falls Entry mobile-init) ──────────────────
     if (name === 'mobile-init') {
-        const mobilePath = resolve(ROOT, 'mobile.html');
+        const mobilePath = resolve(ROOT, 'public/mobile.html');
         let   mobileHtml = readFileSync(mobilePath, 'utf8');
         const mobilePrev = mobileHtml;
 
@@ -94,7 +94,7 @@ for (const [srcPath, name] of Object.entries(ENTRIES)) {
     }
 
     if (name === 'mobile-light-init') {
-        const lightPath = resolve(ROOT, 'mobile_light.html');
+        const lightPath = resolve(ROOT, 'public/mobile_light.html');
         let   lightHtml = readFileSync(lightPath, 'utf8');
         const lightPrev = lightHtml;
 
@@ -111,7 +111,7 @@ for (const [srcPath, name] of Object.entries(ENTRIES)) {
     }
 
     // ── sw.js aktualisieren ───────────────────────────────────────────────────
-    const swPath = resolve(ROOT, 'sw.js');
+    const swPath = resolve(ROOT, 'public/sw.js');
     let   swJs   = readFileSync(swPath, 'utf8');
     const swPrev = swJs;
 

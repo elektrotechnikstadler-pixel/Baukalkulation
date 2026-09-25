@@ -16,9 +16,11 @@ import { resolve }      from 'path';
 export default defineConfig({
     root: '.',
     base: '/',
+    // public/ ist der Webroot der App, kein Vite-Asset-Ordner – sonst kopiert Vite ihn nach dist/.
+    publicDir: false,
 
     build: {
-        outDir:      'dist',
+        outDir:      'public/dist',
         emptyOutDir: true,
         // manifest.json erzeugen → PHP kann Hashes der Assets lesen
         manifest: true,

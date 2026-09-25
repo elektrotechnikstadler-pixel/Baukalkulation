@@ -1,0 +1,9 @@
+# Webroot ist public/. Falls der Webserver auf die Projektwurzel zeigt,
+# wird intern nach public/ umgeleitet – Code und data/ bleiben unerreichbar.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

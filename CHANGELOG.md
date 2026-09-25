@@ -11,6 +11,22 @@
 
 ## Unveröffentlicht
 
+### Umbau – Projektstruktur (Phase 1)
+- **Webroot ist jetzt `public/`.** Alle Browser-Dateien (HTML, JS, CSS, Icons, `lib/`,
+  Modul-JS/CSS) und die API-Einstiegspunkte liegen dort. `src/`, `vendor/`, `modules/`
+  (Backend) und `data/` sind damit grundsätzlich nicht mehr per HTTP erreichbar.
+- **Docker:** `DocumentRoot` = `/var/www/html/public`. Projektwurzel, Volumes und
+  Cron-Pfade (`/var/www/html/cron_*.php`, `/var/www/html/migrate.php`) bleiben gleich –
+  bestehende Installationen brauchen nur ein neues Image (`docker compose up -d --build`).
+- **Ohne Docker:** Den Webserver auf `public/` zeigen lassen. Zeigt er noch auf die
+  Wurzel, leitet eine `.htaccess` intern nach `public/` um.
+- Firmenlogo für PDFs: `public/logo_es.png`. Die Logo-Vorschau in den Einstellungen lädt
+  hochgeladene Logos jetzt über `api.php?action=get_logo`.
+- App-Version steht nur noch in `VERSION` (`npm run version:sync` überträgt sie).
+- Kopie-Ordner `deploy/` entfernt.
+- Neu für die Entwicklung: PHPUnit-Tests, PHPStan, PHP-CS-Fixer, Makefile, Pre-commit-Hooks,
+  GitHub-Actions (CI + Release mit Docker-Image), Renovate, Doku unter `docs/`.
+
 ### Behoben – Wiederherstellen setzte Baustellen nicht zurück
 - „Sicherung wiederherstellen" und „Backup hochladen" meldeten Erfolg, stellten bei einer
   Instanz mit vorhandenen Daten aber **nur** Kunden, Benutzer, Zeiten und Modul-Daten wieder

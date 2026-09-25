@@ -10849,7 +10849,7 @@ function renderAllgemeinSettings(view, s) {
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Firmendaten (für Rechnungen/Angebote)</h3>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
           <div style="width:80px;height:80px;border:2px dashed #ccc;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
-            ${s.firma_logo_url ? `<img src="${esc(s.firma_logo_url)}" style="max-width:76px;max-height:76px;object-fit:contain" id="logoPreviewImg">` : '<span style="font-size:.7rem;color:#999;text-align:center">Kein Logo</span>'}
+            ${s.firma_logo_url ? `<img src="${esc(s.firma_logo_url.startsWith('data/') ? 'api.php?action=get_logo' : s.firma_logo_url)}" style="max-width:76px;max-height:76px;object-fit:contain" id="logoPreviewImg">` : '<span style="font-size:.7rem;color:#999;text-align:center">Kein Logo</span>'}
           </div>
           <div>
             <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin-bottom:4px;display:inline-block">

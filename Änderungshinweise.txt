@@ -97,15 +97,16 @@ v2.10.81 – 2026-08-07
 ============================================================
 MINIFICATION – Nach jeder Änderung an script.js
 ============================================================
-Nach JEDER Änderung an script.js MUSS script.min.js neu erzeugt werden:
+Nach JEDER Änderung an public/script.js MUSS public/script.min.js neu erzeugt werden:
 
-  node node_modules/terser/bin/terser script.js --compress passes=2 --mangle --output script.min.js
+  npm run minify
 
 Ohne diesen Schritt lädt der Browser die veraltete minifizierte Version
 (index.html + sw.js referenzieren script.min.js, NICHT script.js).
+Die CI prüft das automatisch ("script.min.js aktuell?").
 
-Falls node_modules/terser nicht vorhanden:
-  npm install terser --no-save
+Seit der Umstrukturierung liegen alle Browser-Dateien in public/ (Webroot).
+App-Version nur in der Datei VERSION ändern, danach: npm run version:sync
 
 ============================================================
 ============================================================

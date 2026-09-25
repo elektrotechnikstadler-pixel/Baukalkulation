@@ -18,7 +18,7 @@ use App\Services\MailService;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-define('DATA_DIR', __DIR__ . '/data/');
+define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
 
 $force = in_array('--force', $argv ?? [], true);
 

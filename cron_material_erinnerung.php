@@ -17,7 +17,7 @@
 //
 // ============================================================
 
-define('DATA_DIR', __DIR__ . '/data/');
+define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
 
 // -- Hilfsfunktionen --
 function loadJsonFile($path) {

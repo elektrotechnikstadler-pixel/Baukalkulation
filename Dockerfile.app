@@ -1,21 +1,21 @@
 # ============================================================
 # Stage 1: Frontend-Build (Node.js / Vite)
 # ============================================================
-# Erzeugt dist/core.js + dist/<modul>.js aus src/frontend/ und
+# Erzeugt public/dist/core.js + public/dist/<modul>.js aus src/frontend/ und
 # modules/*/frontend/.  Das Ergebnis wird in Stage 2 übernommen.
-# dist/ ist in .gitignore/.dockerignore – immer frisch aus dem Source.
+# public/dist/ ist in .gitignore/.dockerignore – immer frisch aus dem Source.
 # ============================================================
 FROM node:lts-alpine AS frontend-builder
 WORKDIR /build
-COPY package.json ./
-COPY vite.config.js ./
+COPY package.json package-lock.json ./
+COPY vite.config.js VERSION ./
 COPY src/frontend/ ./src/frontend/
 COPY modules/ ./modules/
-# Versions-Abgleich (Cache-Busting ?v=NN): index.html <-> sw.js <-> script.js <-> mobile.html.
-# Diese Root-Dateien werden nur für die Prüfung benötigt (nicht für den Vite-Build).
+# Versions-Abgleich (Cache-Busting ?v=NN + App-Version): index.html <-> sw.js <-> script.js
+# <-> mobile.html, VERSION <-> manifest.json <-> package.json. Nur für die Prüfung benötigt.
 COPY scripts/check-versions.mjs ./scripts/check-versions.mjs
-COPY index.html sw.js script.js mobile.html ./
-RUN npm install --no-audit --prefer-offline \
+COPY public/index.html public/sw.js public/script.js public/mobile.html public/manifest.json ./public/
+RUN npm ci --no-audit --prefer-offline \
     && node scripts/check-versions.mjs \
     && npm run build
 
@@ -89,15 +89,16 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 # Dann restliche Dateien kopieren
 COPY --chown=www-data:www-data . .
 
-# Frontend-Assets aus Stage 1 (dist/ ist gitignored, wird immer frisch gebaut)
-# Rollback: diese Zeile entfernen + index.html-Änderung rückgängig machen
-COPY --from=frontend-builder --chown=www-data:www-data /build/dist ./dist/
+# Frontend-Assets aus Stage 1 (public/dist/ ist gitignored, wird immer frisch gebaut)
+COPY --from=frontend-builder --chown=www-data:www-data /build/public/dist ./public/dist/
 
 # Data-Verzeichnis vorbereiten
 RUN mkdir -p data && chown -R www-data:www-data data && chmod -R 775 data
 
-# Apache DocumentRoot
-ENV APACHE_DOCUMENT_ROOT /var/www/html
+# Apache DocumentRoot = public/. Code (src/, vendor/, modules/) und data/ liegen
+# außerhalb und sind damit nicht per HTTP erreichbar – unabhängig von .htaccess.
+# Die Projektwurzel bleibt /var/www/html (Cron-Pfade + Volumes unverändert).
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
 
 # ── Cron-Daemon: automatische Wartungsskripte ────────────────

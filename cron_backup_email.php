@@ -20,20 +20,14 @@ require_once __DIR__ . '/vendor/autoload.php';
 use App\Services\MailService;
 use App\DataService;
 
-define('DATA_DIR', __DIR__ . '/data/');
+define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
 
 $_pathsCfg = file_exists(DATA_DIR . 'paths_config.json')
     ? (json_decode(file_get_contents(DATA_DIR . 'paths_config.json'), true) ?? [])
     : [];
 define('BACKUP_DIR',   $_pathsCfg['backups']   ?? DATA_DIR . 'backups/');
-// SW-Version dynamisch aus manifest.json (wird pro Release gebumpt) statt fest verdrahtet.
-$__ver = '0.0.0';
-$__mf  = __DIR__ . '/manifest.json';
-if (is_file($__mf)) {
-    $__m = json_decode((string)file_get_contents($__mf), true);
-    if (!empty($__m['version'])) $__ver = (string)$__m['version'];
-}
-define('APP_VERSION',  $__ver);
+$__vf = __DIR__ . '/VERSION';
+define('APP_VERSION', is_file($__vf) ? trim((string)file_get_contents($__vf)) : '0.0.0');
 
 $force = in_array('--force', $argv ?? [], true);
 
