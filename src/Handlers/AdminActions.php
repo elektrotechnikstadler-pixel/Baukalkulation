@@ -354,8 +354,13 @@ class AdminActions
             'stundenauswertung_email_empfaenger' => '',
             'stundenauswertung_email_tag'        => 1,
             'stundenauswertung_email_uhrzeit'    => '07:00',
+            'backup_email_max_mb'                => 20,
         ];
-        jsonOut(['ok' => true, 'settings' => array_merge($defaults, $settings)]);
+        $merged = array_merge($defaults, $settings);
+        // Das Passwort verlässt den Server nie, nur ob eines gesetzt ist.
+        $merged['backup_email_passwort_gesetzt'] = ($merged['backup_email_passwort'] ?? '') !== '';
+        unset($merged['backup_email_passwort']);
+        jsonOut(['ok' => true, 'settings' => $merged]);
     }
 
     public function saveErinnerungSettings(): void
@@ -375,6 +380,19 @@ class AdminActions
         }
         $saTag = max(1, min(28, (int)($this->body['stundenauswertung_email_tag'] ?? 1)));
 
+        $row = $this->db->query("SELECT data FROM erinnerung_settings WHERE id = 1")->fetch();
+        $old = $row ? (json_decode($row['data'], true) ?? []) : [];
+        $backupPw = (string)($old['backup_email_passwort'] ?? '');
+        if (!empty($this->body['backup_email_passwort_loeschen'])) {
+            $backupPw = '';
+        } elseif (($this->body['backup_email_passwort'] ?? '') !== '') {
+            $pw = (string)$this->body['backup_email_passwort'];
+            if (mb_strlen($pw) < 10) {
+                jsonOut(['error' => 'Backup-Passwort mindestens 10 Zeichen.'], 400);
+            }
+            $backupPw = \App\Services\SecretBox::encrypt($pw);
+        }
+
         $newSettings = [
             'stunden_aktiv'           => (bool)($this->body['stunden_aktiv'] ?? true),
             'material_aktiv'          => (bool)($this->body['material_aktiv'] ?? true),
@@ -387,6 +405,8 @@ class AdminActions
             'stundenauswertung_email_empfaenger' => $saEmpf,
             'stundenauswertung_email_tag'        => $saTag,
             'stundenauswertung_email_uhrzeit'    => $this->body['stundenauswertung_email_uhrzeit'] ?? '07:00',
+            'backup_email_passwort'              => $backupPw,
+            'backup_email_max_mb'                => max(1, min(100, (int)($this->body['backup_email_max_mb'] ?? $old['backup_email_max_mb'] ?? 20))),
         ];
         $json = json_encode($newSettings, JSON_UNESCAPED_UNICODE);
         $this->db->prepare("INSERT INTO erinnerung_settings (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data")

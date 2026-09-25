@@ -100,7 +100,9 @@ class DataService
      */
     public static function saveAllData(\PDO $db, array $data, ?int $baseRev = null, bool $force = false, string $user = ''): array
     {
-        $db->beginTransaction();
+        // Läuft bereits eine Transaktion (z. B. Backup-Import), gehört Commit/Rollback dem Aufrufer.
+        $ownTx = !$db->inTransaction();
+        if ($ownTx) $db->beginTransaction();
         try {
             // ── Optimistic-Locking-Prüfung (vor jedem Schreibzugriff) ──
             // WICHTIG: Auch bei baseRev === null (z.B. Offline-Sync, alter Cache) wird
@@ -111,7 +113,7 @@ class DataService
             if ($baseRev === null && !$force && $curRev > 0) {
                 // Kein baseRev gesendet, aber DB hat bereits Daten → Konflikt
                 $meta = $db->query("SELECT updatedAt, updatedBy FROM data_meta WHERE id = 1")->fetch(\PDO::FETCH_ASSOC) ?: [];
-                $db->rollBack();
+                if ($ownTx) $db->rollBack();
                 return [
                     'conflict'   => true,
                     'currentRev' => $curRev,
@@ -124,13 +126,13 @@ class DataService
                 $dbBsCount = (int)$db->query("SELECT COUNT(*) FROM baustellen WHERE archiviert = 0")->fetchColumn();
                 $inBsCount = count($data['baustellen'] ?? []);
                 if ($dbBsCount > 3 && $inBsCount < $dbBsCount / 2) {
-                    $db->rollBack();
+                    if ($ownTx) $db->rollBack();
                     return ['error' => "Force-Save abgelehnt: Payload hat $inBsCount von $dbBsCount Baustellen ohne gültige Revision."];
                 }
             }
             if ($baseRev !== null && !$force && $baseRev !== $curRev) {
                 $meta = $db->query("SELECT updatedAt, updatedBy FROM data_meta WHERE id = 1")->fetch(\PDO::FETCH_ASSOC) ?: [];
-                $db->rollBack();
+                if ($ownTx) $db->rollBack();
                 return [
                     'conflict'   => true,
                     'currentRev' => $curRev,
@@ -268,10 +270,10 @@ class DataService
 
             $newRev = self::bumpRev($db, $user);
 
-            $db->commit();
+            if ($ownTx) $db->commit();
             return ['rev' => $newRev, 'abschlagRemovals' => $abschlagRemovals];
         } catch (\Exception $e) {
-            $db->rollBack();
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
     }
@@ -306,36 +308,19 @@ class DataService
         ")->execute([$id, $name, $kundeId, json_encode($nested, JSON_UNESCAPED_UNICODE)]);
     }
 
-    /** Tägliches Backup erstellen. */
+    /** Tägliches Backup erstellen (Format 2, konsistenter DB-Snapshot). */
     public static function createDailyBackup(\PDO $db, array $data): void
     {
         $today      = date('Y-m-d');
         $backupDir  = BACKUP_DIR . $today . '/';
         if (is_dir($backupDir)) return; // Backup existiert schon
 
-        if (!mkdir($backupDir, 0750, true) && !is_dir($backupDir)) {
-            error_log("Backup-Verzeichnis konnte nicht erstellt werden: $backupDir");
+        try {
+            \App\Backup\BackupWriter::writeDir($db, $backupDir);
+        } catch (\Throwable $e) {
+            error_log("Tagessicherung fehlgeschlagen ($backupDir): " . $e->getMessage());
+            \App\Backup\BackupArchive::removeDir($backupDir);
             return;
-        }
-        $written = file_put_contents(
-            $backupDir . 'baukalkulation.json',
-            json_encode(['ts' => date('c'), 'data' => $data], JSON_UNESCAPED_UNICODE)
-        );
-        if ($written === false) {
-            error_log("Backup-JSON konnte nicht geschrieben werden: $backupDir");
-            return;
-        }
-
-        // SQLite-Datei kopieren. WAL-Checkpoint erzwingen, damit alle committed
-        // Transaktionen in der Hauptdatei stehen – sonst fehlen im Backup die
-        // zuletzt gespeicherten Modul-Daten (WAL-Modus, v2.10.x).
-        $dbPath = DATA_DIR . 'database.sqlite';
-        if (file_exists($dbPath)) {
-            try { $db->exec('PRAGMA wal_checkpoint(FULL)'); }
-            catch (\Throwable $e) { error_log('WAL-Checkpoint vor Tagessicherung fehlgeschlagen: ' . $e->getMessage()); }
-            if (!copy($dbPath, $backupDir . 'database.sqlite')) {
-                error_log("SQLite-Backup-Kopie fehlgeschlagen: $backupDir");
-            }
         }
 
         // Alte TAGES-Sicherungen aufräumen. Wichtig: manuelle und Pre-Restore-

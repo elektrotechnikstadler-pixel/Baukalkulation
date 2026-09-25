@@ -7738,15 +7738,30 @@ async function createManualBackup() {
   }
 }
 
+// Lädt ein Backup-ZIP hoch; fragt bei verschlüsselten Sicherungen nach dem Passwort.
+async function _postBackupZip(action, file) {
+  let password = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const fd = new FormData();
+    fd.append('backup', file);
+    if (password !== null) fd.append('password', password);
+    const r = await fetch('api.php?action=' + action, { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!j.passwordRequired) return j;
+    password = prompt(attempt === 0 && password === null
+      ? 'Die Sicherung ist verschlüsselt. Bitte Passwort eingeben:'
+      : 'Passwort falsch. Bitte erneut eingeben:');
+    if (password === null) return { error: 'Abgebrochen.' };
+  }
+  return { error: 'Passwort falsch.' };
+}
+
 async function uploadAndRestoreBackup() {
   const input = document.getElementById('backupUploadInput');
   if (!input?.files?.length) { alert('Bitte zuerst ein ZIP-Archiv auswählen.'); return; }
   if (!confirm('Sicherung hochladen und aktuellen Stand überschreiben?\nDiese Aktion kann nicht rückgängig gemacht werden.')) return;
-  const fd = new FormData();
-  fd.append('backup', input.files[0]);
   try {
-    const r = await fetch('api.php?action=backup_upload', { method: 'POST', body: fd });
-    const j = await r.json();
+    const j = await _postBackupZip('backup_upload', input.files[0]);
     if (!j.ok || !j.data) { alert('Wiederherstellung fehlgeschlagen: ' + (j.error || 'Unbekannter Fehler')); return; }
     appData    = j.data;
     selectedId = null;
@@ -7764,11 +7779,8 @@ async function uploadAndReplaceBackup() {
   const input = document.getElementById('backupReplaceInput');
   if (!input?.files?.length) { alert('Bitte zuerst ein ZIP-Archiv auswählen.'); return; }
   if (!confirm('KOMPLETT ERSETZEN?\n\nDie aktiven Daten werden 1:1 aus dem Backup übernommen.\nAktive Projekte, die NICHT im Backup stehen, werden ins Archiv verschoben.\nVorhandene Archivdaten bleiben erhalten.\n\nEine Sicherheitskopie wird zuvor automatisch angelegt.')) return;
-  const fd = new FormData();
-  fd.append('backup', input.files[0]);
   try {
-    const r = await fetch('api.php?action=backup_upload_replace', { method: 'POST', body: fd });
-    const j = await r.json();
+    const j = await _postBackupZip('backup_upload_replace', input.files[0]);
     if (!j.ok || !j.data) { alert('Ersetzen fehlgeschlagen: ' + (j.error || 'Unbekannter Fehler')); return; }
     appData    = j.data;
     selectedId = null;
@@ -7786,9 +7798,9 @@ async function uploadAndReplaceBackup() {
 async function restoreFromBackup(dateKey) {
   if (!confirm(`Sicherung vom ${dateKey} wirklich wiederherstellen?\nDer aktuelle Stand wird überschrieben.`)) return;
   try {
-    const r = await fetch(`api.php?action=restore&date=${encodeURIComponent(dateKey)}`);
+    const r = await fetch(`api.php?action=restore&date=${encodeURIComponent(dateKey)}`, { method: 'POST' });
     const j = await r.json();
-    if (!j.ok || !j.data) { alert('Sicherung konnte nicht wiederhergestellt werden.'); return; }
+    if (!j.ok || !j.data) { alert('Sicherung konnte nicht wiederhergestellt werden.' + (j.error ? '\n' + j.error : '')); return; }
     appData    = j.data;
     selectedId = null;
     saveData();
@@ -11034,7 +11046,13 @@ function renderAllgemeinSettings(view, s) {
           </select></div>
         <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Uhrzeit</label>
           <input type="time" id="erBackupEmailUhrzeit" class="form-control" style="font-size:.85rem;width:100%" onchange="saveErinnerungSettings()"></div>
+        <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">ZIP-Passwort (AES-256)</label>
+          <input type="password" id="erBackupEmailPasswort" class="form-control" style="font-size:.85rem;width:100%" autocomplete="new-password" placeholder="min. 10 Zeichen" onchange="saveErinnerungSettings()">
+          <span id="erBackupEmailPasswortStatus" style="font-size:.72rem;color:#888"></span></div>
+        <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Max. Anhang (MB)</label>
+          <input type="number" id="erBackupEmailMaxMb" class="form-control" style="font-size:.85rem;width:100%" min="1" max="100" onchange="saveErinnerungSettings()"></div>
       </div>
+      <p style="font-size:.75rem;color:#888;margin:-4px 0 10px">Das ZIP lässt sich mit 7-Zip oder WinZip und diesem Passwort öffnen. Ohne Passwort wird unverschlüsselt versendet.</p>
       <button class="btn btn-secondary btn-sm" onclick="triggerBackupEmail()">▶ Backup-E-Mail jetzt senden</button>
       <p style="font-size:.75rem;color:#888;margin-top:6px">⏱ Der Cron-Daemon läuft automatisch im Docker-Container (alle 15 Min.). Kein externer Cron-Job nötig.</p>
     </div>
@@ -19948,6 +19966,10 @@ async function loadErinnerungSettings() {
     if (inpEmpf)    inpEmpf.value    = s.backup_email_empfaenger || '';
     if (selZyklus)  selZyklus.value  = s.backup_email_zyklus     || 'woechentlich';
     if (timeBackup) timeBackup.value = s.backup_email_uhrzeit    || '07:00';
+    const pwStatus = document.getElementById('erBackupEmailPasswortStatus');
+    if (pwStatus) pwStatus.textContent = s.backup_email_passwort_gesetzt ? '✔ Passwort gesetzt (leer lassen = unverändert)' : '⚠ kein Passwort – Versand unverschlüsselt';
+    const maxMb = document.getElementById('erBackupEmailMaxMb');
+    if (maxMb) maxMb.value = s.backup_email_max_mb || 20;
 
     const cbSa   = document.getElementById('erSaEmailAktiv');
     const inpSa  = document.getElementById('erSaEmailEmpfaenger');
@@ -19968,6 +19990,9 @@ async function saveErinnerungSettings() {
   const backup_email_empfaenger = document.getElementById('erBackupEmailEmpfaenger')?.value?.trim() || '';
   const backup_email_zyklus     = document.getElementById('erBackupEmailZyklus')?.value || 'woechentlich';
   const backup_email_uhrzeit    = document.getElementById('erBackupEmailUhrzeit')?.value || '07:00';
+  const pwInput                 = document.getElementById('erBackupEmailPasswort');
+  const backup_email_passwort   = pwInput?.value || '';
+  const backup_email_max_mb     = parseInt(document.getElementById('erBackupEmailMaxMb')?.value) || 20;
   const stundenauswertung_email_aktiv      = document.getElementById('erSaEmailAktiv')?.checked ?? false;
   const stundenauswertung_email_empfaenger = document.getElementById('erSaEmailEmpfaenger')?.value?.trim() || '';
   const stundenauswertung_email_tag        = parseInt(document.getElementById('erSaEmailTag')?.value) || 1;
@@ -19978,10 +20003,13 @@ async function saveErinnerungSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stunden_aktiv, material_aktiv, material_uhrzeit,
         backup_email_aktiv, backup_email_empfaenger, backup_email_zyklus, backup_email_uhrzeit,
+        backup_email_passwort, backup_email_max_mb,
         stundenauswertung_email_aktiv, stundenauswertung_email_empfaenger, stundenauswertung_email_tag, stundenauswertung_email_uhrzeit })
     });
     const j = await r.json();
     if (j.error) { showNotification(j.error, 'error'); return; }
+    if (pwInput) pwInput.value = '';
+    if (backup_email_passwort) loadErinnerungSettings();
     showNotification('Erinnerung-Einstellungen gespeichert');
   } catch(e) {
     showNotification('Fehler beim Speichern', 'error');

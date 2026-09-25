@@ -252,9 +252,39 @@ Kurzfassung:
 
 ### Automatische Backups
 
-Die App erstellt täglich automatische Backups der SQLite-Datenbank im `data/backups/` Verzeichnis (max. 7 Stück).
+Die App erstellt täglich automatische Backups im `data/backups/` Verzeichnis (max. 7 Stück).
+Jede Sicherung (Format 2) enthält `database.sqlite` (konsistenter Snapshot), `baukalkulation.json`
+und `manifest.json` mit App-Version, Schema-Version und SHA-256-Prüfsummen.
 
-### Manuelle Sicherung
+### Backup per E-Mail
+
+Einstellungen → Erinnerungen → „Backup per E-Mail". Mit einem **ZIP-Passwort** (min. 10 Zeichen)
+wird das Archiv AES-256-verschlüsselt (öffnen mit 7-Zip/WinZip). Das Passwort wird verschlüsselt
+gespeichert (Schlüssel `data/secret.key` bzw. Env `BK_SECRET_KEY`) und nie an den Browser
+ausgeliefert. Übersteigt das ZIP das eingestellte Limit (Standard 20 MB), kommt nur eine Hinweis-Mail.
+
+> `data/secret.key` gehört zur Installation und ist **nicht** Teil der Sicherungen. Geht er verloren,
+> muss das Backup-Passwort neu gesetzt werden.
+
+### Manuelle Sicherung / Wiederherstellung per Kommandozeile
+
+```bash
+# Sicherung anlegen (optional zusätzlich als verschlüsseltes ZIP)
+docker exec baukalkulation-KÜRZEL-app php bin/console backup:create --name="vor-update" \
+    --zip=/var/www/html/data/exports/backup.zip --password='…'
+
+# Sicherung einspielen – ZIP (alle Formate), Sicherungsordner oder alte JSON-Tagessicherung.
+# Vorher wird automatisch eine Sicherheitskopie des aktuellen Standes angelegt.
+docker exec -it baukalkulation-KÜRZEL-app php bin/console backup:import /pfad/zur/sicherung.zip [--mode=replace]
+
+# Schema-Stand prüfen
+docker exec baukalkulation-KÜRZEL-app php bin/console db:status
+```
+
+Sicherungen aus **älteren** App-Versionen werden beim Einspielen automatisch auf den aktuellen
+Schema-Stand gehoben. Sicherungen aus **neueren** Versionen werden abgelehnt.
+
+### Daten-Volume sichern
 
 ```bash
 # Daten-Volume sichern
@@ -272,10 +302,11 @@ cd /opt/baukalkulation/
 # Neue Dateien kopieren (NICHT den data/ Ordner überschreiben!)
 # Dann:
 docker-compose up -d --build
-
-# Migration ausführen (falls DB-Schema geändert)
-docker exec baukalkulation-KÜRZEL-app php /var/www/html/migrate.php
 ```
+
+Beim Start migriert der Container das Schema automatisch (`bin/console db:migrate`). Schlägt die
+Migration fehl oder ist die Datenbank neuer als die App (Downgrade), startet der Container nicht –
+die Meldung steht in `docker logs`.
 
 ---
 

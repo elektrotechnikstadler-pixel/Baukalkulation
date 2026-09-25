@@ -24,10 +24,10 @@ final class ApiClient
         ], ['Content-Type: application/json']);
     }
 
-    public function upload(string $action, string $field, string $path, array $query = []): ApiResponse
+    public function upload(string $action, string $field, string $path, array $query = [], array $fields = []): ApiResponse
     {
         return $this->request('POST', $action, $query, [
-            CURLOPT_POSTFIELDS => [$field => new \CURLFile($path, 'application/zip', basename($path))],
+            CURLOPT_POSTFIELDS => [$field => new \CURLFile($path, 'application/zip', basename($path))] + $fields,
         ]);
     }
 

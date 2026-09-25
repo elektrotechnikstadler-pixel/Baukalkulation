@@ -428,7 +428,10 @@ if (isset($routes[$action])) {
     if (!empty($_SESSION['authenticated']) && !in_array($action, $allowedDuringPwChange, true)) {
         $stmt = $db->prepare("SELECT mustChangePassword FROM users WHERE username = ?");
         $stmt->execute([$_SESSION['username'] ?? '']);
-        if ((int)$stmt->fetchColumn() === 1) {
+        $mustChange = (int)$stmt->fetchColumn() === 1;
+        // Offenes Statement blockiert sonst WAL-Checkpoint/VACUUM im Handler.
+        unset($stmt);
+        if ($mustChange) {
             jsonOut(['error' => 'Bitte zuerst das Passwort ändern.', 'mustChangePassword' => true], 403);
         }
     }

@@ -11,6 +11,32 @@
 
 ## Unveröffentlicht
 
+### Neu – Datenbank-Migrationen und Sicherungen (Phase 2)
+- **Versionierte Schema-Migrationen** (Phinx, Tabelle `schema_migrations`). Der bisherige
+  Schema-Stand ist als Basis-Migration eingefroren und hebt auch alte Datenbanken an.
+  Ist die Datenbank neuer als die App (Downgrade), verweigert die App den Betrieb (HTTP 503),
+  der Container startet nicht.
+- **`bin/console`**: `db:migrate`, `db:status`, `backup:create`, `backup:import`.
+- **Sicherungsformat 2**: zusätzlich `manifest.json` (App-/Schema-Version, SHA-256).
+  Die Datenbank wird per `VACUUM INTO` gesichert – konsistent auch bei laufenden
+  Schreibzugriffen. Ältere Sicherungen (Format 1 und reine JSON-Tagessicherungen) lassen sich
+  weiterhin einspielen und werden dabei automatisch auf den aktuellen Stand gehoben.
+- **Import ganz oder gar nicht**: Wiederherstellen, Upload und „Komplett ersetzen" laufen in
+  einer Transaktion. Bisher wurden fehlerhafte Tabellen still übersprungen (Teil-Restore).
+  Manipulierte Sicherungen (Prüfsumme), Sicherungen neuerer Versionen und defekte Dateien
+  werden abgelehnt. Nach dem Import müssen offene Clients die Zeiterfassung neu laden.
+- **Backup per E-Mail verschlüsselt**: ZIP-Passwort (AES-256) in den Erinnerungs-
+  Einstellungen; das Passwort wird verschlüsselt gespeichert (`data/secret.key`) und nie an den
+  Browser ausgeliefert. Größenlimit für den Anhang (Standard 20 MB). Ohne Passwort wird wie
+  bisher unverschlüsselt versendet (mit Warnung im Log und in der Mail).
+- Verschlüsselte Sicherungen lassen sich hochladen; die App fragt nach dem Passwort.
+
+### Behoben
+- Tagessicherung und manuelle Sicherung konnten Daten der letzten Minuten verlieren: der
+  WAL-Checkpoint scheiterte an einem offenen Statement („database table is locked") und die
+  Datei wurde trotzdem kopiert.
+- „Sicherung wiederherstellen" ist nur noch per POST möglich (vorher per GET-Link auslösbar).
+
 ### Umbau – Projektstruktur (Phase 1)
 - **Webroot ist jetzt `public/`.** Alle Browser-Dateien (HTML, JS, CSS, Icons, `lib/`,
   Modul-JS/CSS) und die API-Einstiegspunkte liegen dort. `src/`, `vendor/`, `modules/`

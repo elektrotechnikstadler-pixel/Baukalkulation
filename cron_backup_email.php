@@ -17,8 +17,10 @@
 
 require_once __DIR__ . '/vendor/autoload.php';
 
+use App\Backup\BackupArchive;
+use App\Backup\BackupWriter;
 use App\Services\MailService;
-use App\DataService;
+use App\Services\SecretBox;
 
 define('DATA_DIR', rtrim(getenv('BK_DATA_DIR') ?: __DIR__ . '/data', '/\\') . '/');
 
@@ -122,74 +124,65 @@ if (!$force) {
     }
 }
 
-// -- ZIP erstellen --
+// -- ZIP erstellen (Format 2: manifest.json + konsistenter DB-Snapshot) --
 logMsg("Erstelle Backup-ZIP ...");
 
 $zipName = 'baukalkulation_backup_' . date('Y-m-d_H-i') . '.zip';
-$zipPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $zipName;
+$zipPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'bk_mail_' . bin2hex(random_bytes(6)) . '.zip';
+$tmpDir  = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'bk_mail_' . bin2hex(random_bytes(6)) . DIRECTORY_SEPARATOR;
 
-$zip = new ZipArchive();
-if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-    logMsg("FEHLER: ZIP konnte nicht erstellt werden: $zipPath");
+$password = '';
+try {
+    $password = SecretBox::decrypt((string)($erData['backup_email_passwort'] ?? ''));
+} catch (Throwable $e) {
+    // Niemals unverschlüsselt senden, wenn eine Verschlüsselung eingerichtet ist.
+    logMsg("FEHLER: Backup-Passwort nicht lesbar (" . $e->getMessage() . "). Bitte in den Einstellungen neu setzen.");
     exit(1);
 }
 
-// baukalkulation.json on-the-fly generieren
 try {
-    $data = DataService::loadAllData($db);
-    $snap = ['ts' => date('c'), 'v' => APP_VERSION, 'data' => $data];
-    $jsonBytes = json_encode($snap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    $zip->addFromString('baukalkulation.json', $jsonBytes);
-    logMsg("baukalkulation.json hinzugefuegt (" . round(strlen($jsonBytes) / 1024, 1) . " KB)");
+    $manifest = BackupWriter::writeDir($db, $tmpDir);
+    BackupWriter::zipDir($tmpDir, $zipPath, $password !== '' ? $password : null);
 } catch (Throwable $e) {
-    logMsg("WARNUNG: baukalkulation.json konnte nicht erstellt werden: " . $e->getMessage());
+    logMsg("FEHLER: Sicherung konnte nicht erstellt werden: " . $e->getMessage());
+    BackupArchive::removeDir($tmpDir);
+    if (is_file($zipPath)) unlink($zipPath);
+    exit(1);
 }
-
-// database.sqlite hinzufuegen (WAL-Checkpoint erzwingen, damit alle
-// committed Daten in der Hauptdatei stehen – wichtig bei WAL-Modus)
-if (file_exists($dbPath)) {
-    try {
-        $db->exec('PRAGMA wal_checkpoint(FULL)');
-    } catch (Throwable $e) {
-        logMsg("WARNUNG: WAL-Checkpoint fehlgeschlagen: " . $e->getMessage());
-    }
-    // Integritaetspruefung: schlaegt Alarm, falls die Datenbank beschaedigt ist,
-    // bevor eine (moeglicherweise korrupte) Datei ins Backup wandert. Rein
-    // additiv – das Backup wird trotzdem erstellt, damit im Fehlerfall ueberhaupt
-    // eine Kopie existiert; der Log-Eintrag macht das Problem aber sichtbar.
-    try {
-        $integrity = $db->query('PRAGMA integrity_check')->fetchColumn();
-        if ($integrity === 'ok') {
-            logMsg("Integritaetspruefung: ok");
-        } else {
-            logMsg("ACHTUNG: Datenbank-Integritaetspruefung fehlgeschlagen: " . $integrity);
-        }
-    } catch (Throwable $e) {
-        logMsg("WARNUNG: Integritaetspruefung konnte nicht ausgefuehrt werden: " . $e->getMessage());
-    }
-    $zip->addFile($dbPath, 'database.sqlite');
-    logMsg("database.sqlite hinzugefuegt (" . round(filesize($dbPath) / 1024 / 1024, 2) . " MB)");
-} else {
-    logMsg("WARNUNG: database.sqlite nicht gefunden.");
-}
-
-$zip->close();
+BackupArchive::removeDir($tmpDir);
 $zipSize = filesize($zipPath);
-logMsg("ZIP erstellt: $zipName (" . round($zipSize / 1024, 1) . " KB)");
+$zipHash = hash_file('sha256', $zipPath);
+logMsg("ZIP erstellt: $zipName (" . round($zipSize / 1024, 1) . " KB" . ($password !== '' ? ', AES-256' : ', UNVERSCHLUESSELT') . ")");
+if ($password === '') {
+    logMsg("WARNUNG: Kein Backup-Passwort gesetzt – die Sicherung wird unverschluesselt versendet.");
+}
 
 // -- E-Mail versenden --
 $firmaName = $smtpCfg['smtp_from_name'] ?: 'Baukalkulation';
 $subject   = "Automatisches Backup – $firmaName – " . date('d.m.Y');
-$htmlBody  = '<p>Automatisches Backup der Baukalkulation vom <strong>' . date('d.m.Y H:i') . ' Uhr</strong>.</p>'
-           . '<p>Im Anhang befindet sich das vollständige Backup als ZIP-Datei.</p>'
-           . '<ul>'
-           . '<li><strong>baukalkulation.json</strong> – alle Projektdaten</li>'
-           . '<li><strong>database.sqlite</strong> – vollständige Datenbank</li>'
+$maxBytes  = max(1, (int)($erData['backup_email_max_mb'] ?? 20)) * 1024 * 1024;
+$tooLarge  = $zipSize > $maxBytes;
+
+$htmlBody  = '<p>Automatisches Backup der Baukalkulation vom <strong>' . date('d.m.Y H:i') . ' Uhr</strong>.</p>';
+if ($tooLarge) {
+    $htmlBody .= '<p><strong>Die Sicherung ist mit ' . round($zipSize / 1024 / 1024, 1) . ' MB größer als das eingestellte Limit ('
+               . round($maxBytes / 1024 / 1024) . ' MB) und wurde deshalb nicht angehängt.</strong> '
+               . 'Die tägliche Sicherung liegt weiterhin auf dem Server (Einstellungen → Datensicherung).</p>';
+} else {
+    $htmlBody .= '<p>Im Anhang befindet sich das vollständige Backup als ZIP-Datei'
+               . ($password !== ''
+                   ? ' (<strong>AES-256-verschlüsselt</strong> – öffnen mit 7-Zip/WinZip und dem hinterlegten Backup-Passwort).'
+                   : '. <strong>Achtung: unverschlüsselt</strong> – bitte in den Einstellungen ein Backup-Passwort hinterlegen.')
+               . '</p>';
+}
+$htmlBody .= '<ul>'
+           . '<li>Format ' . (int)$manifest['format'] . ', Schema ' . htmlspecialchars((string)$manifest['schemaVersion']) . '</li>'
+           . '<li>SHA-256 der ZIP-Datei: <code>' . $zipHash . '</code></li>'
            . '</ul>'
-           . '<p><em>Baukalkulation_ES v' . APP_VERSION . ' – ' . date('d.m.Y H:i') . '</em></p>';
+           . '<p><em>Baukalkulation_ES v' . htmlspecialchars(APP_VERSION) . ' – ' . date('d.m.Y H:i') . '</em></p>';
 
 try {
-    $zipBytes = file_get_contents($zipPath);
+    $zipBytes = $tooLarge ? null : file_get_contents($zipPath);
     if ($zipBytes === false) throw new RuntimeException("ZIP-Datei konnte nicht gelesen werden.");
     MailService::send(
         $smtpCfg,
@@ -198,16 +191,15 @@ try {
         $subject,
         $htmlBody,
         $zipBytes,
-        $zipName,
+        $tooLarge ? null : $zipName,
         'application/zip'
     );
-    logMsg("E-Mail erfolgreich gesendet an: $empfaenger");
+    logMsg("E-Mail erfolgreich gesendet an: $empfaenger" . ($tooLarge ? ' (ohne Anhang, zu gross)' : ''));
 } catch (RuntimeException $e) {
     logMsg("FEHLER beim E-Mail-Versand: " . $e->getMessage());
-    @unlink($zipPath);
     exit(1);
 } finally {
-    @unlink($zipPath);
+    if (is_file($zipPath)) unlink($zipPath);
 }
 
 // -- Lock-File schreiben (ausser bei --force) --

@@ -29,6 +29,36 @@
 Git-Hooks: `prek install` (oder `pre-commit install`) aktiviert die Prüfungen aus
 `.pre-commit-config.yaml` vor jedem Commit.
 
+## Datenbank-Migrationen
+
+Das Schema verwaltet [Phinx](https://book.cakephp.org/phinx/0/en/index.html); ausgeführte
+Versionen stehen in der Tabelle `schema_migrations`.
+
+- `migrations/20260925000000_legacy_baseline.php` ist der eingefrorene Stand bis v2.10.99
+  (`src/Database/LegacySchema.php`). Sie legt neue DBs an und hebt jede ältere DB ohne
+  Versionstabelle auf diesen Stand. **Nicht mehr ändern.**
+- Jede Schemaänderung ist eine neue Migration: `vendor/bin/phinx create AddFooToBar`
+  (Konfiguration in `phinx.php`). Nur vorwärts; `down()` darf eine Exception werfen.
+- Die App migriert beim Verbinden automatisch (Dateisperre `data/migrate.lock`). Ist die DB
+  neuer als der Code, antwortet die API mit 503 und `bin/console db:migrate` bricht ab.
+- Sicherungen älterer Versionen werden beim Import als Kopie migriert – deshalb nach jeder
+  Migration `make fixture` ausführen und die neue Fixture einchecken.
+
+```bash
+php bin/console db:status      # ausgeführt / offen
+php bin/console db:migrate     # Schema anheben
+php bin/console backup:create  # Sicherung in data/backups/
+php bin/console backup:import <zip|ordner|json> [--mode=replace] [--password=…]
+```
+
+## Sicherungen (Format 2)
+
+`App\Backup\BackupWriter` schreibt `baukalkulation.json`, `database.sqlite` (per `VACUUM INTO`)
+und `manifest.json` (Format, App-/Schema-Version, SHA-256). `App\Backup\BackupArchive` liest alle
+bisherigen Formate (2, 1 = ohne Manifest, 0 = einzelne JSON-Datei), `App\Backup\Importer` spielt
+sie in **einer** Transaktion ein: Baustellen/Kataloge aus dem JSON, alle übrigen Tabellen
+generisch aus der SQLite-Datei (gemeinsame Spalten). Jeder Fehler rollt vollständig zurück.
+
 ## Tests
 
 - `tests/Unit/` – reine PHP-Funktionen.
