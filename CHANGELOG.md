@@ -6,6 +6,14 @@
   zwei Personen denselben Datensatz gleichzeitig, überschreibt die letzte Speicherung (nur
   dieser eine Datensatz, kein Massenverlust). Optional nachrüstbar über einen
   `updatedAt`/Versions-Check pro Datensatz. (Stand 2026-08-07)
+- **Rechnungs-PDF in der Git-Historie:** `R26000174.pdf` ist aus dem Projekt entfernt, steckt aber
+  noch in Commit `e2ec875` (Tag `v2.10.99-pre-restructure`). Endgültig entfernen hieße, die
+  Historie umzuschreiben (alle Commit-Kennungen und der Tag ändern sich) – Entscheidung offen.
+  (Stand 2026-09-26)
+- **OCI-Lieferanten-Passwörter** (`oci_lieferanten.password`) liegen im Klartext in der Datenbank.
+  Optional wie SMTP-Passwort per `SecretBox` verschlüsseln. (Stand 2026-09-26)
+- **Backup-Mail ohne ZIP-Passwort:** wird derzeit unverschlüsselt (mit Warnung im Log) versendet.
+  Offen, ob der Versand ohne Passwort blockiert werden soll. (Stand 2026-09-26)
 
 ---
 
