@@ -355,22 +355,7 @@ class DataActions
         }
         $snap['data'] = $data;
 
-        // Sicherheits-Snapshot des AKTUELLEN Standes – der Restore bleibt damit
-        // umkehrbar. Scheitert die Sicherung, wird NICHTS überschrieben.
-        try {
-            $safety = $this->_createSafetySnapshot('restore');
-        } catch (\Throwable $e) {
-            error_log('Pre-Restore-Snapshot fehlgeschlagen: ' . $e->getMessage());
-            jsonOut(['error' => 'Wiederherstellung abgebrochen: Der aktuelle Stand konnte nicht gesichert werden. Es wurden KEINE Daten verändert.'], 500);
-        }
-
-        // Hauptdaten wiederherstellen
-        DataService::saveAllData($this->db, $snap['data']);
-
-        // SQLite-Tabellen wiederherstellen (alle Module: VDE, DIN1090, Aufmaß, Lager …)
-        // _restoreFromSqlite() prüft intern ob die Datei existiert und überspringt
-        // fehlende Tabellen (Abwärtskompatibilität alter Backups).
-        $this->_restoreFromSqlite($bDir . 'database.sqlite');
+        $safety = $this->_restoreSnapshot($snap['data'], $bDir . 'database.sqlite', 'restore');
 
         AuditService::log('data_restore', 'Backup wiederhergestellt: Datum=' . $date . ', Baustellen=' . count($snap['data']['baustellen'] ?? []) . ', Sicherheitskopie=' . $safety);
         jsonOut(['ok' => true, 'data' => $snap['data'], 'safetyBackup' => $safety]);
@@ -536,7 +521,12 @@ class DataActions
      */
     private function _createSafetySnapshot(string $reason): string
     {
-        $dirName = date('Y-m-d_H-i-s') . '_pre-' . $reason;
+        // Eindeutiger Name, damit ein Restore aus einer Sicherheitskopie diese nicht überschreibt.
+        $base    = date('Y-m-d_H-i-s') . '_pre-' . $reason;
+        $dirName = $base;
+        for ($i = 2; is_dir(BACKUP_DIR . $dirName); $i++) {
+            $dirName = $base . '-' . $i;
+        }
         $destDir = BACKUP_DIR . $dirName . '/';
         try {
             $this->_writeVerifiedSnapshot($destDir);
@@ -547,6 +537,37 @@ class DataActions
         // Eigene Aufbewahrung für Sicherheits-Snapshots (neueste 20 behalten).
         DataService::pruneBackupCategory('pre-restore', 20);
         return $dirName;
+    }
+
+    /**
+     * Setzt Hauptdaten und SQLite-Tabellen auf den Stand einer Sicherung zurück.
+     * Vorher wird der aktuelle Stand gesichert; bei jedem Abbruch bleibt die DB unverändert.
+     * Gibt den Namen der Sicherheitskopie zurück.
+     */
+    private function _restoreSnapshot(array $data, string $sqlitePath, string $reason): string
+    {
+        $curActive = (int)$this->db->query("SELECT COUNT(*) FROM baustellen WHERE archiviert = 0")->fetchColumn();
+        if (empty($data['baustellen']) && $curActive > 0) {
+            jsonOut(['error' => 'Abgebrochen: Die Sicherung enthält keine aktiven Baustellen – die Wiederherstellung würde alle aktuellen Projekte entfernen. Es wurden KEINE Daten verändert.'], 400);
+        }
+
+        try {
+            $safety = $this->_createSafetySnapshot($reason);
+        } catch (\Throwable $e) {
+            error_log("Pre-{$reason}-Snapshot fehlgeschlagen: " . $e->getMessage());
+            jsonOut(['error' => 'Wiederherstellung abgebrochen: Der aktuelle Stand konnte nicht gesichert werden. Es wurden KEINE Daten verändert.'], 500);
+        }
+
+        // Ohne baseRev würde saveAllData() bei vorhandenen Daten still einen Konflikt liefern.
+        $res = DataService::saveAllData(
+            $this->db, $data, DataService::currentRev($this->db), false, (string)($_SESSION['username'] ?? '')
+        );
+        if (!isset($res['rev'])) {
+            jsonOut(['error' => 'Wiederherstellung abgebrochen: Die Daten wurden gerade von jemand anderem geändert. Es wurden KEINE Daten verändert. Bitte erneut versuchen.', 'conflict' => true], 409);
+        }
+
+        $this->_restoreFromSqlite($sqlitePath);
+        return $safety;
     }
 
     /** Erzeugt ein ZIP der aktuellen (oder einer gespeicherten) Sicherung und streamt es. */
@@ -642,20 +663,7 @@ class DataActions
             }
             $snap['data'] = $data;
 
-            // Sicherheits-Snapshot des aktuellen Standes vor dem Überschreiben.
-            // Scheitert die Sicherung, wird NICHTS überschrieben.
-            try {
-                $safety = $this->_createSafetySnapshot('upload');
-            } catch (\Throwable $e) {
-                error_log('Pre-Upload-Snapshot fehlgeschlagen: ' . $e->getMessage());
-                jsonOut(['error' => 'Wiederherstellung abgebrochen: Der aktuelle Stand konnte nicht gesichert werden. Es wurden KEINE Daten verändert.'], 500);
-            }
-
-            // Hauptdaten wiederherstellen
-            DataService::saveAllData($this->db, $snap['data']);
-
-            // SQLite-Tabellen wiederherstellen (falls im ZIP enthalten)
-            $this->_restoreFromSqlite($tmpDir . 'database.sqlite');
+            $safety = $this->_restoreSnapshot($snap['data'], $tmpDir . 'database.sqlite', 'upload');
 
         } finally {
             // Temp-Verzeichnis immer bereinigen

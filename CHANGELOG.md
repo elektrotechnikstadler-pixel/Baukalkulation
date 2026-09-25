@@ -9,6 +9,20 @@
 
 ---
 
+## Unveröffentlicht
+
+### Behoben – Wiederherstellen setzte Baustellen nicht zurück
+- „Sicherung wiederherstellen" und „Backup hochladen" meldeten Erfolg, stellten bei einer
+  Instanz mit vorhandenen Daten aber **nur** Kunden, Benutzer, Zeiten und Modul-Daten wieder
+  her – die Baustellen blieben auf dem aktuellen Stand (stiller Revisionskonflikt).
+  Jetzt werden auch die Baustellen zurückgesetzt; bei einem echten Konflikt wird mit
+  HTTP 409 abgebrochen, **bevor** etwas verändert wird.
+- Eine Sicherung ohne Baustellen kann eine Instanz mit Baustellen nicht mehr leeren (HTTP 400).
+- Sicherheitskopien vor einem Restore erhalten eindeutige Namen; ein Restore aus einer
+  Sicherheitskopie überschreibt diese nicht mehr, wenn er in derselben Sekunde läuft.
+
+---
+
 ## v2.10.99 – Stundenauswertung: „Projekt existiert nicht mehr" (ZE005) ausgeblendet
 
 ### Behoben – Warnliste lief mit gültigen ZE005-Buchungen voll

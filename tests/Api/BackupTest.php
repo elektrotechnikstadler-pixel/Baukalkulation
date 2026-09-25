@@ -80,12 +80,7 @@ final class BackupTest extends ApiTestCase
         $this->assertCount(1, $this->assertOk($this->api->get('list_rechnungen'))['rechnungen']);
     }
 
-    /**
-     * BEKANNTER FEHLER (hält den Ist-Zustand fest): restore meldet ok, setzt aber nur die
-     * SQLite-Tabellen zurück. Baustellen bleiben unverändert, weil saveAllData() ohne
-     * baseRev bei vorhandenen Daten still einen Konflikt liefert. Nach der Korrektur umdrehen.
-     */
-    public function testRestoreSetztKundenZurueckAberBaustellenNicht(): void
+    public function testRestoreSetztAlleDatenAufDenSicherungsstandZurueck(): void
     {
         $this->setupAdmin();
         $kundeId = $this->befuelleBeispieldaten();
@@ -95,13 +90,45 @@ final class BackupTest extends ApiTestCase
         $this->saveBaustellen([['id' => 1, 'name' => 'Neubau geändert', 'kundeId' => $kundeId], ['id' => 2, 'name' => 'Zusätzlich']], $rev);
         $this->assertOk($this->api->post('save_kunde', ['firma' => 'Neukunde']));
 
-        $this->assertOk($this->api->post('restore', [], ['date' => $date]));
+        $json = $this->assertOk($this->api->post('restore', [], ['date' => $date]));
 
         $this->assertSame(['Muster GmbH'], array_column($this->assertOk($this->api->get('load_kunden'))['kunden'], 'firma'));
+        $this->assertSame(['Neubau'], array_column($this->assertOk($this->api->get('load'))['data']['baustellen'], 'name'));
+
+        // Die Sicherheitskopie enthält den Stand direkt vor dem Restore.
+        $this->assertOk($this->api->post('restore', [], ['date' => $json['safetyBackup']]));
         $this->assertSame(
             ['Neubau geändert', 'Zusätzlich'],
             array_column($this->assertOk($this->api->get('load'))['data']['baustellen'], 'name'),
         );
+    }
+
+    public function testUploadInBestehendeInstallationSetztBaustellenZurueck(): void
+    {
+        $this->setupAdmin();
+        $kundeId = $this->befuelleBeispieldaten();
+        $zipPath = $this->speichereZip($this->api->get('backup_download'));
+
+        $rev = $this->assertOk($this->api->get('load'))['data']['rev'];
+        $this->saveBaustellen([['id' => 1, 'name' => 'Neubau geändert', 'kundeId' => $kundeId]], $rev);
+
+        $this->assertOk($this->api->upload('backup_upload', 'backup', $zipPath));
+        @unlink($zipPath);
+
+        $data = $this->assertOk($this->api->get('load'))['data'];
+        $this->assertSame(['Neubau'], array_column($data['baustellen'], 'name'));
+        $this->assertGreaterThan($rev + 1, $data['rev'], 'Restore erhöht die Revision, damit offene Clients neu laden');
+    }
+
+    public function testSicherungOhneBaustellenUeberschreibtVorhandeneNicht(): void
+    {
+        $this->setupAdmin();
+        $leer = $this->assertOk($this->api->post('backup_create'))['date'];
+        $this->befuelleBeispieldaten();
+
+        $this->assertStatus(400, $this->api->post('restore', [], ['date' => $leer]));
+
+        $this->assertSame(['Neubau'], array_column($this->assertOk($this->api->get('load'))['data']['baustellen'], 'name'));
     }
 
     public function testNurAdminOderMasterDarfSichern(): void
