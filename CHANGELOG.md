@@ -35,6 +35,12 @@
 ### Behoben
 - Docker-Image seit der Umstellung auf `public/`: Die `.htaccess` der Projektwurzel erzeugte eine
   Redirect-Schleife (HTTP 500 auf alle Anfragen).
+- Einspielen einer Sicherung stellte **archivierte Baustellen** nicht wieder her; ihre IDs konnten
+  danach neu vergeben und alte Stunden/Rechnungen einer neuen Baustelle zugeordnet werden.
+- Sicherung unter PostgreSQL brach bei verknüpften Lagerdaten ab (Fremdschlüssel beim Kopieren).
+- Wochen- und Tagesprüfung: Die Tabellen entstanden erst beim ersten Aufruf und fehlten deshalb in
+  Sicherungen aus PostgreSQL; sie werden jetzt per Migration angelegt.
+  (Alle drei beim Probelauf mit einem echten Datenbestand gefunden.)
 
 ### Neu – PostgreSQL als Alternative zu SQLite (Phase 3)
 - **Wahlweise PostgreSQL** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`, Passwort als

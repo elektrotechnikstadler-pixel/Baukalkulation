@@ -43,6 +43,25 @@ final class BackupTest extends ApiTestCase
         $this->assertFileExists($this->server->dataPath("backups/{$date}/database.sqlite"));
     }
 
+    public function testSicherungEnthaeltVerknuepfteModuldatenUndPruefungen(): void
+    {
+        $this->setupAdmin();
+        $db = $this->server->db();
+        // lager_artikel wird vor lager_orte kopiert – der Fremdschlüssel darf die Sicherung nicht abbrechen.
+        $db->exec("INSERT INTO lager_orte (id, name) VALUES (1, 'Halle')");
+        $db->exec("INSERT INTO lager_artikel (id, bezeichnung, lagerort_id) VALUES (1, 'Kabel', 1)");
+        $db->exec("INSERT INTO zeiterfassung_tagespruefung (username, datum, geprueft) VALUES ('admin', '2026-03-02', 1)");
+        $db = null;
+
+        $date = $this->assertOk($this->api->post('backup_create', ['name' => 'fk']))['date'];
+
+        $snap = new \PDO('sqlite:' . $this->server->dataPath("backups/{$date}/database.sqlite"));
+        foreach (['lager_orte', 'lager_artikel', 'zeiterfassung_tagespruefung'] as $table) {
+            $this->assertSame(1, (int) $snap->query("SELECT COUNT(*) FROM {$table}")->fetchColumn(), $table);
+        }
+        $snap = null;
+    }
+
     public function testDownloadEnthaeltJsonUndSqlite(): void
     {
         $this->setupAdmin();
@@ -79,6 +98,26 @@ final class BackupTest extends ApiTestCase
         $this->assertSame(['Muster GmbH'], array_column($this->assertOk($this->api->get('load_kunden'))['kunden'], 'firma'));
         $this->assertSame(['u-1'], array_column($this->assertOk($this->api->get('load_zeiterfassung'))['entries'], 'clientUuid'));
         $this->assertCount(1, $this->assertOk($this->api->get('list_rechnungen'))['rechnungen']);
+    }
+
+    public function testArchivierteBaustellenBleibenBeimEinspielenErhalten(): void
+    {
+        $this->setupAdmin();
+        $this->saveBaustellen([['id' => 1, 'name' => 'Aktiv'], ['id' => 7, 'name' => 'Alt']]);
+        $db = $this->server->db();
+        $db->exec("UPDATE baustellen SET archiviert = 1, archivFile = 'alt.json' WHERE id = 7");
+        $db = null;
+        $zipPath = $this->speichereZip($this->api->get('backup_download'));
+
+        $this->server->resetData();
+        $this->api = $this->server->client();
+        $this->setupAdmin();
+        $this->assertOk($this->api->upload('backup_upload', 'backup', $zipPath));
+        @unlink($zipPath);
+
+        $this->assertSame(['Aktiv'], array_column($this->assertOk($this->api->get('load'))['data']['baustellen'], 'name'));
+        $row = $this->server->db()->query('SELECT archiviert, archivFile FROM baustellen WHERE id = 7')->fetch();
+        $this->assertSame(['archiviert' => 1, 'archivFile' => 'alt.json'], ['archiviert' => (int) $row['archiviert'], 'archivFile' => $row['archivFile']]);
     }
 
     public function testRestoreSetztAlleDatenAufDenSicherungsstandZurueck(): void

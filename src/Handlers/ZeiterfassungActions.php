@@ -1792,29 +1792,6 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // WOCHENPRÜFUNG – DB-Migration
-    // -------------------------------------------------------
-
-    private function ensureWochenpruefungTable(): void
-    {
-        $this->db->exec("
-            CREATE TABLE IF NOT EXISTS zeiterfassung_wochenpruefung (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                kw TEXT NOT NULL,
-                geprueft INTEGER NOT NULL DEFAULT 0,
-                geprueftVon TEXT NOT NULL DEFAULT '',
-                geprueftAm TEXT NOT NULL DEFAULT '',
-                kommentar TEXT NOT NULL DEFAULT ''
-            )
-        ");
-        $this->db->exec("
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_zp_user_kw
-            ON zeiterfassung_wochenpruefung(username, kw)
-        ");
-    }
-
-    // -------------------------------------------------------
     // WOCHENPRÜFUNG – Laden
     // -------------------------------------------------------
 
@@ -1825,7 +1802,6 @@ class ZeiterfassungActions
         if (!Auth::canDo($this->db, 'canSeeWochenpruefung')) {
             jsonOut(['error' => 'Keine Berechtigung.'], 403);
         }
-        $this->ensureWochenpruefungTable();
 
         $rows = Database::fetchAll($this->db, "SELECT * FROM zeiterfassung_wochenpruefung", []);
         $result = [];
@@ -1854,7 +1830,6 @@ class ZeiterfassungActions
         if (!Auth::canDo($this->db, 'canSeeWochenpruefung')) {
             jsonOut(['error' => 'Keine Berechtigung.'], 403);
         }
-        $this->ensureWochenpruefungTable();
 
         $username  = trim($this->body['username'] ?? '');
         $kw        = trim($this->body['kw'] ?? '');
@@ -1902,8 +1877,6 @@ class ZeiterfassungActions
      */
     private function propagateWochenpruefungToTage(string $username, string $kw, bool $geprueft, string $supervisor, string $now): void
     {
-        $this->ensureTagespruefungTable();
-
         if (!preg_match('/^(\d{4})-W(\d{1,2})$/', $kw, $mKw)) {
             return;
         }
@@ -1942,29 +1915,6 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // TAGESPRÜFUNG – DB-Migration
-    // -------------------------------------------------------
-
-    private function ensureTagespruefungTable(): void
-    {
-        $this->db->exec("
-            CREATE TABLE IF NOT EXISTS zeiterfassung_tagespruefung (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                datum TEXT NOT NULL,
-                geprueft INTEGER NOT NULL DEFAULT 0,
-                geprueftVon TEXT NOT NULL DEFAULT '',
-                geprueftAm TEXT NOT NULL DEFAULT '',
-                kommentar TEXT NOT NULL DEFAULT ''
-            )
-        ");
-        $this->db->exec("
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_tp_user_datum
-            ON zeiterfassung_tagespruefung(username, datum)
-        ");
-    }
-
-    // -------------------------------------------------------
     // TAGESPRÜFUNG – Laden
     // -------------------------------------------------------
 
@@ -1975,7 +1925,6 @@ class ZeiterfassungActions
         if (!Auth::canDo($this->db, 'canSeeWochenpruefung')) {
             jsonOut(['error' => 'Keine Berechtigung.'], 403);
         }
-        $this->ensureTagespruefungTable();
 
         $rows = Database::fetchAll($this->db, "SELECT * FROM zeiterfassung_tagespruefung", []);
         $result = [];
@@ -2004,7 +1953,6 @@ class ZeiterfassungActions
         if (!Auth::canDo($this->db, 'canSeeWochenpruefung')) {
             jsonOut(['error' => 'Keine Berechtigung.'], 403);
         }
-        $this->ensureTagespruefungTable();
 
         $username  = trim($this->body['username'] ?? '');
         $datum     = trim($this->body['datum'] ?? '');

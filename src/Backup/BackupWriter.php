@@ -102,33 +102,35 @@ final class BackupWriter
         $tmp = $dbFile . '.tmp';
         if (is_file($tmp)) unlink($tmp);
         $lite = ConnectionConfig::openSqlite($tmp);
-        $lite->exec('PRAGMA journal_mode=DELETE');
-        Migrator::migrate($lite);
-        (new ModuleLoader($lite))->migrateAll(false);
-
-        $tables = [];
-        foreach (Dialect::for($db)->tableNames($db) as $table) {
-            if ($table === Migrator::TABLE) continue;
-            if (Dialect::for($lite)->tableExists($lite, $table)) {
-                $tables[] = $table;
-            } else {
-                error_log("[Backup] Tabelle {$table} ist in SQLite unbekannt und wird nicht gesichert.");
-            }
-        }
-
-        $ownTx = !$db->inTransaction();
-        if ($ownTx) Dialect::for($db)->beginSnapshot($db);
+        $ownTx = false;
         try {
+            $lite->exec('PRAGMA journal_mode=DELETE');
+            Migrator::migrate($lite);
+            (new ModuleLoader($lite))->migrateAll(false);
+
+            $tables = [];
+            foreach (Dialect::for($db)->tableNames($db) as $table) {
+                if ($table === Migrator::TABLE) continue;
+                if (Dialect::for($lite)->tableExists($lite, $table)) {
+                    $tables[] = $table;
+                } else {
+                    error_log("[Backup] Tabelle {$table} ist in SQLite unbekannt und wird nicht gesichert.");
+                }
+            }
+
+            // Tabellen werden alphabetisch kopiert; Fremdschlüssel dürfen erst am Ende stimmen.
+            Dialect::for($lite)->beforeBulkImport($lite);
+            $ownTx = !$db->inTransaction();
+            if ($ownTx) Dialect::for($db)->beginSnapshot($db);
             $lite->beginTransaction();
             (new TableCopier($db, $lite))->copyAll($tables);
             $lite->commit();
         } finally {
             if ($ownTx && $db->inTransaction()) $db->commit();
+            // Windows: Datei erst nach dem Schließen aller Verbindungen (auch in Zyklen, z. B. Phinx) umbenenn-/löschbar.
+            unset($lite);
+            gc_collect_cycles();
         }
-
-        // Windows: Datei erst nach dem Schließen aller Verbindungen (auch in Zyklen, z. B. Phinx) umbenennbar.
-        unset($lite);
-        gc_collect_cycles();
         if (!rename($tmp, $dbFile)) {
             throw new \RuntimeException('Datenbank-Sicherung konnte nicht abgelegt werden.');
         }

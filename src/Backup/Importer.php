@@ -54,6 +54,7 @@ final class Importer
             $result['rev'] = $res['rev'];
 
             if ($source !== null) {
+                $this->restoreArchivedBaustellen($source['pdo']);
                 $tables = [];
                 foreach ($source['tables'] as $table) {
                     if (!$this->shouldCopy($table, $mode)) {
@@ -149,5 +150,22 @@ final class Importer
         if (in_array($table, self::SKIP_TABLES, true)) return false;
         if (in_array($table, self::REPLACE_ONLY_TABLES, true)) return $mode === self::MODE_REPLACE;
         return true;
+    }
+
+    /**
+     * Archivierte Baustellen fehlen in baukalkulation.json; ohne ihre Zeilen würden ihre IDs neu vergeben
+     * und alte Stunden/Rechnungen einer neuen Baustelle zugeordnet.
+     */
+    private function restoreArchivedBaustellen(\PDO $src): void
+    {
+        $existing = array_flip($this->db->query('SELECT id FROM baustellen')->fetchAll(\PDO::FETCH_COLUMN));
+        $cols = 'id, name, kundeId, data, archiviert, archivFile, archiviertAm, archiviertVon';
+        $insert = $this->db->prepare("INSERT INTO baustellen ({$cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        foreach ($src->query("SELECT {$cols} FROM baustellen WHERE archiviert = 1", \PDO::FETCH_NUM) as $row) {
+            if (isset($existing[(int)$row[0]])) continue;
+            if ($row[2] === '') $row[2] = null; // kundeId: SQLite erlaubt '' in INTEGER-Spalten
+            $insert->execute($row);
+        }
+        Dialect::for($this->db)->resetSequences($this->db, ['baustellen']);
     }
 }
