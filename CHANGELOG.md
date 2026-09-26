@@ -41,6 +41,10 @@
 - Wochen- und Tagesprüfung: Die Tabellen entstanden erst beim ersten Aufruf und fehlten deshalb in
   Sicherungen aus PostgreSQL; sie werden jetzt per Migration angelegt.
   (Alle drei beim Probelauf mit einem echten Datenbestand gefunden.)
+- Mehrere Mandanten auf einem Server: `install.sh`/`install.ps1` schlagen jetzt eindeutige Namen aus
+  dem Mandantenordner vor (auch für Autoheal), prüfen Projektname, Container-Namen und Port auf
+  Kollisionen mit anderen Instanzen und behalten beim Update alle übrigen `.env`-Einträge
+  (bisher wurde die `.env` komplett neu geschrieben).
 
 ### Neu – PostgreSQL als Alternative zu SQLite (Phase 3)
 - **Wahlweise PostgreSQL** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`, Passwort als

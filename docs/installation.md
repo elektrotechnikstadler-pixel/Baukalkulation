@@ -381,6 +381,22 @@ Jede Instanz braucht **drei eindeutige Werte** in ihrer `.env`:
 
 > **`docker compose` immer aus dem richtigen Verzeichnis aufrufen.** Die `.env` wird aus dem aktuellen Arbeitsverzeichnis geladen — im falschen Ordner werden die Werte der anderen Instanz verwendet.
 
+> **Typische Falle: Ordner heißen überall `Baukalkulation`.** Fehlt `COMPOSE_PROJECT_NAME`, nimmt
+> Docker den Ordnernamen als Projektnamen – alle Mandanten landen im selben Projekt `baukalkulation`.
+> Folge: Jeder Build in einem Mandantenordner erzeugt die Container der anderen Mandanten neu
+> („Recreated“), und alle bauen dasselbe Image `baukalkulation-app`. Namen und Port nur in der `.env`
+> setzen, **nicht** in der `docker-compose.yml` (die wird beim nächsten Update überschrieben).
+> `install.sh` schlägt eindeutige Namen aus dem Mandantenordner vor und bricht bei Kollisionen ab.
+>
+> Bestehende, vermischte Installation trennen (Daten in `data/` bleiben erhalten):
+>
+> ```bash
+> docker compose ls                                   # zeigt Projekte und ihre compose-Dateien
+> docker compose -p baukalkulation down               # Container des gemeinsamen Projekts entfernen
+> # je Mandantenordner: eindeutige Werte in .env eintragen (oder ./install.sh), dann
+> docker compose up -d --build
+> ```
+
 ---
 
 ## Technische Details

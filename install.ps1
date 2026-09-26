@@ -67,13 +67,23 @@ function Read-YesNo([string]$prompt, [bool]$default) {
 
 # ── Abfrage ─────────────────────────────────────────────────
 Write-Host '-- Instanz-Identifikation (pro Installation eindeutig!) --'
-Write-Host 'Wenn mehrere Instanzen auf einem Server laufen, muessen'
-Write-Host 'diese drei Werte fuer jede Instanz verschieden sein.'
+Write-Host 'Mehrere Instanzen auf einem Server brauchen je einen eigenen'
+Write-Host 'Projektnamen und Port. Container-Namen werden daraus abgeleitet.'
 Write-Host ''
-$defProject = if ($defaults.COMPOSE_PROJECT_NAME) { $defaults.COMPOSE_PROJECT_NAME } else { 'baukalkulation' }
-$defAppName = if ($defaults.APP_NAME) { $defaults.APP_NAME } else { 'baukalkulation-app' }
-$COMPOSE_PROJECT_NAME = Read-WithDefault 'Projektname (z.B. baukalkulation-es)' $defProject
-$APP_NAME             = Read-WithDefault 'Container-Name (z.B. baukalkulation-es-app)' $defAppName
+# Liegt die App in "...\<mandant>\Baukalkulation", zählt der Mandantenordner.
+$folder = Split-Path $PSScriptRoot -Leaf
+if ($folder -ieq 'baukalkulation') { $folder = Split-Path (Split-Path $PSScriptRoot -Parent) -Leaf }
+$slug = ($folder.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
+$folderProject = if (-not $slug -or $slug.StartsWith('baukalkulation')) { if ($slug) { $slug } else { 'baukalkulation' } } else { "baukalkulation-$slug" }
+$defProject = if ($defaults.COMPOSE_PROJECT_NAME) { $defaults.COMPOSE_PROJECT_NAME } else { $folderProject }
+do {
+    $COMPOSE_PROJECT_NAME = Read-WithDefault 'Projektname (Kleinbuchstaben, z.B. baukalkulation-es)' $defProject
+} until ($COMPOSE_PROJECT_NAME -cmatch '^[a-z0-9][a-z0-9_-]*$')
+$defAppName = if ($defaults.APP_NAME -and $defaults.APP_NAME.StartsWith($COMPOSE_PROJECT_NAME)) { $defaults.APP_NAME } else { "$COMPOSE_PROJECT_NAME-app" }
+$APP_NAME = Read-WithDefault 'Container-Name' $defAppName
+$AUTOHEAL_NAME = if ($defaults.AUTOHEAL_NAME -and $defaults.AUTOHEAL_NAME.StartsWith($COMPOSE_PROJECT_NAME)) { $defaults.AUTOHEAL_NAME } else { "$COMPOSE_PROJECT_NAME-autoheal" }
+# Label darf nicht "autoheal" bleiben, sonst startet jeder Autoheal auch die Apps der anderen Instanzen neu.
+$AUTOHEAL_LABEL = if ($defaults.AUTOHEAL_LABEL -and $defaults.AUTOHEAL_LABEL -ne 'autoheal') { $defaults.AUTOHEAL_LABEL } else { 'autoheal_' + ($COMPOSE_PROJECT_NAME -replace '-', '_') }
 Write-Host ''
 Write-Host '-- Ports ----------------------------------------------'
 $APP_PORT = Read-WithDefault 'App-Port (HTTP)' $defaults.APP_PORT
@@ -102,23 +112,34 @@ if ($ENABLE_WHATSAPP -eq 'true') {
     $WA_API_TOKEN = Read-WithDefault 'WhatsApp-API-Token' $WA_API_TOKEN
 }
 
-# ── .env schreiben ──────────────────────────────────────────
-$envContent = @"
-# Automatisch erzeugt von install.ps1 am $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
-APP_NAME=$APP_NAME
-APP_PORT=$APP_PORT
-WA_PORT=$WA_PORT
-ENABLE_OCR=$ENABLE_OCR
-ENABLE_WHATSAPP=$ENABLE_WHATSAPP
-WA_API_TOKEN=$WA_API_TOKEN
-"@
-Set-Content -Path $envFile -Value $envContent -Encoding UTF8
+# ── .env schreiben (übrige Einträge wie BK_*-Variablen bleiben erhalten) ──
+$values = [ordered]@{
+    COMPOSE_PROJECT_NAME = $COMPOSE_PROJECT_NAME
+    APP_NAME             = $APP_NAME
+    AUTOHEAL_NAME        = $AUTOHEAL_NAME
+    AUTOHEAL_LABEL       = $AUTOHEAL_LABEL
+    APP_PORT             = $APP_PORT
+    WA_PORT              = $WA_PORT
+    ENABLE_OCR           = $ENABLE_OCR
+    ENABLE_WHATSAPP      = $ENABLE_WHATSAPP
+    WA_API_TOKEN         = $WA_API_TOKEN
+}
+$lines = if (Test-Path $envFile) { @(Get-Content $envFile) } elseif (Test-Path (Join-Path $PSScriptRoot '.env.example')) { @(Get-Content (Join-Path $PSScriptRoot '.env.example')) } else { @() }
+$seen = @{}
+$lines = foreach ($line in $lines) {
+    if ($line -match '^\s*([A-Z_][A-Z0-9_]*)\s*=' -and $values.Contains($matches[1])) {
+        if (-not $seen[$matches[1]]) { "$($matches[1])=$($values[$matches[1]])" }
+        $seen[$matches[1]] = $true
+    } else { $line }
+}
+foreach ($key in $values.Keys) { if (-not $seen[$key]) { $lines += "$key=$($values[$key])" } }
+[System.IO.File]::WriteAllLines($envFile, [string[]]$lines, (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host ''
 Write-Host '-- Zusammenfassung ------------------------------------'
 Write-Host "  Projektname:      $COMPOSE_PROJECT_NAME"
 Write-Host "  Container-Name:   $APP_NAME"
+Write-Host "  Autoheal:         $AUTOHEAL_NAME (Label $AUTOHEAL_LABEL)"
 Write-Host "  App-Port:         $APP_PORT"
 Write-Host "  OCR:              $ENABLE_OCR"
 Write-Host "  WhatsApp:         $ENABLE_WHATSAPP"

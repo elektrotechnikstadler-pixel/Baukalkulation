@@ -42,7 +42,19 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # ── Defaults ────────────────────────────────────────────────
-DEF_COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-}"
+# Projektname aus dem Ordner ableiten; liegt die App in ".../<mandant>/Baukalkulation",
+# zählt der Mandantenordner – sonst hätten alle Instanzen denselben Standardnamen.
+FOLDER="$(basename "$SCRIPT_DIR")"
+if [ "$(echo "$FOLDER" | tr '[:upper:]' '[:lower:]')" = "baukalkulation" ]; then
+    FOLDER="$(basename "$(dirname "$SCRIPT_DIR")")"
+fi
+SLUG="$(echo "$FOLDER" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')"
+case "$SLUG" in
+    ""|baukalkulation*) DEF_FOLDER_PROJECT="${SLUG:-baukalkulation}" ;;
+    *)                  DEF_FOLDER_PROJECT="baukalkulation-$SLUG" ;;
+esac
+
+DEF_COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-$DEF_FOLDER_PROJECT}"
 DEF_APP_NAME="${APP_NAME:-}"
 DEF_APP_PORT="${APP_PORT:-8081}"
 DEF_WA_PORT="${WA_PORT:-3002}"
@@ -80,11 +92,23 @@ ask_yn() {
 
 # ── Abfrage ─────────────────────────────────────────────────
 echo "── Instanz-Identifikation (pro Installation eindeutig!) ─"
-echo "Wenn mehrere Instanzen auf einem Server laufen, müssen diese"
-echo "drei Werte für jede Instanz verschieden sein."
+echo "Mehrere Instanzen auf einem Server brauchen je einen eigenen"
+echo "Projektnamen und Port. Container-Namen werden daraus abgeleitet."
 echo ""
-COMPOSE_PROJECT_NAME="$(ask 'Projektname (z.B. baukalkulation-es)' "${DEF_COMPOSE_PROJECT:-baukalkulation}")" 
-APP_NAME="$(ask 'Container-Name (z.B. baukalkulation-es-app)' "${DEF_APP_NAME:-baukalkulation-app}")"
+while :; do
+    COMPOSE_PROJECT_NAME="$(ask 'Projektname (Kleinbuchstaben, z.B. baukalkulation-es)' "$DEF_COMPOSE_PROJECT")"
+    echo "$COMPOSE_PROJECT_NAME" | grep -Eq '^[a-z0-9][a-z0-9_-]*$' && break
+    echo "Nur Kleinbuchstaben, Ziffern, '-' und '_' erlaubt."
+done
+APP_NAME="$(ask 'Container-Name' "$(case "$DEF_APP_NAME" in "$COMPOSE_PROJECT_NAME"*) echo "$DEF_APP_NAME" ;; *) echo "$COMPOSE_PROJECT_NAME-app" ;; esac)")"
+case "${AUTOHEAL_NAME:-}" in
+    "$COMPOSE_PROJECT_NAME"*) ;;
+    *) AUTOHEAL_NAME="$COMPOSE_PROJECT_NAME-autoheal" ;;
+esac
+# Label darf nicht "autoheal" bleiben, sonst startet jeder Autoheal auch die Apps der anderen Instanzen neu.
+if [ -z "${AUTOHEAL_LABEL:-}" ] || [ "$AUTOHEAL_LABEL" = "autoheal" ]; then
+    AUTOHEAL_LABEL="autoheal_$(echo "$COMPOSE_PROJECT_NAME" | tr '-' '_')"
+fi
 echo ""
 echo "── Ports ─────────────────────────────────────────────"
 APP_PORT="$(ask 'App-Port (HTTP)' "$DEF_APP_PORT")"
@@ -123,23 +147,57 @@ if [ "$ENABLE_WHATSAPP" = "true" ]; then
     fi
 fi
 
-# ── .env schreiben ──────────────────────────────────────────
-cat > "$ENV_FILE" <<EOF
-# Automatisch erzeugt von install.sh am $(date '+%Y-%m-%d %H:%M:%S')
-COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
-APP_NAME=$APP_NAME
-APP_PORT=$APP_PORT
-WA_PORT=$WA_PORT
-ENABLE_OCR=$ENABLE_OCR
-ENABLE_WHATSAPP=$ENABLE_WHATSAPP
-WA_API_TOKEN=$WA_API_TOKEN
-USE_BIND_MOUNT=$USE_BIND_MOUNT
-EOF
+# ── Kollisionen mit anderen Instanzen prüfen ──────────────────
+# Gleicher Projektname in zwei Ordnern: jeder Build übernimmt/erzeugt die Container der
+# anderen Instanz neu (ggf. mit falschem Datenordner).
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    conflict=""
+    other_dirs="$(docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" \
+        --format '{{.Label "com.docker.compose.project.working_dir"}}' | sort -u | grep -vxF "$SCRIPT_DIR" || true)"
+    if [ -n "$other_dirs" ]; then
+        conflict="$conflict\n  - Projektname '$COMPOSE_PROJECT_NAME' wird schon von einer anderen Installation benutzt: $other_dirs"
+    fi
+    for cname in "$APP_NAME" "$AUTOHEAL_NAME"; do
+        owner="$(docker ps -a --filter "name=^/${cname}\$" --format '{{.Label "com.docker.compose.project"}}')"
+        if [ -n "$owner" ] && [ "$owner" != "$COMPOSE_PROJECT_NAME" ]; then
+            conflict="$conflict\n  - Container '$cname' gehört zu Projekt '$owner'"
+        fi
+    done
+    port_owner="$(docker ps --format '{{.Names}} {{.Ports}}' | grep -E "[:.]${APP_PORT}->" | grep -vE "^${APP_NAME} " | cut -d' ' -f1 || true)"
+    if [ -n "$port_owner" ]; then
+        conflict="$conflict\n  - Port $APP_PORT wird schon von '$port_owner' benutzt"
+    fi
+    if [ -n "$conflict" ]; then
+        printf 'FEHLER: Konflikt mit einer anderen Instanz:%b\n' "$conflict" >&2
+        echo "Bitte anderen Projektnamen/Port wählen (siehe docs/installation.md, 'Mehrere Instanzen')." >&2
+        exit 1
+    fi
+fi
+
+# ── .env schreiben (übrige Einträge wie BK_*-Variablen bleiben erhalten) ──
+[ -f "$ENV_FILE" ] || { [ -f "$SCRIPT_DIR/.env.example" ] && cp "$SCRIPT_DIR/.env.example" "$ENV_FILE"; } || touch "$ENV_FILE"
+set_env() {
+    K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; done = 0 }
+        index($0, k "=") == 1 { if (!done) print k "=" v; done = 1; next }
+        { print }
+        END { if (!done) print k "=" v }' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+}
+set_env COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT_NAME"
+set_env APP_NAME "$APP_NAME"
+set_env AUTOHEAL_NAME "$AUTOHEAL_NAME"
+set_env AUTOHEAL_LABEL "$AUTOHEAL_LABEL"
+set_env APP_PORT "$APP_PORT"
+set_env WA_PORT "$WA_PORT"
+set_env ENABLE_OCR "$ENABLE_OCR"
+set_env ENABLE_WHATSAPP "$ENABLE_WHATSAPP"
+set_env WA_API_TOKEN "$WA_API_TOKEN"
+set_env USE_BIND_MOUNT "$USE_BIND_MOUNT"
 
 echo ""
 echo "── Zusammenfassung ───────────────────────────────────"
 echo "  Projektname:      $COMPOSE_PROJECT_NAME"
 echo "  Container-Name:   $APP_NAME"
+echo "  Autoheal:         $AUTOHEAL_NAME (Label $AUTOHEAL_LABEL)"
 echo "  App-Port:         $APP_PORT"
 echo "  OCR:              $ENABLE_OCR"
 echo "  WhatsApp:         $ENABLE_WHATSAPP"
