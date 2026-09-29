@@ -273,7 +273,7 @@ Bytes über die Leitung sinken spürbar nur durch Gzip/Brotli am Server bzw. C(2
 6. **Browser-Smoke (C4):** Playwright als neue devDependency + CI-Job gewünscht, oder genügen statischer Check,
    Asset-Test und manuelle Checkliste?
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – Stufe 0 + A; Stufe B später. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 

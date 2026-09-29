@@ -342,7 +342,7 @@ Aufschlag eingespielt, Pauschalen mit 0 €.
 - **F5:** Darf beim Anpassen des Selects der fehlende `<div>`-Wrapper des Blocks „Standard-Branche“
   gleich mit behoben werden? Er liegt in derselben Stelle und ist ein Layoutfehler.
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – nur Teil A; Layout-Fix (F5) mit beheben. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 

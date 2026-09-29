@@ -202,7 +202,9 @@ Teil B (manuelle Prüfliste, keine JS-Testumgebung vorhanden)
 4. Minimalpaket V1–V4 so freigeben? Arbeitszeit-Standardgruppierung Monat oder Mitarbeiter? Mobile (V13) später?
 5. Nebenbefunde (zerstörte Zeichen in `script.js`, OCI mit ISO-8859-1) als eigene APs anlegen?
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – Umlaut-Fix + V1–V4. Symptom laut Nutzer: **Quadrate** statt ä/ö/ü bei Datanorm von
+**FEGA & Schmitt** → bestätigt CP850-Hypothese (Bytes 0x84/0x94/0x81 als ISO-8859-1 = Steuerzeichen). Reparatur bestehender
+Positionen: eigenes AP. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 

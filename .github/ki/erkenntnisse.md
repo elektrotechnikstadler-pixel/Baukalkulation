@@ -20,6 +20,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 |---|---|---|---|---|
 | E-010 | Geheime Einstellungen über `Auth::SECRET_SETTINGS`/`SecretBox` speichern | Klartext in DB und Backups | Sicherheits-Umbau | php-backend.instructions.md |
 | E-011 | Secrets nicht nur als Docker-Env anbieten, wenn Cron-Jobs sie brauchen | Cron sieht die Container-Umgebung nicht | Sicherheits-Umbau | nur hier |
+| E-012 | Einstellungen, die als Dateipfad dienen, auf feste Dateinamen im Datenverzeichnis abbilden – auch Werte aus Sicherungen | `firma_logo_url` erlaubte Lesen beliebiger Dateien | AP-20260929-sicherheit | nur hier |
+| E-013 | Ohne Anmeldung erreichbare Endpunkte (`check`, `get_logo` …) in jedem AP auf ungefilterte Ausgabe prüfen | `check` lieferte IBAN/SMTP an Anonyme | AP-20260929-sicherheit | nur hier |
 
 ## Backup / Migration
 
@@ -32,6 +34,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
 | E-030 | SQLite-Dateien unter Windows erst nach `gc_collect_cycles()` löschen/umbenennen | Phinx hält Referenzzyklen, Datei bleibt gesperrt | Umbau Phase 3 | tests.instructions.md |
+| E-031 | `TestServer::resetData()` verschluckt Aufräumfehler; nach leerer Antwort des Built-in-Servers Folgeanfrage senden | Folgetest sah alte Daten (`setup` → 403) | AP-20260929-sicherheit | nur hier (Fix als eigenes AP) |
+| E-032 | Gesamtläufe (SQLite ~2 min, PostgreSQL ~3 min) asynchron mit Logdatei starten | Subagent lieferte bei langem Lauf kein Ergebnis | AP-20260929-sicherheit | nur hier |
 
 ## Frontend
 
@@ -53,11 +57,13 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-061 | npm unter Windows als `npm.cmd` aufrufen | ExecutionPolicy blockiert `npm.ps1` | Umbau Phase 1 | AGENTS.md |
 | E-062 | Composer-Constraints mit `^` direkt in `composer.json` eintragen | `composer.bat` verschluckt `^` | Umbau Phase 1 | nur hier |
 | E-063 | Kein `@`-Operator | Globaler Error-Handler wirft trotzdem | Umbau Phase 2 | AGENTS.md |
+| E-064 | PostgreSQL-Tests nur starten, wenn der eigene Wegwerf-Container läuft – bei belegtem Port abbrechen, nie gegen einen unbekannten Server testen | Tests leeren das Schema `public`; Port 55432 war von einem Rest-Container belegt | AP-20260929-sicherheit | nur hier |
 
 ## Planung / Zusammenarbeit
 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
+| E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
 
 ## Abgelöst
 

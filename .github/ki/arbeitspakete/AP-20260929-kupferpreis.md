@@ -133,7 +133,7 @@ Entspricht der Vorlage: Logik als typisierte Klasse unter `src/` (≙ `src/<pake
 4. **Manueller Wert:** Soll er dauerhaft gelten, bis ein Admin „automatisch abrufen“ klickt (Plan), oder nur bis zum Folgetag?
 5. **Formel (außerhalb dieses AP):** Soll `basisNotierung` (heute gespeichert, aber nicht verrechnet; Frontend sendet 0, Server-Standard 150) künftig abgezogen werden? Das hängt davon ab, ob die Datanorm-Preise der Großhändler Kupferbasis 0 oder 150 enthalten.
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – obere WM-Notiz bleibt DEL-Preis; LME- und finanzen.net-Ersatzquellen (Dollar) ersatzlos entfernen. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 

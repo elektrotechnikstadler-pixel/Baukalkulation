@@ -155,7 +155,7 @@ Nicht anfassen: `deploy/` (generiert), `legacy_baseline`/`LegacySchema.php`, `sr
 5. **Lizenz:** Soll Branding an eine Lizenz/Edition gebunden sein (`LicenseService`) oder für alle frei?
 6. **`check`-Leck:** Einverstanden, das Ausliefern der Einstellungen an nicht angemeldete Nutzer als eigenes Sicherheits-AP direkt danach zu planen?
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – nach AP-20260929-sicherheit (Logo-Pfad-Lücke wird dort geschlossen). Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 

@@ -211,7 +211,7 @@ oder CI-Jobs. Prüfung über bestehendes `make check-versions` (≙ Vorlagen-Tar
 6. **Version:** `VERSION` in diesem AP erhöhen (z. B. 2.11.0) oder erst beim Release?
 7. Doppelter Eintrag „Schnellnotizen“ im Header-Dropdown „Verwaltung“ belassen?
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-09-29 – Kundenstamm unter Kataloge, Auswertung nach Dashboard, WhatsApp vor Schnellnotizen; Lieferschein als eigenes AP. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 
