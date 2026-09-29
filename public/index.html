@@ -418,7 +418,8 @@
         <p style="font-size:.82rem;color:var(--grey-600);margin-bottom:14px">
           Die DEL-Notierung (Deutscher Elektrolytkupfer-Preis) wird beim Einfügen von Kabelartikeln
           aus dem Katalog automatisch auf den EK aufgeschlagen.<br>
-          <strong>Der Preis wird automatisch tagesaktuell abgerufen.</strong> Sie können ihn auch manuell überschreiben.
+          <strong>Der Preis (obere Kupfer-WM-Notiz, Westmetall) wird automatisch abgerufen.</strong>
+          Ein manuell eingegebener Wert bleibt aktiv, bis Sie erneut „automatisch abrufen“ klicken.
         </p>
         <div style="margin-bottom:14px">
           <button class="btn" style="background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;font-weight:600;width:100%;padding:10px" onclick="autoFetchDel()">🌐 DEL-Notierung automatisch abrufen</button>
@@ -1007,7 +1008,7 @@
   <!-- Lokal gehostet (kein CDN), damit Diagramme & Excel-Export auch ohne Internetzugang funktionieren -->
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/chart.umd.min.js"></script>
-  <script src="script.min.js?v=217"></script>
+  <script src="script.min.js?v=219"></script>
   <!-- Phase 5: ES-Modul-Bootstrap (Companion-Modus, läuft parallel zu script.js) -->
   <!-- ROLLBACK: diese Zeile entfernen → vollständiger Rollback auf v2.9.8 -->
   <script type="module" src="dist/core.js?v=100"></script>

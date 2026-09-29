@@ -3,6 +3,7 @@ namespace App\Handlers;
 
 use App\Auth;
 use App\Database;
+use App\Services\Kupferpreis;
 
 class CatalogActions
 {
@@ -286,89 +287,131 @@ class CatalogActions
     // METALLZUSCHLAG
     // ══════════════════════════════════════════════════════════
 
+    private const METALLZUSCHLAG_DEFAULTS = ['delNotierung' => 0, 'basisNotierung' => Kupferpreis::BASIS_STANDARD, 'datum' => '', 'quelle' => 'none'];
+
     public function metallzuschlagGet(): void
     {
         Auth::requireAuth();
-        $row = $this->db->query("SELECT data FROM metallzuschlag WHERE id = 1")->fetch();
-        $data = $row ? (json_decode($row['data'], true) ?? []) : [];
-        jsonOut(array_merge(['delNotierung' => 0, 'basisNotierung' => 150, 'datum' => '', 'quelle' => 'none'], $data));
+        if (!$this->kupferAktiv()) jsonOut(['delNotierung' => 0, 'aktiv' => false]);
+        $data = $this->loadMetallzuschlag();
+        jsonOut(array_merge(self::METALLZUSCHLAG_DEFAULTS, $data, [
+            'veraltet' => $this->kupferpreis()->istVeraltet($data),
+            'aktiv'    => true,
+        ]));
     }
 
     public function metallzuschlagSet(): void
     {
         Auth::requireRole('admin', 'master');
+        $del = $this->body['delNotierung'] ?? null;
+        $del = (is_int($del) || is_float($del) || (is_string($del) && is_numeric($del))) ? (float)$del : NAN;
+        if (!is_finite($del) || $del < Kupferpreis::PREIS_MIN || $del > Kupferpreis::PREIS_MAX) {
+            jsonOut(['error' => 'DEL-Notierung muss zwischen 100 und 5000 €/100 kg liegen.'], 400);
+        }
+        $basis = $this->body['basisNotierung'] ?? Kupferpreis::BASIS_STANDARD;
+        $basis = (is_int($basis) || is_float($basis) || (is_string($basis) && is_numeric($basis))) ? (float)$basis : NAN;
+        if (!is_finite($basis) || $basis < 0 || $basis > Kupferpreis::PREIS_MAX) {
+            jsonOut(['error' => 'Basis-Notierung muss zwischen 0 und 5000 €/100 kg liegen.'], 400);
+        }
+        $heute = date('Y-m-d');
         $data = [
-            'delNotierung'   => (float)($this->body['delNotierung'] ?? 0),
-            'basisNotierung' => (float)($this->body['basisNotierung'] ?? 150),
-            'datum'          => date('Y-m-d'),
+            'delNotierung'   => $del,
+            'basisNotierung' => $basis,
+            'stand'          => $heute,
+            'datum'          => $heute,
             'quelle'         => 'manual',
             'updated'        => date('c'),
         ];
-        $this->db->prepare("UPDATE metallzuschlag SET data = ? WHERE id = 1")
-                  ->execute([json_encode($data, JSON_UNESCAPED_UNICODE)]);
-        jsonOut(['ok' => true] + $data);
+        $this->saveMetallzuschlag($data);
+        jsonOut(['ok' => true] + $data + ['veraltet' => false, 'aktiv' => true]);
     }
 
     public function metallzuschlagAutoFetch(): void
     {
         Auth::requireAuth();
+        $force = !empty($_GET['force'] ?? $this->body['force'] ?? null);
+        if ($force) Auth::requireRole('admin', 'master');
+        if (!$this->kupferAktiv()) jsonOut(['delNotierung' => 0, 'aktiv' => false]);
+        // force überschreibt den manuellen Wert – nicht per GET-Link auslösbar (CSRF).
+        if ($force && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            jsonOut(['error' => 'Erzwungener Abruf nur per POST.'], 405);
+        }
+
+        $roh = $this->loadMetallzuschlagRoh();
+        $data = self::decodeMetallzuschlag($roh);
+        $kp = $this->kupferpreis();
+        if (!$kp->sollAbrufen($data, true, $force)) {
+            jsonOut(array_merge(self::METALLZUSCHLAG_DEFAULTS, $data, [
+                'veraltet' => $kp->istVeraltet($data),
+                'aktiv'    => true,
+                'cached'   => true,
+            ]));
+        }
+
+        $neu = $kp->aktualisieren($data, $force);
+        $gespeichert = $neu;
+        unset($gespeichert['veraltet']);
+        // Während des langsamen Abrufs gespeicherte Werte (z. B. manuell) nicht überschreiben.
+        if (!$this->saveMetallzuschlag($gespeichert, $roh)) {
+            $aktuell = $this->loadMetallzuschlag();
+            jsonOut(array_merge(self::METALLZUSCHLAG_DEFAULTS, $aktuell, [
+                'veraltet' => $kp->istVeraltet($aktuell),
+                'aktiv'    => true,
+                'cached'   => true,
+            ]));
+        }
+
+        if (!empty($neu['fetchError'])) {
+            error_log('[Kupferpreis] ' . $neu['fetchError']);
+            jsonOut(array_merge(self::METALLZUSCHLAG_DEFAULTS, $neu, ['aktiv' => true]));
+        }
+        jsonOut(['ok' => true] + $neu + ['aktiv' => true]);
+    }
+
+    private function kupferAktiv(): bool
+    {
+        return (Auth::loadSettings($this->db)['modul_kupfer_del'] ?? true) !== false;
+    }
+
+    private function kupferpreis(): Kupferpreis
+    {
+        return new Kupferpreis(static fn (string $url): ?string => fetchUrl($url, 5));
+    }
+
+    /** @return array<string,mixed> */
+    private function loadMetallzuschlag(): array
+    {
+        return self::decodeMetallzuschlag($this->loadMetallzuschlagRoh());
+    }
+
+    private function loadMetallzuschlagRoh(): ?string
+    {
         $row = $this->db->query("SELECT data FROM metallzuschlag WHERE id = 1")->fetch();
-        $existing = $row ? (json_decode($row['data'], true) ?? null) : null;
-        $basis = ($existing && isset($existing['basisNotierung'])) ? $existing['basisNotierung'] : 150;
+        return ($row && $row['data'] !== null) ? (string)$row['data'] : null;
+    }
 
-        if ($existing && !empty($existing['delNotierung']) && !empty($existing['updated'])) {
-            $age = time() - strtotime($existing['updated']);
-            if ($age < 21600) jsonOut($existing + ['cached' => true]);
+    /** @return array<string,mixed> */
+    private static function decodeMetallzuschlag(?string $roh): array
+    {
+        $data = $roh !== null ? json_decode($roh, true) : null;
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Mit $erwartet nur schreiben, wenn die Zeile noch diesen Rohtext enthält.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function saveMetallzuschlag(array $data, ?string $erwartet = null): bool
+    {
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        if ($erwartet === null) {
+            $this->db->prepare("UPDATE metallzuschlag SET data = ? WHERE id = 1")->execute([$json]);
+            return true;
         }
-
-        $delPrice = 0; $source = ''; $fetchErrors = [];
-
-        // Source 1: Westmetall WM-Notiz
-        try {
-            $html = fetchUrl('https://www.westmetall.com/de/markdaten.php?action=table&field=WM_Cu_high');
-            if ($html && preg_match_all('/<td[^>]*class="last"[^>]*>\s*([\d.,]+)\s*<\/td>/s', $html, $matches, PREG_SET_ORDER)) {
-                $priceStr = str_replace(['.', ','], ['', '.'], $matches[0][1]);
-                $price = (float)$priceStr;
-                if ($price > 100 && $price < 5000) { $delPrice = round($price, 2); $source = 'westmetall (WM-Notiz)'; }
-            }
-        } catch (\Exception $e) { $fetchErrors[] = 'westmetall: ' . $e->getMessage(); }
-
-        // Source 2: LME Cash Fallback
-        if ($delPrice <= 0) {
-            try {
-                $html3 = fetchUrl('https://www.westmetall.com/de/markdaten.php?action=table&field=LME_Cu_cash');
-                if ($html3 && preg_match_all('/<td[^>]*>\s*([\d]{1,2}[\.,]?\d{3}[\.,]\d{2})\s*<\/td>/s', $html3, $m3, PREG_SET_ORDER)) {
-                    $p3 = str_replace(['.', ','], ['', '.'], $m3[0][1]);
-                    $pv3 = (float)$p3;
-                    if ($pv3 > 1000 && $pv3 < 50000) { $delPrice = round($pv3 / 10, 2); $source = 'westmetall (LME Cash)'; }
-                }
-            } catch (\Exception $e) { $fetchErrors[] = 'westmetall-lme: ' . $e->getMessage(); }
-        }
-
-        // Source 3: finanzen.net
-        if ($delPrice <= 0) {
-            try {
-                $html2 = fetchUrl('https://www.finanzen.net/rohstoffe/kupferpreis');
-                if ($html2 && (preg_match('/"price"\s*:\s*"?([\d.,]+)/si', $html2, $mp) || preg_match('/Kupferpreis[^<]{0,200}?([\d]{1,2}[\.,]?\d{3}[\.,]\d{2})/si', $html2, $mp))) {
-                    $priceStr2 = str_replace(['.', ','], ['', '.'], $mp[1]);
-                    $price2 = (float)$priceStr2;
-                    if ($price2 > 100 && $price2 < 50000) { $delPrice = round($price2 / 10, 2); $source = 'finanzen.net'; }
-                }
-            } catch (\Exception $e) { $fetchErrors[] = 'finanzen.net: ' . $e->getMessage(); }
-        }
-
-        if (!empty($fetchErrors)) {
-            @file_put_contents(DATA_DIR . 'error.log', date('c') . " Kupferpreis: " . implode(' | ', $fetchErrors) . "\n", FILE_APPEND | LOCK_EX);
-        }
-
-        if ($delPrice <= 0) {
-            if ($existing && ($existing['delNotierung'] ?? 0) > 0) jsonOut($existing + ['fetchError' => 'Abruf fehlgeschlagen']);
-            jsonOut(['error' => 'Kupferpreis konnte nicht abgerufen werden.', 'delNotierung' => 0], 200);
-        }
-
-        $data = ['delNotierung' => $delPrice, 'basisNotierung' => $basis, 'datum' => date('Y-m-d'), 'quelle' => 'auto (' . $source . ')', 'updated' => date('c')];
-        $this->db->prepare("UPDATE metallzuschlag SET data = ? WHERE id = 1")->execute([json_encode($data, JSON_UNESCAPED_UNICODE)]);
-        jsonOut(['ok' => true] + $data);
+        $stmt = $this->db->prepare("UPDATE metallzuschlag SET data = ? WHERE id = 1 AND data = ?");
+        $stmt->execute([$json, $erwartet]);
+        return $stmt->rowCount() > 0;
     }
 
     public function metallprofileCatalog(): void

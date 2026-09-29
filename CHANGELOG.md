@@ -45,6 +45,14 @@
   dem Mandantenordner vor (auch für Autoheal), prüfen Projektname, Container-Namen und Port auf
   Kollisionen mit anderen Instanzen und behalten beim Update alle übrigen `.env`-Einträge
   (bisher wurde die `.env` komplett neu geschrieben).
+- **Kupferpreis (DEL-Notierung):** Abruf nur noch aus der oberen Kupfer-WM-Notiz von Westmetall
+  (€/100 kg); die Ersatzquellen LME und finanzen.net lieferten Dollar je Tonne und damit einen
+  falschen Metallzuschlag und wurden entfernt. Das Notiz-Datum wird gespeichert und angezeigt, ein
+  veralteter Wert bzw. fehlgeschlagener Abruf ist sichtbar gekennzeichnet, Fehlversuche werden für
+  30 Minuten gedrosselt. Ein manuell eingegebener Wert wird nicht mehr nach 6 Stunden automatisch
+  überschrieben; Eingaben außerhalb 100–5000 €/100 kg werden abgelehnt. Ist „Kupferpreis DEL“
+  abgeschaltet, wird weder abgerufen noch aufgeschlagen. Bezeichnung `[MZ+… €]` und `3×1,5`
+  werden am Desktop wieder richtig dargestellt bzw. erkannt.
 
 ### Neu – PostgreSQL als Alternative zu SQLite (Phase 3)
 - **Wahlweise PostgreSQL** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`, Passwort als

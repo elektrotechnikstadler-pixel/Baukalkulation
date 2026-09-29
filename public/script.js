@@ -5305,7 +5305,7 @@ function saveMatRowToKatalog(matId) {
 
 // -- Metallzuschlag (Kupfer-DEL-Notierung) --------------------
 const CABLE_RE = /\b(NYM|NYY|NHXMH|NYCWY|NYCY|NAYY|H07V|H05V|H03V|LIYCY|ÖLFLEX|J-Y\(ST\)|YSLY|NSGAFÖU|NSHTÖU)/i;
-const CABLE_SPEC_RE = /(\d+)\s*[x]\s*(\d+[,.]?\d*)/i;
+const CABLE_SPEC_RE = /(\d+)\s*[x×]\s*(\d+[,.]?\d*)/i;
 
 let _currentMetallzuschlag = null; // { delNotierung, basisNotierung, datum, quelle }
 
@@ -5346,7 +5346,7 @@ function calcMetallzuschlag(name, einheit, delNotierung) {
   return {
     zuschlag: Math.round(zuschlag * 10000) / 10000,
     cuKgPerM,
-    spec: spec.cores + '—' + spec.crossSection + 'mm²'
+    spec: spec.cores + '×' + spec.crossSection + 'mm²'
   };
 }
 
@@ -5356,13 +5356,11 @@ async function fetchMetallzuschlag() {
   try {
     const r = await fetch('api.php?action=metallzuschlag_get');
     const j = await r.json();
-    if (j && j.delNotierung > 0) {
-      _currentMetallzuschlag = j;
-    }
+    if (j && 'delNotierung' in j) _currentMetallzuschlag = j.delNotierung > 0 ? j : null;
   } catch (e) { console.warn('Metallzuschlag fetch:', e); }
   // 2) Background: try auto-fetch to update for next time (non-blocking)
   fetch('api.php?action=metallzuschlag_auto_fetch').then(r => r.json()).then(j => {
-    if (j && j.delNotierung > 0) _currentMetallzuschlag = j;
+    if (j && 'delNotierung' in j) _currentMetallzuschlag = j.delNotierung > 0 ? j : null;
   }).catch(() => {});
 }
 
@@ -5381,8 +5379,23 @@ function renderMzInfoBar() {
     return;
   }
   bar.innerHTML = `<div class="mz-info-bar mz-info-active">
-    <span> <strong>DEL-Notierung:</strong> ${fmt(mz.delNotierung)} €/100kg Cu</span>
-    <span style="font-size:.72rem;color:var(--grey-500)">Stand: ${mz.datum || '—'} (${mz.quelle === 'manual' ? 'manuell' : 'automatisch'})</span>
+    <span> <strong>DEL-Notierung:</strong> ${fmt(mz.delNotierung)}/100 kg Cu</span>
+    <span style="font-size:.72rem;color:var(--grey-500)">${mzStandText(mz)}</span>
+  </div>${mzVeraltetHinweis(mz)}`;
+}
+
+/** „Stand der Notiz: TT.MM.JJJJ (manuell|automatisch)“ – Serverwerte escaped. */
+function mzStandText(mz) {
+  const roh = String(mz.stand || mz.datum || '');
+  const m = roh.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const datum = m ? `${m[3]}.${m[2]}.${m[1]}` : roh;
+  return `Stand der Notiz: ${esc(datum) || '-'} (${mz.quelle === 'manual' ? 'manuell' : 'automatisch'})`;
+}
+
+function mzVeraltetHinweis(mz) {
+  if (!mz.veraltet && !mz.fetchError) return '';
+  return `<div class="mz-veraltet" style="margin-top:4px;padding:4px 8px;background:#FFF8E1;border:1px solid #FFD54F;border-radius:4px;font-size:.75rem;color:#8D6E00;">
+    <strong>Hinweis:</strong> DEL-Notierung möglicherweise veraltet${mz.fetchError ? ' - letzter Abruf fehlgeschlagen: ' + esc(mz.fetchError) : ''}
   </div>`;
 }
 
@@ -6117,7 +6130,7 @@ function insertFromKatalog() {
           const mzCalc = calcMetallzuschlag(r.bezeichnung, r.einheit, mz.delNotierung);
           if (mzCalc && mzCalc.zuschlag > 0) {
             ek = Math.round((ek + mzCalc.zuschlag) * 10000) / 10000;
-            bezSuffix = ' [MZ+' + fmt(mzCalc.zuschlag) + '—]';
+            bezSuffix = ' [MZ+' + fmt(mzCalc.zuschlag) + ']';
             mzCount++;
           }
         }
@@ -20097,11 +20110,10 @@ async function loadMetallzuschlagSettings() {
       if (delInput) delInput.value = j.delNotierung;
       _currentMetallzuschlag = j;
       if (info) {
-        const quelleLabel = (j.quelle || '').startsWith('auto') ? 'automatisch' : 'manuell';
         info.innerHTML = `<div style="padding:8px 12px;background:#FFF8E1;border:1px solid #FFE082;border-radius:6px;font-size:.82rem;">
-          <strong>Aktiv:</strong> DEL ${fmt(j.delNotierung)} €/100kg Cu
-          <span style="color:var(--grey-500);margin-left:8px">(${j.datum || '—'}, ${quelleLabel})</span>
-        </div>`;
+          <strong>Aktiv:</strong> DEL ${fmt(j.delNotierung)}/100 kg Cu
+          <span style="color:var(--grey-500);margin-left:8px">${mzStandText(j)}</span>
+        </div>${mzVeraltetHinweis(j)}`;
       }
     } else {
       if (info) info.innerHTML = '<span style="color:var(--grey-400)">Noch kein Wert hinterlegt - wird bei Katalogsuche automatisch abgerufen.</span>';
@@ -20114,13 +20126,23 @@ async function autoFetchDel() {
   const info = document.getElementById('mzCurrentInfo');
   if (info) info.innerHTML = '<div style="padding:8px 12px;font-size:.82rem;color:var(--grey-500);"> Rufe tagesaktuelle DEL-Notierung ab...</div>';
   try {
-    const r = await fetch('api.php?action=metallzuschlag_auto_fetch');
+    const r = await fetch('api.php?action=metallzuschlag_auto_fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: 1 })
+    });
     const j = await r.json();
-    if (j && j.delNotierung > 0) {
+    if (!r.ok || j.error) {
+      showNotification('Fehler: ' + (j.error || 'Abruf nicht möglich'), 'error');
+      loadMetallzuschlagSettings();
+    } else if (j.fetchError) {
+      showNotification('Automatischer Abruf fehlgeschlagen - ' + (j.delNotierung > 0 ? 'letzter Wert bleibt aktiv' : 'bitte manuell eingeben'), 'warning');
+      loadMetallzuschlagSettings();
+    } else if (j.delNotierung > 0) {
       _currentMetallzuschlag = j;
       const delInput = document.getElementById('mzDelNotierung');
       if (delInput) delInput.value = j.delNotierung;
-      showNotification('DEL-Notierung automatisch abgerufen: ' + fmt(j.delNotierung) + ' €/100kg');
+      showNotification('DEL-Notierung automatisch abgerufen: ' + fmt(j.delNotierung) + '/100 kg');
       loadMetallzuschlagSettings();
     } else {
       showNotification('Automatischer Abruf fehlgeschlagen - bitte manuell eingeben', 'warning');

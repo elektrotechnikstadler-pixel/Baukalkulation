@@ -24,6 +24,14 @@ final class ApiClient
         ], ['Content-Type: application/json']);
     }
 
+    /** JSON-Body unverändert senden (z. B. `1e999`, das json_encode nicht erzeugen kann). */
+    public function postRaw(string $action, string $json, array $query = []): ApiResponse
+    {
+        return $this->request('POST', $action, $query, [
+            CURLOPT_POSTFIELDS => $json,
+        ], ['Content-Type: application/json']);
+    }
+
     public function upload(string $action, string $field, string $path, array $query = [], array $fields = []): ApiResponse
     {
         return $this->request('POST', $action, $query, [

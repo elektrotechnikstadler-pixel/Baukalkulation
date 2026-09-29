@@ -3283,11 +3283,11 @@ async function fetchMetallzuschlag() {
   try {
     const r = await fetch('api.php?action=metallzuschlag_get');
     const j = await r.json();
-    if (j && j.delNotierung > 0) _currentMetallzuschlag = j;
+    if (j && 'delNotierung' in j) _currentMetallzuschlag = j.delNotierung > 0 ? j : null;
   } catch (e) { console.warn('MZ fetch:', e); }
   // Background: auto-fetch to update for next time
   fetch('api.php?action=metallzuschlag_auto_fetch').then(r => r.json()).then(j => {
-    if (j && j.delNotierung > 0) _currentMetallzuschlag = j;
+    if (j && 'delNotierung' in j) _currentMetallzuschlag = j.delNotierung > 0 ? j : null;
   }).catch(() => {});
 }
 
@@ -3410,7 +3410,7 @@ async function doMobileCatSearch(q) {
     // Show MZ info bar if DEL-Notierung is set
     const mz = _currentMetallzuschlag;
     if (mz && mz.delNotierung > 0) {
-      html += `<div style="background:#FFF3E0;border:1px solid #FFB74D;border-radius:8px;padding:6px 10px;margin:0 0 6px;font-size:.75rem;color:#E65100;">🔶 <strong>DEL:</strong> ${fmt(mz.delNotierung)} €/100kg Cu <span style="color:#999;font-size:.68rem;">(${mz.datum||'–'})</span></div>`;
+      html += `<div style="background:#FFF3E0;border:1px solid #FFB74D;border-radius:8px;padding:6px 10px;margin:0 0 6px;font-size:.75rem;color:#E65100;">🔶 <strong>DEL:</strong> ${fmt(mz.delNotierung)}/100 kg Cu <span style="color:#999;font-size:.68rem;">(${esc(mz.stand || mz.datum) || '–'}${mz.quelle === 'manual' ? ', manuell' : ''})</span>${mz.veraltet || mz.fetchError ? '<div style="margin-top:3px;color:#8D6E00;">⚠️ Wert möglicherweise veraltet' + (mz.fetchError ? ' – letzter Abruf fehlgeschlagen' : '') + '</div>' : ''}</div>`;
     }
     html += '<div class="card">';
     remoteResults.forEach((r, i) => {
@@ -3469,7 +3469,7 @@ function insertMobileCatItem(src, idx) {
         const mzCalc = calcMetallzuschlag(r.bezeichnung, r.einheit, mz.delNotierung);
         if (mzCalc && mzCalc.zuschlag > 0) {
           ek = Math.round((ek + mzCalc.zuschlag) * 10000) / 10000;
-          bezSuffix = ' [MZ+' + fmt(mzCalc.zuschlag) + '€]';
+          bezSuffix = ' [MZ+' + fmt(mzCalc.zuschlag) + ']';
           mzApplied = true;
         }
       }
