@@ -21,8 +21,9 @@ class AuthActions
         $dienstleisterId  = null;
         $stundenKategorie = '';
         $mustChange = false;
+        $loggedIn   = !empty($_SESSION['authenticated']);
 
-        if (!empty($_SESSION['authenticated'])) {
+        if ($loggedIn) {
             $user = $this->db->prepare("SELECT * FROM users WHERE username = ?");
             $user->execute([$_SESSION['username']]);
             $u = $user->fetch();
@@ -53,8 +54,14 @@ class AuthActions
 
         $userCount = (int)$this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
 
+        $license = LicenseService::getPublicInfo();
+        if (!$loggedIn) {
+            $license['customer'] = null;
+            $license['expires']  = null;
+        }
+
         jsonOut([
-            'loggedIn'           => !empty($_SESSION['authenticated']),
+            'loggedIn'           => $loggedIn,
             'version'            => APP_VERSION,
             'username'           => $_SESSION['username'] ?? null,
             'role'               => $role,
@@ -66,11 +73,11 @@ class AuthActions
             'isSubunternehmer'   => $isSubunternehmer,
             'dienstleisterId'    => $dienstleisterId,
             'stundenKategorie'   => $stundenKategorie,
-            'settings'           => Auth::publicSettings(Auth::loadSettings($this->db)),
-            'modules'            => !empty($_SESSION['authenticated'])
+            'settings'           => $loggedIn ? Auth::publicSettings(Auth::loadSettings($this->db)) : new \stdClass(),
+            'modules'            => $loggedIn
                                         ? (new ModuleLoader($this->db))->listForFrontend()
                                         : [],
-            'license'            => LicenseService::getPublicInfo(),
+            'license'            => $license,
         ]);
     }
 

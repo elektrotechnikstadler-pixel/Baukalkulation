@@ -95,26 +95,9 @@ class BelegPdfService
 
         // ── Logo als Base64-Data-URI ──────────────────────────────────────────
         $logoHtml = '';
-        $logoUrl  = $settings['firma_logo_url'] ?? '';
-        if ($logoUrl) {
-            $logoPath = realpath(__DIR__ . '/../../' . ltrim((string)$logoUrl, '/'));
-            if ($logoPath && file_exists($logoPath)) {
-                $mime = '';
-                if (class_exists('finfo')) {
-                    try { $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($logoPath) ?: ''; }
-                    catch (\Throwable $ignored) {}
-                }
-                if (!$mime) {
-                    $ext = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
-                    $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-                                'png' => 'image/png',  'gif'  => 'image/gif',
-                                'webp'=> 'image/webp'];
-                    $mime = $mimeMap[$ext] ?? 'image/png';
-                }
-                $logoHtml = '<img src="data:' . $mime . ';base64,'
-                    . base64_encode((string)file_get_contents($logoPath))
-                    . '" style="max-height:22mm;max-width:60mm;" /><br>';
-            }
+        $logoUri  = FirmenLogo::dataUri($settings);
+        if ($logoUri !== '') {
+            $logoHtml = '<img src="' . $logoUri . '" style="max-height:22mm;max-width:60mm;" /><br>';
         }
 
         // ── Positionen aufbereiten ────────────────────────────────────────────

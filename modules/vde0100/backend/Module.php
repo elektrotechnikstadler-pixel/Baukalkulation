@@ -17,6 +17,7 @@ namespace App\Modules\Vde0100;
 
 use App\Core\AbstractModule;
 use App\Auth;
+use App\Services\FirmenLogo;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -1383,20 +1384,9 @@ class Module extends AbstractModule
         $firmaConLine = $h(implode(' · ', $firmaContact));
         // ── Firmen-Logo (inline Base64) ────────────────────────
         $logoHtml = '';
-        $logoUrl  = $s['firma_logo_url'] ?? '';
-        if ($logoUrl) {
-            $logoPath = realpath(__DIR__ . '/../../../' . $logoUrl);
-            if ($logoPath && file_exists($logoPath)) {
-                $mime = '';
-                if (function_exists('mime_content_type')) $mime = @mime_content_type($logoPath);
-                if (!$mime) {
-                    $ext     = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
-                    $mimeMap = ['jpg' => 'image/jpeg','jpeg' => 'image/jpeg','png' => 'image/png','gif' => 'image/gif','webp' => 'image/webp'];
-                    $mime    = $mimeMap[$ext] ?? 'image/png';
-                }
-                $b64      = base64_encode((string)file_get_contents($logoPath));
-                $logoHtml = '<img src="data:' . $mime . ';base64,' . $b64 . '" style="max-height:42px;max-width:150px;display:block;" />';
-            }
+        $logoUri  = FirmenLogo::dataUri($s);
+        if ($logoUri !== '') {
+            $logoHtml = '<img src="' . $logoUri . '" style="max-height:42px;max-width:150px;display:block;" />';
         }
 
         // ── Kundendaten ────────────────────────────────────────

@@ -222,24 +222,9 @@ class ZugferdService
 
         // Logo
         $logoHtml = '';
-        $logoUrl = $settings['firma_logo_url'] ?? '';
-        if ($logoUrl) {
-            $logoPath = realpath(__DIR__ . '/../../' . $logoUrl);
-            if ($logoPath && file_exists($logoPath)) {
-                // MIME-Type ermitteln (SEC v2.9.17: finfo statt mime_content_type, Fallback falls ext-fileinfo fehlt)
-                $mime = '';
-                if (class_exists('finfo')) {
-                    try { $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($logoPath) ?: ''; }
-                    catch (\Throwable $e) { $mime = ''; }
-                }
-                if (!$mime) {
-                    $ext = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
-                    $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'webp' => 'image/webp'];
-                    $mime = $mimeMap[$ext] ?? 'image/png';
-                }
-                $b64  = base64_encode(file_get_contents($logoPath));
-                $logoHtml = '<img src="data:' . $mime . ';base64,' . $b64 . '" style="max-height:70px;" />';
-            }
+        $logoUri = FirmenLogo::dataUri($settings);
+        if ($logoUri !== '') {
+            $logoHtml = '<img src="' . $logoUri . '" style="max-height:70px;" />';
         }
 
         // Positionen-Tabelle

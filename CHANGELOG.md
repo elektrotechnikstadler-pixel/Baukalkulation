@@ -75,6 +75,15 @@
   noch „gespeichert"; leer lassen = unverändert.
 - Wird eine Sicherung einer **anderen** Installation eingespielt, lassen sich diese Werte dort nicht
   entschlüsseln (anderer `data/secret.key`) und müssen neu eingegeben werden.
+- **Firmenlogo:** `api.php?action=get_logo` lieferte ohne Anmeldung jede Server-Datei aus, deren Pfad
+  in der Einstellung `firma_logo_url` stand (setzbar über die Einstellungen oder eine eingespielte
+  Sicherung); Beleg-PDF, E-Rechnung und VDE-Protokoll betteten diese Datei ein. Jetzt gilt nur noch
+  das hochgeladene Logo `firma_logo.{png,jpg,gif,webp}` im Datenverzeichnis mit Bild-Inhalt; andere
+  Werte lehnt das Speichern ab. Nebeneffekte: `get_logo` beachtet `BK_DATA_DIR`, das VDE-Protokoll
+  zeigt das Logo jetzt an. **SVG-Altlogos werden nicht mehr ausgeliefert – bitte als PNG neu hochladen.**
+- **`api.php?action=check` ohne Anmeldung** liefert keine Einstellungen (Firmendaten, IBAN,
+  SMTP-Server/-Benutzer) und keinen Lizenznehmer/Ablaufdatum mehr; Statuscode und übrige Felder
+  (z. B. für den Docker-Healthcheck) bleiben.
 
 ### Neu – Datenbank-Migrationen und Sicherungen (Phase 2)
 - **Versionierte Schema-Migrationen** (Phinx, Tabelle `schema_migrations`). Der bisherige

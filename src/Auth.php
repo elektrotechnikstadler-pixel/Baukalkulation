@@ -166,6 +166,10 @@ class Auth
             $settings[$key . '_gesetzt'] = ($settings[$key] ?? '') !== '';
             $settings[$key] = '';
         }
+        $logo = $settings['firma_logo_url'] ?? '';
+        if (!is_string($logo) || !Services\FirmenLogo::isValidSetting($logo)) {
+            $settings['firma_logo_url'] = '';
+        }
         return $settings;
     }
 

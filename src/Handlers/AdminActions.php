@@ -4,6 +4,7 @@ namespace App\Handlers;
 use App\Auth;
 use App\Database;
 use App\Services\AuditService;
+use App\Services\FirmenLogo;
 
 class AdminActions
 {
@@ -36,6 +37,12 @@ class AdminActions
     public function saveSettingsAction(): void
     {
         Auth::requireRole('admin');
+        if (array_key_exists('firma_logo_url', $this->body)) {
+            $logo = $this->body['firma_logo_url'];
+            if (($logo !== null && !is_string($logo)) || !FirmenLogo::isValidSetting(trim((string)$logo))) {
+                jsonOut(['error' => 'Ungültiger Logo-Pfad.'], 400);
+            }
+        }
         $current = Auth::loadSettings($this->db);
         $allowed = array_keys($current);
         foreach ($allowed as $key) {
@@ -132,26 +139,13 @@ class AdminActions
     // ── Logo ausliefern (umgeht nginx-Blockade auf data/) ─────
     public function getLogo(): void
     {
-        $settings = Auth::loadSettings($this->db);
-        $logoUrl = $settings['firma_logo_url'] ?? '';
-        if (!$logoUrl) { http_response_code(404); exit; }
-        $logoPath = realpath(__DIR__ . '/../../' . $logoUrl);
-        if (!$logoPath || !file_exists($logoPath)) { http_response_code(404); exit; }
-        // MIME-Type bestimmen (SEC v2.9.17: finfo statt mime_content_type)
-        $mime = '';
-        if (class_exists('finfo')) {
-            try { $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($logoPath) ?: ''; }
-            catch (\Throwable $e) { $mime = ''; }
-        }
-        if (!$mime) {
-            $ext = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
-            $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'webp' => 'image/webp'];
-            $mime = $mimeMap[$ext] ?? 'application/octet-stream';
-        }
-        header('Content-Type: ' . $mime);
+        $logo = FirmenLogo::resolve(Auth::loadSettings($this->db));
+        if ($logo === null) { http_response_code(404); exit; }
+        header('Content-Type: ' . $logo['mime']);
+        header('X-Content-Type-Options: nosniff');
         header('Cache-Control: public, max-age=86400');
-        header('Content-Length: ' . filesize($logoPath));
-        readfile($logoPath);
+        header('Content-Length: ' . filesize($logo['path']));
+        readfile($logo['path']);
         exit;
     }
 

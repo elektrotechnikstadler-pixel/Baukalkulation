@@ -6,6 +6,13 @@ namespace Tests\Api;
 
 final class AuthTest extends ApiTestCase
 {
+    private const FIRMENDATEN = [
+        'firma_name' => 'Elektro Testfirma Nord',
+        'firma_iban' => 'DE02120300000000202051',
+        'smtp_host'  => 'smtp.testfirma-nord.example',
+        'smtp_user'  => 'versand@testfirma-nord.example',
+    ];
+
     public function testFrischeInstallationVerlangtSetup(): void
     {
         $json = $this->api->get('check')->json();
@@ -171,5 +178,82 @@ final class AuthTest extends ApiTestCase
 
         $this->assertOk($this->api->post('save_settings', ['smtp_pass' => '']));
         $this->assertFalse($this->api->get('load_settings')->json()['settings']['smtp_pass_gesetzt']);
+    }
+
+    private function schreibeLizenz(): void
+    {
+        file_put_contents($this->server->dataPath('license.json'), json_encode([
+            'customer' => 'Test Lizenznehmer GmbH',
+            'expires'  => '2099-12-31',
+            'tier'     => 'professional',
+            'modules'  => ['*'],
+        ]));
+    }
+
+    /** C1 (AP-20260929-sicherheit) */
+    public function testCheckOhneAnmeldungLiefertKeineEinstellungenUndKeinenLizenznehmer(): void
+    {
+        $this->setupAdmin();
+        $this->schreibeLizenz();
+        $this->assertOk($this->api->post('save_settings', self::FIRMENDATEN));
+
+        $r = $this->server->client()->get('check');
+        $json = $this->assertStatus(200, $r);
+
+        $this->assertFalse($json['loggedIn']);
+        $this->assertSame([], $json['settings']);
+        $this->assertInstanceOf(\stdClass::class, json_decode($r->body)->settings);
+        foreach ([...array_values(self::FIRMENDATEN), 'Test Lizenznehmer GmbH', '2099-12-31'] as $wert) {
+            $this->assertStringNotContainsString($wert, $r->body);
+        }
+        $this->assertSame('professional', $json['license']['tier']);
+        $this->assertArrayHasKey('customer', $json['license']);
+        $this->assertNull($json['license']['customer']);
+        $this->assertArrayHasKey('expires', $json['license']);
+        $this->assertNull($json['license']['expires']);
+        $this->assertFalse($json['needSetup']);
+        $this->assertNull($json['username']);
+        $this->assertNull($json['role']);
+        $this->assertSame([], $json['permissions']);
+        $this->assertSame([], $json['modules']);
+    }
+
+    /** C2: Docker-Healthcheck ruft check vor der Einrichtung ohne Anmeldung auf. */
+    public function testCheckVorEinrichtungLiefert200(): void
+    {
+        $json = $this->assertStatus(200, $this->api->get('check'));
+
+        $this->assertFalse($json['loggedIn']);
+        $this->assertTrue($json['needSetup']);
+        $this->assertNotEmpty($json['version']);
+        $this->assertArrayHasKey('settings', $json);
+        $this->assertArrayHasKey('tier', $json['license']);
+    }
+
+    /** C3: angemeldet bleibt die Antwort wie bisher. */
+    public function testCheckAngemeldetLiefertEinstellungenWieBisher(): void
+    {
+        $this->setupAdmin();
+        $this->schreibeLizenz();
+        $this->assertOk($this->api->post('save_settings', self::FIRMENDATEN + ['smtp_pass' => 'Smtp-Geheim-1']));
+        $monteur = $this->createActiveUser('monteur', 'Monteur-Pass-1');
+        $erwarteteSchluessel = array_keys($this->assertOk($this->api->get('load_settings'))['settings']);
+        sort($erwarteteSchluessel);
+
+        foreach (['admin' => $this->api, 'monteur' => $monteur] as $wer => $client) {
+            $json = $this->assertStatus(200, $client->get('check'));
+            $this->assertTrue($json['loggedIn'], $wer);
+            $settings = $json['settings'];
+            foreach (self::FIRMENDATEN as $key => $wert) {
+                $this->assertSame($wert, $settings[$key], "{$wer}: {$key}");
+            }
+            $this->assertSame('', $settings['smtp_pass'], $wer);
+            $this->assertTrue($settings['smtp_pass_gesetzt'], $wer);
+            $schluessel = array_keys($settings);
+            sort($schluessel);
+            $this->assertSame($erwarteteSchluessel, $schluessel, $wer);
+            $this->assertSame('Test Lizenznehmer GmbH', $json['license']['customer'], $wer);
+            $this->assertSame('2099-12-31', $json['license']['expires'], $wer);
+        }
     }
 }
