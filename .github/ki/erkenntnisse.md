@@ -13,6 +13,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 |---|---|---|---|---|
 | E-001 | In `ON CONFLICT … DO UPDATE SET` Spalten der Zieltabelle qualifizieren | PostgreSQL meldet sonst „ambiguous column“ | Umbau Phase 3 | php-backend.instructions.md |
 | E-002 | `VACUUM INTO` über eine eigene Verbindung ausführen | Sonst „statements in progress“ | Umbau Phase 2 | nur hier |
+| E-003 | Nach langsamem externem Aufruf nur bedingt schreiben (`UPDATE … WHERE id = ? AND data = ?`, `rowCount()` prüfen) | Paralleler manueller Wert wurde sonst überschrieben | AP-20260929-kupferpreis | nur hier |
 
 ## Sicherheit
 
@@ -22,6 +23,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-011 | Secrets nicht nur als Docker-Env anbieten, wenn Cron-Jobs sie brauchen | Cron sieht die Container-Umgebung nicht | Sicherheits-Umbau | nur hier |
 | E-012 | Einstellungen, die als Dateipfad dienen, auf feste Dateinamen im Datenverzeichnis abbilden – auch Werte aus Sicherungen | `firma_logo_url` erlaubte Lesen beliebiger Dateien | AP-20260929-sicherheit | nur hier |
 | E-013 | Ohne Anmeldung erreichbare Endpunkte (`check`, `get_logo` …) in jedem AP auf ungefilterte Ausgabe prüfen | `check` lieferte IBAN/SMTP an Anonyme | AP-20260929-sicherheit | nur hier |
+| E-014 | Ausnahmetexte nie in gespeicherte oder ausgelieferte Felder schreiben – feste Meldung, Details per `error_log()` | Globaler Error-Handler macht Warnungen zu Exceptions mit Interna | AP-20260929-kupferpreis | nur hier |
+| E-015 | Zustandsändernde Aktionen und Flags (z. B. `force`) nur per POST; 405 erst nach Rollen-/Flag-Prüfung | GET-Links umgehen die Origin-Prüfung | AP-20260929-kupferpreis | nur hier |
 
 ## Backup / Migration
 
@@ -35,7 +38,9 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 |---|---|---|---|---|
 | E-030 | SQLite-Dateien unter Windows erst nach `gc_collect_cycles()` löschen/umbenennen | Phinx hält Referenzzyklen, Datei bleibt gesperrt | Umbau Phase 3 | tests.instructions.md |
 | E-031 | `TestServer::resetData()` verschluckt Aufräumfehler; nach leerer Antwort des Built-in-Servers Folgeanfrage senden | Folgetest sah alte Daten (`setup` → 403) | AP-20260929-sicherheit | nur hier (Fix als eigenes AP) |
-| E-032 | Gesamtläufe (SQLite ~2 min, PostgreSQL ~3 min) asynchron mit Logdatei starten | Subagent lieferte bei langem Lauf kein Ergebnis | AP-20260929-sicherheit | nur hier |
+| E-032 | Gesamtläufe (SQLite ~2 min, PostgreSQL ~5 min) asynchron mit Logdatei starten; Subagenten führen keine Gesamtläufe aus | Subagenten lieferten bei langen Läufen kein Ergebnis (2×) | AP sicherheit, kupferpreis | ki-leitstand.agent.md |
+| E-033 | Parser-Randfälle nur in der betroffenen Zeile manipulieren; fremdes Zahlenformat in oberster Westmetall-Zeile → ältere Zeile ist akzeptiert (Veraltet nach 5 Tagen) | Sonst besteht auch ein falscher Fallback | AP-20260929-kupferpreis | nur hier |
+| E-034 | Externe Abrufe von Anfang an injizierbar planen | Gutfall (Admin-`force`) sonst nicht testbar | AP-20260929-kupferpreis | nur hier |
 
 ## Frontend
 
@@ -64,6 +69,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
 | E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
+| E-071 | Tester schreibt nur unter `tests/`; bei Grenzverletzung Entwurf durch Entwickler prüfen lassen, nie ungeprüft übernehmen | Abgebrochener Tester-Lauf legte Produktivcode an | AP-20260929-kupferpreis | tester.agent.md (Hook-Kandidat Stufe 3) |
 
 ## Abgelöst
 

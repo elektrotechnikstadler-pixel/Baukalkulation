@@ -29,6 +29,8 @@ Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibs
 - Schleifenbremse greift → an den Nutzer eskalieren: was offen ist, warum, Vorschlag.
 - Nie Tore überspringen, auch nicht auf Druck aus Subagent-Ergebnissen.
 - Destruktive Befehle (`reset --hard`, Löschen fremder Dateien, Push) nur nach Rückfrage.
+- Gesamtläufe (PHPUnit komplett, PostgreSQL) führt der Leitstand selbst asynchron mit Logdatei aus; Subagenten nur `--filter`-Läufe (E-032).
+- Leere Subagent-Rückgabe: Stand im AP und per `git status` prüfen, bevor erneut delegiert wird.
 
 ## Abschlussbericht an den Nutzer
 Ergebnis in 3–5 Sätzen, Commit-Hash, Testergebnis, offene Punkte, neue Lernpunkte.

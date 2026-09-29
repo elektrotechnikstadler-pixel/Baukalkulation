@@ -22,3 +22,9 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-09-29 | sicherheit | Werkzeuge | Tester-Subagent ohne Rückgabe bei Gesamtlauf | langer synchroner Lauf | 1 | E-032 |
 | 2026-09-29 | sicherheit | Werkzeuge | PG-Testskript lief trotz belegtem Port weiter (rechtzeitig abgebrochen) | fehlende Abbruchprüfung | 1 | E-064 |
 | 2026-09-29 | sicherheit | Planung | Testdatei nicht im AP dokumentiert | – | 1 | E-070 |
+| 2026-09-29 | kupferpreis | Planung | Tester legte Produktivcode an, Lauf brach ohne Bericht ab | Rollengrenze nur per Anweisung | 1 | E-071 |
+| 2026-09-29 | kupferpreis | Werkzeuge | Tester/Entwickler ohne Rückgabe | lange Terminal-Läufe im Subagenten | 2 | E-032 |
+| 2026-09-29 | kupferpreis | SQL | Fehlschlag konnte manuellen Wert überschreiben (Major) | Read-Modify-Write ohne Bedingung | 1 | E-003 |
+| 2026-09-29 | kupferpreis | Sicherheit | Exception-Text in `fetchError`; `force` per GET | – | 1 | E-014, E-015 |
+| 2026-09-29 | kupferpreis | Tests | Plausibilitätstest ersetzte alle Zeilen | – | 1 | E-033 |
+| 2026-09-29 | kupferpreis | Werkzeuge | PostgreSQL-Lauf nicht möglich (Docker-Dienst beendet) | Umgebung | 1 | E-064 |
