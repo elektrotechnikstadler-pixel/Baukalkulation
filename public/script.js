@@ -125,6 +125,7 @@ let _autoMergeAttempts = 0;  // Schutz gegen Endlos-Merge bei Dauer-Kollisionen
 let _conflictRetryTimer = null;  // Zyklischer Hintergrund-Merge nach "Später entscheiden"
 let _conflictRetryCount = 0;
 let rechnungenData = [];     // Rechnungen & Angebote
+let _projectJumpObserver = null;
 let rechnungenSearchState = { rechnung: '', angebot: '', all: '' };
 let metallProfileCatalog = [];
 let metallProfileMeta = { updated: '', quelle: '' };
@@ -2332,6 +2333,69 @@ function toggleKundenansicht() {
   }
 }
 
+function projectSectionCount(section, b) {
+  switch (section.id) {
+    case 'sec-material': return (b.material || []).length;
+    case 'sec-arbeitszeit': return (b.arbeitszeit || []).length;
+    case 'sec-pauschalen': return (b.pauschalen || []).length;
+    case 'sec-abschlag':
+      return (b.abschlaege || []).length + (rechnungenData || []).filter(row => row.typ === 'rechnung' && row.baustelleId === b.id).length;
+    case 'sec-linkeddocs': return (rechnungenData || []).filter(row => row.baustelleId === b.id).length;
+    case 'sec-fehlendes': return (b.fehlendesMaterial || []).length;
+    case 'sec-tagebuch': return (b.bautagebuch || []).length;
+    case 'sec-dateien': return section.querySelectorAll('#baustelleFilesGrid .file-card').length;
+    case 'sec-schnellnotizen': return section.querySelectorAll('#baustelleSchnellnotizen .schnellnotiz-card').length;
+    case 'sec-posarchiv': return (b._posArchiv || []).length;
+    default: return 0;
+  }
+}
+
+function renderProjectJumpBar(root, b) {
+  const nav = root.querySelector('#projectJumpBar');
+  if (!nav) return;
+  if (_projectJumpObserver) _projectJumpObserver.disconnect();
+
+  const labels = {
+    'sec-material': 'Material',
+    'sec-arbeitszeit': 'Arbeitszeit',
+    'sec-pauschalen': 'Pauschalen',
+    'sec-abschlag': 'Abschläge',
+    'sec-linkeddocs': 'Angebote & Rechnungen',
+    'sec-fehlendes': 'Fehlendes Material',
+    'sec-tagebuch': 'Bautagebuch',
+    'sec-dateien': 'Dateien & Fotos',
+    'sec-schnellnotizen': 'Schnellnotizen',
+    'sec-posarchiv': 'Archivierte Positionen'
+  };
+  const sections = [...root.querySelectorAll('.section-card[id^="sec-"]')];
+  nav.replaceChildren();
+  nav.hidden = sections.length === 0;
+  sections.forEach(section => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'project-jump-link';
+    button.setAttribute('aria-label', labels[section.id] || 'Abschnitt');
+    const label = document.createElement('span');
+    label.textContent = labels[section.id] || 'Abschnitt';
+    const count = document.createElement('span');
+    count.className = 'project-jump-count';
+    button.append(label, count);
+    button.addEventListener('click', () => section.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    nav.appendChild(button);
+    section._projectJumpCount = count;
+  });
+
+  const updateCounts = () => sections.forEach(section => {
+    if (section._projectJumpCount) section._projectJumpCount.textContent = String(projectSectionCount(section, b));
+  });
+  updateCounts();
+  _projectJumpObserver = new MutationObserver(updateCounts);
+  sections.forEach(section => {
+    const body = section.querySelector('.section-body');
+    if (body) _projectJumpObserver.observe(body, { childList: true, subtree: true });
+  });
+}
+
 function renderDetail() {
   const b = getBaustelle();
   if (!b) return showEmptyState();
@@ -2356,6 +2420,7 @@ function renderDetail() {
   const canSeeEk     = canDo('canSeePrices');
   const canEditAz    = canDo('canEditArbeitszeit');
   const canEditPausch = canDo('canEditPauschalen');
+  const azGroupMode = getAzGroupState(b).mode;
 
   el.innerHTML = `
     <!-- Header -->
@@ -2429,6 +2494,8 @@ function renderDetail() {
       </div>
     </div>
 
+    <nav id="projectJumpBar" class="project-jumpbar" aria-label="Projektabschnitte"></nav>
+
     <!-- MATERIAL -->
     ${appSettings.bau_material !== false ? `<section class="section-card${sectionCollapsed('material') ? ' collapsed' : ''}" id="sec-material">
       <div class="section-header collapsible" onclick="toggleSection('material')">
@@ -2457,11 +2524,13 @@ function renderDetail() {
           value="${b.materialAufschlagGlobal || 0}" onchange="setMatAufschlagGlobal(this.value)">
         <span style="font-size:.85rem;font-weight:600;">%</span>
       </div>` : ''}
-      <div style="margin-bottom:6px;">
+      <div class="project-filter-row" style="margin-bottom:2px;">
         <input type="text" id="matFilterInput" class="form-input" placeholder="Material filtern..."
           oninput="_debouncedFilterMat(this.value)"
           style="width:100%;max-width:400px;padding:5px 10px;font-size:.85rem;">
+        ${(b.matKategorien || []).length ? '<button type="button" id="matToggleAllBtn" class="btn btn-secondary btn-sm" onclick="toggleAllMatCategories()">Alle zu</button>' : ''}
       </div>
+      <div id="matFilterSummary" class="project-filter-summary" aria-live="polite"></div>
       <div class="table-wrapper">
         <table class="data-table${canSeeEk ? '' : ' hide-ek-cols'}" id="matTable">
           <thead>
@@ -2505,10 +2574,20 @@ function renderDetail() {
       </div>
       <div class="section-body">
       <div style="margin-bottom:6px;">
+        <label for="azGroupMode" style="font-size:.82rem;margin-right:6px;">Gruppieren:</label>
+        <select id="azGroupMode" class="cell-select" onchange="setAzGroupMode(this.value)" style="max-width:180px;">
+          <option value="month"${azGroupMode === 'month' ? ' selected' : ''}>Monat</option>
+          <option value="employee"${azGroupMode === 'employee' ? ' selected' : ''}>Mitarbeiter</option>
+          <option value="none"${azGroupMode === 'none' ? ' selected' : ''}>Keine</option>
+        </select>
+        <button type="button" id="azToggleAllBtn" class="btn btn-secondary btn-sm" onclick="toggleAllAzGroups()">Alle zu</button>
+      </div>
+      <div class="project-filter-row" style="margin-bottom:2px;">
         <input type="text" id="azFilterInput" class="form-input" placeholder="Arbeitszeit filtern (Beschreibung, Monteur, Kategorie, Datum)…"
           oninput="_debouncedFilterAz(this.value)"
           style="width:100%;max-width:400px;padding:5px 10px;font-size:.85rem;">
       </div>
+      <div id="azFilterSummary" class="project-filter-summary" aria-live="polite"></div>
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -2774,6 +2853,7 @@ function renderDetail() {
   loadBaustelleFiles();
   loadBaustelleSchnellnotizen(b.id);
   recalc();
+  renderProjectJumpBar(el, b);
   // Restore EK/Aufschlag toggle state
   const matTable = document.getElementById('matTable');
   if (matTable && !showEkCols) matTable.classList.add('hide-ek-cols');
@@ -3120,7 +3200,7 @@ function addMatRow() {
   const b = getBaustelle();
   if (!b) return;
   b.material.unshift({ id: b.nextMatId++, bezeichnung: '', anzahl: 1, einheit: 'Stk.', ek: 0, aufschlag: 0, kategorieId: null, erstelltVon: currentKuerzel, datum: new Date().toISOString().split('T')[0] });
-  _collapsedMatCats.delete('__none__');
+  openMatCategory('__none__', b);
   saveData();
   renderMatRows();
   recalc();
@@ -3616,7 +3696,7 @@ async function _kiScanImport() {
     count++;
   });
   if (count > 0) {
-    _collapsedMatCats.delete('__none__');
+    openMatCategory('__none__', b);
     saveData();
     renderMatRows();
     recalc();
@@ -3952,7 +4032,7 @@ async function _kigImport() {
   // Aktuell geöffnete Baustelle betroffen → Ansicht aktualisieren
   const cur = getBaustelle();
   if (cur && touched.has(cur.id)) {
-    _collapsedMatCats.delete('__none__');
+    openMatCategory('__none__', cur);
     renderMatRows();
     if (typeof renderAzRows === 'function') renderAzRows();
     recalc();
@@ -3986,7 +4066,7 @@ async function addMatRowFromLager() {
     datum: new Date().toISOString().split('T')[0],
     quelleLagerArtikelId: r.artikelId,
   });
-  _collapsedMatCats.delete('__none__');
+  openMatCategory('__none__', b);
   saveData();
   renderMatRows();
   recalc();
@@ -4027,6 +4107,9 @@ function setMat(id, field, val) {
   const vk = matVk(r, b);
   setCell(`vk_${id}`,  fmt(vk));
   setCell(`mg_${id}`,  fmt(vk * r.anzahl));
+  const filter = document.getElementById('matFilterInput');
+  if (filter && filter.value.trim()) filterMatRows(filter.value);
+  else updateMatFilterSummary(b);
   recalc();
 }
 
@@ -4042,9 +4125,10 @@ function setMatAufschlagGlobal(val) {
 // -- Material-Tabelle filtern ---------------------------------
 function filterMatRows(q) {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(t => t);
+  const b = getBaustelle();
+  if (terms.length === 0) { renderMatRows(); return; }
   // If filter active but collapsed categories hide rows from DOM, re-render to expand all
   if (terms.length > 0) {
-    const b = getBaustelle();
     if (b) {
       const renderedRows = document.querySelectorAll('#matBody tr.mat-data-row').length;
       if (renderedRows < b.material.length) { renderMatRows(); return; }
@@ -4070,18 +4154,87 @@ function filterMatRows(q) {
     }
     hdr.style.display = hasVisible ? '' : 'none';
   });
+  updateMatFilterSummary(b);
 }
 
 let _collapsedMatCats = new Set();
+let _collapsedMatCatsBaustelleId = null;
+function loadMatCategoryState(b) {
+  if (_collapsedMatCatsBaustelleId === b.id) return _collapsedMatCats;
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(`matCollapsedCats_${b.id}`) || '[]'); } catch (e) {}
+  _collapsedMatCats = new Set(Array.isArray(saved) ? saved.filter(key => typeof key === 'string') : []);
+  _collapsedMatCatsBaustelleId = b.id;
+  return _collapsedMatCats;
+}
+
+function saveMatCategoryState(b) {
+  try { localStorage.setItem(`matCollapsedCats_${b.id}`, JSON.stringify([..._collapsedMatCats])); } catch (e) {}
+}
+
+function updateMatGroupControls(b) {
+  const button = document.getElementById('matToggleAllBtn');
+  if (!button) return;
+  loadMatCategoryState(b);
+  const keys = (b.matKategorien || []).map(category => String(category.id));
+  if (keys.length) keys.unshift('__none__');
+  button.textContent = keys.some(key => !_collapsedMatCats.has(key)) ? 'Alle zu' : 'Alle auf';
+}
+
+function updateMatFilterSummary(b = getBaustelle()) {
+  const summary = document.getElementById('matFilterSummary');
+  if (!summary || !b) return;
+  const all = b.material || [];
+  const active = !!document.getElementById('matFilterInput')?.value.trim();
+  const visibleIds = active
+    ? new Set([...document.querySelectorAll('#matBody tr.mat-data-row')]
+      .filter(row => row.style.display !== 'none').map(row => row.dataset.itemId))
+    : null;
+  const matching = active ? all.filter(row => visibleIds.has(String(row.id))) : all;
+  let text = `${matching.length} von ${all.length} Positionen`;
+  if (canDo('canSeePrices')) {
+    const total = matching.reduce((sum, row) => sum + matVk(row, b) * (Number(row.anzahl) || 0), 0);
+    text += ` · Summe: ${fmt(total)}`;
+  }
+  summary.textContent = text;
+}
+
+function openMatCategory(catKey, b = getBaustelle()) {
+  if (!b) return;
+  loadMatCategoryState(b).delete(catKey);
+  saveMatCategoryState(b);
+}
+
+function toggleAllMatCategories() {
+  const b = getBaustelle();
+  if (!b) return;
+  loadMatCategoryState(b);
+  const keys = (b.matKategorien || []).map(category => String(category.id));
+  if (!keys.length) return;
+  keys.unshift('__none__');
+  if (keys.some(key => !_collapsedMatCats.has(key))) keys.forEach(key => _collapsedMatCats.add(key));
+  else keys.forEach(key => _collapsedMatCats.delete(key));
+  saveMatCategoryState(b);
+  renderMatRows();
+}
+
 function toggleMatCategory(catKey) {
-  if (_collapsedMatCats.has(catKey)) _collapsedMatCats.delete(catKey);
-  else _collapsedMatCats.add(catKey);
+  const b = getBaustelle();
+  if (!b) return;
+  loadMatCategoryState(b);
+  if (_collapsedMatCats.has(catKey)) {
+    _collapsedMatCats.delete(catKey);
+  } else {
+    _collapsedMatCats.add(catKey);
+  }
+  saveMatCategoryState(b);
   renderMatRows();
 }
 
 function renderMatRows() {
   const b = getBaustelle();
   if (!b) return;
+  loadMatCategoryState(b);
   const tbody = document.getElementById('matBody');
   if (!tbody) return;
   tbody.innerHTML = '';
@@ -4131,6 +4284,7 @@ function renderMatRows() {
     const vk = matVk(r, b);
     const tr = document.createElement('tr');
     tr.className  = 'mat-data-row';
+    tr.dataset.itemId = String(r.id);
     tr.draggable  = true;
     tr.addEventListener('dragstart', e => {
       dragMatId = r.id;
@@ -4183,6 +4337,8 @@ function renderMatRows() {
 
   // Re-apply filter if active
   if (activeFilter) filterMatRows(activeFilter);
+  updateMatGroupControls(b);
+  updateMatFilterSummary(b);
 }
 
 // -- Material category management ----------------------------
@@ -4275,7 +4431,121 @@ function setAz(id, field, val) {
   }
   saveDataDebounced();
   setCell(`azg_${id}`, fmt((r.stunden || 0) * (r.stundenpreis || 0)));
+  const groupMode = getAzGroupState(b).mode;
+  if (field === 'datum' && groupMode === 'month') renderAzRows();
+  else if (['stunden', 'stundenpreis'].includes(field)) updateAzGroupTotals(b, groupMode);
+  const filter = document.getElementById('azFilterInput');
+  if (filter && filter.value.trim()) filterAzRows(filter.value);
+  else updateAzFilterSummary(b);
   recalc();
+}
+
+function getAzGroupState(b) {
+  const state = { mode: 'month', collapsed: { month: [], employee: [] }, expanded: { month: [], employee: [] } };
+  try {
+    const saved = JSON.parse(localStorage.getItem(`azGroupState_${b.id}`) || 'null');
+    if (!saved || typeof saved !== 'object') return state;
+    if (['month', 'employee', 'none'].includes(saved.mode)) state.mode = saved.mode;
+    ['month', 'employee'].forEach(mode => {
+      if (saved.collapsed && Array.isArray(saved.collapsed[mode])) state.collapsed[mode] = saved.collapsed[mode].filter(key => typeof key === 'string');
+      if (saved.expanded && Array.isArray(saved.expanded[mode])) state.expanded[mode] = saved.expanded[mode].filter(key => typeof key === 'string');
+    });
+  } catch (e) {}
+  return state;
+}
+
+function saveAzGroupState(b, state) {
+  try { localStorage.setItem(`azGroupState_${b.id}`, JSON.stringify(state)); } catch (e) {}
+}
+
+function updateAzGroupControls(b) {
+  const button = document.getElementById('azToggleAllBtn');
+  if (!button) return;
+  const state = getAzGroupState(b);
+  const mode = state.mode;
+  const keys = mode === 'none' ? [] : [...new Set((b.arbeitszeit || []).map(row => azGroupInfo(row, mode).key))];
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  button.hidden = keys.length === 0;
+  button.textContent = keys.some(key => azGroupIsCollapsed(state, mode, key, currentMonth)) ? 'Alle auf' : 'Alle zu';
+}
+
+function toggleAllAzGroups() {
+  const b = getBaustelle();
+  if (!b) return;
+  const state = getAzGroupState(b);
+  const mode = state.mode;
+  if (mode === 'none') return;
+  const keys = [...new Set((b.arbeitszeit || []).map(row => azGroupInfo(row, mode).key))];
+  if (!keys.length) return;
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const hasCollapsed = keys.some(key => azGroupIsCollapsed(state, mode, key, currentMonth));
+  state.collapsed[mode] = hasCollapsed ? [] : keys;
+  state.expanded[mode] = hasCollapsed ? keys : [];
+  saveAzGroupState(b, state);
+  renderAzRows();
+}
+
+function setAzGroupMode(mode) {
+  const b = getBaustelle();
+  if (!b || !['month', 'employee', 'none'].includes(mode)) return;
+  const state = getAzGroupState(b);
+  state.mode = mode;
+  saveAzGroupState(b, state);
+  renderAzRows();
+}
+
+function azGroupInfo(row, mode) {
+  if (mode === 'month') {
+    const match = /^(\d{4})-(\d{2})/.exec(String(row.datum || ''));
+    if (match && Number(match[2]) >= 1 && Number(match[2]) <= 12) {
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      return {
+        key: `date:${match[1]}-${match[2]}`,
+        label: new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1))
+      };
+    }
+    return { key: 'date:__none__', label: 'Ohne Datum' };
+  }
+  const employee = String(row.erstelltVon || row.zeitUser || '').trim();
+  return { key: employee ? `employee:${employee}` : 'employee:__none__', label: employee || 'Ohne Mitarbeiter' };
+}
+
+function azGroupIsCollapsed(state, mode, key, currentMonth) {
+  if (state.collapsed[mode].includes(key)) return true;
+  if (state.expanded[mode].includes(key)) return false;
+  return mode === 'month' && key !== `date:${currentMonth}`;
+}
+
+function toggleAzGroup(mode, key) {
+  const b = getBaustelle();
+  if (!b || !['month', 'employee'].includes(mode)) return;
+  const state = getAzGroupState(b);
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const wasCollapsed = azGroupIsCollapsed(state, mode, key, currentMonth);
+  state.collapsed[mode] = state.collapsed[mode].filter(item => item !== key);
+  state.expanded[mode] = state.expanded[mode].filter(item => item !== key);
+  state[wasCollapsed ? 'expanded' : 'collapsed'][mode].push(key);
+  saveAzGroupState(b, state);
+  renderAzRows();
+}
+
+function updateAzGroupTotals(b, mode) {
+  if (!['month', 'employee'].includes(mode)) return;
+  document.querySelectorAll('#azBody tr.az-group-header').forEach(header => {
+    const rows = b.arbeitszeit.filter(row => azGroupInfo(row, mode).key === header.dataset.groupKey);
+    const hours = rows.reduce((sum, row) => sum + (Number(row.stunden) || 0), 0);
+    const amount = rows.reduce((sum, row) => sum + (Number(row.stunden) || 0) * (Number(row.stundenpreis) || 0), 0);
+    const count = header.querySelector('.az-group-count');
+    const hoursLabel = header.querySelector('.az-group-hours');
+    const price = header.querySelector('.az-group-price');
+    if (count) count.textContent = `(${rows.length})`;
+    if (hoursLabel) hoursLabel.textContent = `Σ ${hours.toLocaleString('de-DE', { maximumFractionDigits: 2 })} h`;
+    if (price) price.textContent = fmt(amount);
+  });
 }
 
 function renderAzRows() {
@@ -4287,7 +4557,14 @@ function renderAzRows() {
   tbody.innerHTML = '';
   // Sort by date descending (newest first)
   const sorted = [...b.arbeitszeit].sort((a, c) => (c.datum || '').localeCompare(a.datum || ''));
-  sorted.forEach(r => {
+  const state = getAzGroupState(b);
+  const mode = state.mode;
+  const filterInput = document.getElementById('azFilterInput');
+  const activeFilter = !!(filterInput && filterInput.value.trim());
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  function renderAzRow(r, groupKey = '') {
     // Migration: stundenpreis aus stundenKatId nachfüllen wenn fehlt (z.B. alte Datensätze)
     if ((r.stundenpreis == null || r.stundenpreis === '') && r.stundenKatId) {
       const kat = (appData.stundenKatalog || []).find(k => k.id === r.stundenKatId);
@@ -4297,6 +4574,8 @@ function renderAzRows() {
     const gesamt = (r.stunden || 0) * (r.stundenpreis || 0);
     const tr = document.createElement('tr');
     tr.className = 'az-data-row';
+    tr.dataset.groupKey = groupKey;
+    tr.dataset.itemId = String(r.id);
     if (r.autoImport) tr.style.background = '#F1F8E9';
     if (canEditAz) {
       tr.draggable = true;
@@ -4322,16 +4601,88 @@ function renderAzRows() {
       <td style="text-align:center"><input type="checkbox" class="az-unp-cb" ${r.unproduktiv ? 'checked' : ''} onchange="setAz(${r.id},'unproduktiv',this.checked)" title="Unproduktiv" ${canEditAz ? '' : 'disabled'}></td>
       <td>${canEditAz ? `<button class="icon-btn" onclick="archiveAzRow(${r.id})" title="Position archivieren">${ico('box')}</button><button class="icon-btn danger" onclick="delAzRow(${r.id})">${ico('trash')}</button>` : ''}</td>`;
     tbody.appendChild(tr);
-  });
+  }
+
+  if (mode === 'none') {
+    sorted.forEach(r => renderAzRow(r));
+  } else {
+    const groups = new Map();
+    sorted.forEach(r => {
+      const info = azGroupInfo(r, mode);
+      if (!groups.has(info.key)) groups.set(info.key, { ...info, rows: [] });
+      groups.get(info.key).rows.push(r);
+    });
+    groups.forEach(group => {
+      const savedCollapsed = azGroupIsCollapsed(state, mode, group.key, currentMonth);
+      const collapsed = savedCollapsed && !activeFilter;
+      const hours = group.rows.reduce((sum, row) => sum + (Number(row.stunden) || 0), 0);
+      const amount = group.rows.reduce((sum, row) => sum + (Number(row.stunden) || 0) * (Number(row.stundenpreis) || 0), 0);
+      const header = document.createElement('tr');
+      header.className = 'mat-cat-header az-group-header';
+      header.dataset.groupKey = group.key;
+      header.dataset.collapsed = savedCollapsed ? '1' : '0';
+      const cell = document.createElement('td');
+      cell.colSpan = 9;
+      cell.className = 'mat-cat-cell';
+      const inner = document.createElement('div');
+      inner.className = 'mat-cat-inner';
+      inner.style.cursor = 'pointer';
+      inner.setAttribute('role', 'button');
+      inner.tabIndex = 0;
+      const chevron = document.createElement('span');
+      chevron.className = 'mat-cat-chevron';
+      chevron.style.cssText = 'font-size:.75rem;margin-right:4px;transition:transform .2s;display:inline-block;';
+      chevron.textContent = '▾';
+      if (collapsed) chevron.style.transform = 'rotate(-90deg)';
+      const icon = document.createElement('span');
+      icon.className = 'mat-cat-icon';
+      icon.innerHTML = ico(mode === 'month' ? 'calendar' : 'users');
+      const name = document.createElement('span');
+      name.className = 'mat-cat-name';
+      name.textContent = group.label;
+      const count = document.createElement('span');
+      count.className = 'az-group-count';
+      count.style.cssText = 'font-size:.72rem;color:var(--grey-400);margin-left:4px;';
+      count.textContent = `(${group.rows.length})`;
+      const hoursLabel = document.createElement('span');
+      hoursLabel.className = 'mat-cat-total az-group-hours';
+      hoursLabel.textContent = `Σ ${hours.toLocaleString('de-DE', { maximumFractionDigits: 2 })} h`;
+      inner.append(chevron, icon, name, count, hoursLabel);
+      if (canDo('canSeePrices')) {
+        const price = document.createElement('span');
+        price.className = 'mat-cat-total az-group-price price-sensitive';
+        price.textContent = fmt(amount);
+        inner.appendChild(price);
+      }
+      const toggle = () => toggleAzGroup(mode, group.key);
+      inner.addEventListener('click', toggle);
+      inner.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
+      });
+      cell.appendChild(inner);
+      header.appendChild(cell);
+      tbody.appendChild(header);
+      if (!collapsed) group.rows.forEach(r => renderAzRow(r, group.key));
+    });
+  }
   // Aktiven Filter nach dem Neu-Rendern erneut anwenden
   const azF = document.getElementById('azFilterInput');
   if (azF && azF.value.trim()) filterAzRows(azF.value);
+  updateAzGroupControls(b);
+  updateAzFilterSummary(b);
 }
 
 // -- Arbeitszeit-Tabelle filtern ------------------------------
 function filterAzRows(q) {
   const terms = (q || '').trim().toLowerCase().split(/\s+/).filter(t => t);
+  const b = getBaustelle();
   const rows = document.querySelectorAll('#azBody tr.az-data-row');
+  if (terms.length > 0 && b && rows.length < b.arbeitszeit.length) { renderAzRows(); return; }
+  const headers = document.querySelectorAll('#azBody tr.az-group-header');
+  if (terms.length === 0 && b && rows.length === b.arbeitszeit.length && [...headers].some(header => header.dataset.collapsed === '1')) {
+    renderAzRows();
+    return;
+  }
   rows.forEach(tr => {
     if (terms.length === 0) { tr.style.display = ''; return; }
     let text = tr.textContent.toLowerCase();
@@ -4339,6 +4690,36 @@ function filterAzRows(q) {
     tr.querySelectorAll('select').forEach(sel => { const o = sel.options[sel.selectedIndex]; if (o) text += ' ' + o.textContent.toLowerCase(); });
     tr.style.display = terms.every(t => text.includes(t)) ? '' : 'none';
   });
+  headers.forEach(header => {
+    if (terms.length === 0) { header.style.display = ''; return; }
+    let next = header.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('az-group-header')) {
+      if (next.classList.contains('az-data-row') && next.style.display !== 'none') hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    header.style.display = hasVisible ? '' : 'none';
+  });
+  updateAzFilterSummary(b);
+}
+
+function updateAzFilterSummary(b = getBaustelle()) {
+  const summary = document.getElementById('azFilterSummary');
+  if (!summary || !b) return;
+  const all = b.arbeitszeit || [];
+  const active = !!document.getElementById('azFilterInput')?.value.trim();
+  const visibleIds = active
+    ? new Set([...document.querySelectorAll('#azBody tr.az-data-row')]
+      .filter(row => row.style.display !== 'none').map(row => row.dataset.itemId))
+    : null;
+  const matching = active ? all.filter(row => visibleIds.has(String(row.id))) : all;
+  const hours = matching.reduce((sum, row) => sum + (Number(row.stunden) || 0), 0);
+  let text = `${matching.length} von ${all.length} Positionen · Summe: ${hours.toLocaleString('de-DE', { maximumFractionDigits: 2 })} h`;
+  if (canDo('canSeePrices')) {
+    const amount = matching.reduce((sum, row) => sum + (Number(row.stunden) || 0) * (Number(row.stundenpreis) || 0), 0);
+    text += ` · ${fmt(amount)}`;
+  }
+  summary.textContent = text;
 }
 
 function stundenKategorieSelect(azId, currentKatId) {
@@ -6142,7 +6523,7 @@ function insertFromKatalog() {
 
   const count = _pickerSelected.size;
   _pickerSelected.clear();
-  _collapsedMatCats.delete('__none__');
+  openMatCategory('__none__', b);
   saveData();
   closeKatalogPickerModal();
   renderMatRows();

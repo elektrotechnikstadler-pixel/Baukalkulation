@@ -560,6 +560,71 @@ body.dark-theme .action-menu-pop { background: var(--surface); border-color: var
   display: block;
 }
 
+#baustelleDetail .section-card {
+  scroll-margin-top: 104px;
+}
+
+.project-jumpbar {
+  position: sticky;
+  top: 0;
+  z-index: 150;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.project-jumpbar[hidden] {
+  display: none;
+}
+
+.project-jump-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: var(--text);
+  background: var(--grey-50);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: .78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.project-jump-link:hover {
+  background: var(--blue-light);
+  border-color: var(--blue);
+}
+
+.project-jump-count {
+  color: var(--text-light);
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.project-filter-summary {
+  min-height: 1.35em;
+  margin: 0 0 7px;
+  color: var(--text-light);
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================================
    SUMMARY BOX  –  Gold / Yellow
    ============================================================ */

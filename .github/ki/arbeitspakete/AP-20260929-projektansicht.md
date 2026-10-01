@@ -2,10 +2,10 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | abgeschlossen (PostgreSQL-Lauf und Browser-Abnahme AK 5, 7–12 ausstehend) |
 | Typ | Feature + Bugfix |
-| Testläufe rot | 0 |
-| Review-Runden | 0 |
+| Testläufe rot | 0 (Runde 0/2 bewusst rot) |
+| Review-Runden | 2 |
 | Commit | – |
 
 ## 1. Auftrag
@@ -208,8 +208,79 @@ Positionen: eigenes AP. Übrige Fragen: Vorschlag des Architekten.
 
 ## 3. Umsetzung
 
+### Teil A
+- `src/Handlers/CatalogActions.php`: Kodierung je Datanorm-Datei erkannt (BOM, UTF-8 oder CP850/Windows-1252), Zeilenrückfall für ungültiges UTF-8 und `encoding` in der Reindex-Antwort ergänzt.
+- `CHANGELOG.md`: Hinweis zur Neuindexierung nach dem Update ergänzt; bereits übernommene Positionen bleiben unverändert.
+- CP850 ist lokal in `mb_list_encodings()` verfügbar; Docker installiert `mbstring`.
+
+### Teil B – V1
+- `public/script.js`: Gruppierungswahl in `renderDetail()` (2510); Zustands-/Gruppenhelfer `getAzGroupState()`, `setAzGroupMode()`, `azGroupInfo()`, `toggleAzGroup()` (4293, 4311, 4320, 4343); Gruppierung in `renderAzRows()` (4372) mit Material-Kopfzeilen, Anzahl, Σ h und preisrechtlich geschützter Σ €; Filter in `filterAzRows()` (4494) öffnet alle Gruppen und blendet leere Gruppen aus. Zu-/aufgeklappte Gruppen rendern keine Zeilen; bestehende Zeilen-Editoren und Drag&Drop-Handler bleiben erhalten.
+- Manuelle Prüfschritte: Arbeitszeit nach Monat/Mitarbeiter/Keine umschalten; aktuelle und ältere Monatsgruppen sowie eine Gruppe zuklappen; Baustelle neu laden und Status prüfen; aktiven Filter auf Einträge in zugeklappten Gruppen anwenden und Filter leeren; mit/ohne Preisrecht Summen prüfen; Zeile bearbeiten, löschen und per Drag&Drop verschieben.
+- `node --check public/script.js` ausgeführt. Minifizierung, Cache-Busting und V2–V4 bleiben gemäß Teilumfang im Folgeschritt.
+
+### Teil B – V2–V4
+- `public/script.js`: Material-Zuklappzustände unter `matCollapsedCats_<baustelleId>` in `localStorage` gespeichert; Aktionen „Alle auf/zu“ für Materialkategorien und die V1-Arbeitszeitgruppen ergänzt. Beide Filter zeigen Trefferzahl und Summe; Material- und Arbeitszeitbeträge werden nur mit Preisrecht ausgegeben. Sticky Sprungleiste wird aus den tatsächlich gerenderten, damit aktivierten und berechtigten Abschnitten aufgebaut und zählt deren Positionen.
+- `public/style.css`: Sticky-Sprungleiste, Filterzeilen und Scroll-Abstand der Projektabschnitte gestaltet.
+- Cache-Busting: `style.css?v=145`, `script.min.js?v=220` und `CACHE_VERSION=bk-es-v219`; `npm.cmd run minify`, `node scripts/check-versions.mjs --strict` und `node --check public/script.js`.
+- Manuelle Prüfschritte: In zwei Baustellen Materialkategorien unterschiedlich zuklappen, zwischen ihnen wechseln und neu laden; „Alle auf/zu“ bei Material und Arbeitszeit in den Modi Monat/Mitarbeiter testen; Material- und Arbeitszeitfilter auf Teiltreffer und Nulltreffer prüfen, Summe mit/ohne Preisrecht vergleichen; Sprungleiste zu jedem sichtbaren Abschnitt testen, `bau_*`-Abschnitte deaktivieren und fehlende Berechtigungen prüfen; Datei-/Notiz-/Positionszähler nach Änderungen und asynchronem Laden kontrollieren.
+
+### Runde 2
+- `src/Handlers/CatalogActions.php`: Datei-Vorgabe durch zeilenweisen Scan der vollständigen Datei ermittelt; UTF-8-Zeilen bleiben UTF-8, Legacy-Zeilen werden anhand ihrer eigenen CP850-/Windows-1252-Umlautbytes klassifiziert. Bei Gleichstand greift die Datei-Vorgabe (Gesamtzählung, Gleichstand CP850); `encoding` meldet den überwiegenden Zeichensatz. CP850 wird über `iconv` konvertiert, falls `mbstring` es nicht anbietet; BOM wird nur am Dateianfang entfernt.
+- `public/script.js`: Leeren des Materialfilters rendert anhand des gespeicherten Kategorie-Zuklappzustands neu; Material- und Arbeitszeit-Summen werden nach Inline-Änderungen bzw. erneut angewendetem Filter aktualisiert.
+- Cache-Busting: `script.min.js?v=221` in `index.html` und `sw.js`, `CACHE_VERSION=bk-es-v220`; Minifizierung und Versionsprüfungen siehe Folgezeile.
+- Prüfungen Runde 2: `phpunit --filter DatanormEncodingTest` grün (13 Tests, 118 Assertions); `phpstan analyse --memory-limit=2G --no-progress` ohne Befunde; `npm.cmd run minify` erfolgreich; `node scripts/check-versions.mjs --strict` konsistent; `node --check public/script.js` ohne Syntaxfehler.
+
 ## 4. Tests
+
+### Runde 0 (Reproduktion)
+
+| Test | rot/grün | Grund |
+|---|---|---|
+| `testReindexAndSearchPreserveUmlauts` – cp850 | ROT | Falsch dekodierte Umlaute in der Bezeichnung. |
+| `testReindexAndSearchPreserveUmlauts` – windows-1252 | GRÜN | Suche, Bezeichnung, Warengruppe und `count=1` stimmen. |
+| `testReindexAndSearchPreserveUmlauts` – utf-8 | ROT | UTF-8-Umlaute werden doppelt kodiert. |
+| `testReindexAndSearchPreserveUmlauts` – utf-8-bom | ROT | Erster Artikel wird übersprungen, `count=0`. |
+| `testReindexReportsDetectedEncoding` – alle 4 Kodierungen | ROT | Antwort enthält kein Feld `encoding`. |
+
+### Runde 2 – Teil A
+
+| Test | rot/grün |
+|---|---|
+| `testDetectsLegacyEncodingAfterAsciiPrefixLargerThanSample` – Windows-1252 | ROT |
+| `testDetectsLegacyEncodingAfterAsciiPrefixLargerThanSample` – CP850 | GRÜN |
+| `testMixedCp850AndWindows1252ArticlesAreDecodedPerLine` | ROT |
+| `testCp850LineInUtf8FileIsDecodedAsCp850` | ROT |
+| `testBomAtStartOfLaterArticleTextIsPreservedAndArticleIndexed` | GRÜN |
 
 ## 5. Review
 
+### Runde 1 (2026-10-01) – vom Leitstand aus der Reviewer-Rückgabe übernommen
+
+**Urteil: `CHANGES_REQUESTED`**
+
+| Schwere | Datei:Zeile | Problem | Vorschlag |
+|---|---|---|---|
+| Major | `src/Handlers/CatalogActions.php` ~L160 | Erkennung aus erster Stichprobe gilt für die ganze Datei: ASCII-Stichprobe → Gleichstand → CP850, spätere Windows-1252-Zeilen falsch; ungültige UTF-8-Zeile fällt nur auf Windows-1252 zurück (CP850-Zeilen in UTF-8-Datei falsch). Keine Tests für ASCII-Präfix, Mischkodierung, Stichprobengrenze. | Erkennung/Rückfall für diese Fälle festlegen und testen. |
+| Minor | `public/script.js` ~L4323 | Nach Leeren des Materialfilters wird der gespeicherte Zuklappzustand nicht wiederhergestellt. | Beim Leeren des Filters anhand des gespeicherten Zustands neu rendern. |
+| Minor | `public/script.js` ~L4108, ~L4429 | Inline-Änderungen an Material/Arbeitszeit aktualisieren die Filtersumme nicht. | Filtersummen nach Inline-Änderungen neu berechnen. |
+| Minor | `src/Handlers/CatalogActions.php` ~L176 | BOM-Präfix wird bei jeder Zeile entfernt, nicht nur am Dateianfang. | Nur am Dateianfang entfernen. |
+| Minor | `tests/bin/build-datanorm-fixtures.php` | Nicht dokumentierter Generator (E-070). | Entfernt durch Leitstand (der Tester hatte das Löschen gemeldet, aber nicht ausgeführt). |
+| Hinweis | `Dockerfile.app` ~L57 | CP850 im Image nicht belegt. | Nachweisen oder iconv-Rückfall. |
+
+### Runde 2 (2026-10-01)
+
+**Urteil: `APPROVE`**
+
+| Schwere | Datei:Zeile | Problem | Vorschlag |
+|---|---|---|---|
+| Minor | [AP-20260929-projektansicht.md](AP-20260929-projektansicht.md#L231), Z.249, Z.251–252 | §3 meldet 13 grüne Tests, während §4 mehrere Runde-2-Tests als ROT aufführt. Es ist nicht erkennbar, ob diese ROT-Stände vor dem Fix aufgenommen wurden oder den Endstand meinen. | ROT-Stände als Vor-Fix-Ergebnisse kennzeichnen oder den finalen Status je Test ergänzen. |
+| Hinweis | [src/Handlers/CatalogActions.php](../../../src/Handlers/CatalogActions.php#L140) | Erkennung streamt zeilenweise und hält damit nur die aktuelle Zeile im Speicher, liest die gesamte Artikeldatei aber vor dem Indexieren ein zweites Mal. Bei sehr großen Datanorm-Dateien steigt die Reindexierungszeit entsprechend. | Kein Blocker; Laufzeit bei realistischen großen Dateien beobachten. |
+
+Die Runde-1-Befunde sind im Code behoben: zeilenweise Erkennung mit Datei-Vorgabe und CP850-Zeilenrückfall, BOM-Entfernung nur am Dateianfang, Wiederherstellung des Material-Zuklappzustands beim Leeren des Filters sowie Aktualisierung der Filter-/Gruppensummen nach Inline-Änderungen. Für CP850 ist ein `iconv`-Rückfall ohne `@` vorhanden. Die Cache-URLs stimmen zwischen `index.html` und `sw.js` überein (`style.css?v=145`, `script.min.js?v=221`); `CACHE_VERSION` wurde erhöht. Die in §3 dokumentierten Test-, PHPStan- und Versionsprüfungen wurden in dieser Review-Runde nicht erneut ausgeführt.
+
 ## 6. Lernpunkte
+
+**Gesamtlauf (Leitstand, nach Runde 2):** SQLite 255 Tests / 1766 Assertions OK, PHPStan ohne Fehler, `check-versions --strict` OK.
+PostgreSQL ausstehend (Docker-Dienst nicht erreichbar). Rote Tests in §4 sind Vor-Fix-Stände (Runde 0/2); Endstand grün.
+
+Neu in `erkenntnisse.md`: E-035, E-072.
