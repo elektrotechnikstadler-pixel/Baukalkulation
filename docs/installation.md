@@ -305,19 +305,53 @@ docker cp baukalkulation-KÜRZEL-app:/var/www/html/data ./backup_data_$(date +%Y
 docker cp baukalkulation-KÜRZEL-app:/var/www/html/data/uploads ./backup_uploads_$(date +%Y%m%d)
 ```
 
-### Update einspielen
+### Aktualisieren
+
+**Update-Fenster:** Verwaltung → „Update & Systeminfo“ (nur Administratoren) zeigt Version,
+Schema-Stand, Datenbank, PHP, letzte Sicherung, Lizenz und Module. „Auf Updates prüfen“ fragt die
+neueste Release-Version auf GitHub ab und zeigt bei einem Update Datum, Änderungen und die
+passenden Befehle. Ohne Klick findet kein Abruf statt.
+
+Update-Quelle einmalig in der `.env` eintragen (Format `owner/name`, nur über `.env` änderbar)
+und den Container neu starten:
+
+```env
+BK_UPDATE_REPO=owner/baukalkulation
+```
+
+Fehlt der Wert oder ist er ungültig, zeigt das Fenster einen Einrichtungshinweis. Dasselbe per
+Kommandozeile: `docker compose exec -u www-data app php bin/console app:info` und
+`docker compose exec -u www-data app php bin/console app:check-update`
+(Exit 0 aktuell, 2 Update verfügbar, 1 Fehler/nicht eingerichtet). Befehle im Container immer
+als `www-data` ausführen (`-u www-data`), sonst entstehen in `data/` Dateien, die der Webserver
+nicht mehr schreiben kann.
+
+Die Prüfung ist gedrosselt: Ein erfolgreiches Ergebnis gilt 6 Stunden, nach einem Fehlschlag
+wird frühestens nach 30 Minuten erneut abgefragt.
+
+Ablauf eines Updates – **Build aus Quellen** (Standard, `docker-compose.yml` mit `build:`):
 
 ```bash
 cd /opt/baukalkulation/
 
-# Neue Dateien kopieren (NICHT den data/ Ordner überschreiben!)
-# Dann:
-docker-compose up -d --build
+# 1. Immer vorher sichern
+docker compose exec -u www-data app php bin/console backup:create --name="vor-update"
+
+# 2. Neue Quellen holen (git-Checkout) – alternativ Release-Dateien kopieren,
+#    dabei den data/ Ordner und die .env NICHT überschreiben
+git pull
+
+# 3. Image neu bauen und Container ersetzen
+docker compose up -d --build
 ```
+
+`docker compose pull` allein aktualisiert die App nicht (es holt nur Fremd-Images wie PostgreSQL),
+da `app` aus den lokalen Quellen gebaut wird.
 
 Beim Start migriert der Container das Schema automatisch (`bin/console db:migrate`). Schlägt die
 Migration fehl oder ist die Datenbank neuer als die App (Downgrade), startet der Container nicht –
-die Meldung steht in `docker logs`.
+die Meldung steht in `docker logs`. Zurück auf den alten Stand: alte Dateien einspielen und die
+vor dem Update angelegte Sicherung (z. B. `vor-update…`) mit `bin/console backup:import` wiederherstellen.
 
 ### Datenbank: SQLite oder PostgreSQL
 

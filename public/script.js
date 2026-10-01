@@ -304,6 +304,8 @@ async function init() {
         if (btn2) btn2.style.display = '';
         const btn3 = document.getElementById('btnAllgemein');
         if (btn3) btn3.style.display = '';
+        const btn4 = document.getElementById('btnUpdate');
+        if (btn4) btn4.style.display = '';
       }
       // Offenes Material Button (konfigurierbar über Berechtigungen)
       if (canDo('canSeeOffenesMaterial')) {
@@ -22842,6 +22844,172 @@ async function saveStoragePaths() {
     }
   } catch (e) {
     showNotification('Netzwerkfehler: ' + e.message, 'error');
+  }
+}
+
+// ── Update & Systeminfo (nur admin) ──────────────────────────
+let _updateBetriebsart = 'docker';
+
+async function openUpdateModal() {
+  document.getElementById('updateOverlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'kunde-form-overlay';
+  overlay.id = 'updateOverlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `<div class="kunde-form-card" style="max-width:750px;">
+    <h3>Update &amp; Systeminfo</h3>
+    <div id="updSysInfo" style="font-size:.88rem">Lade Systeminfo…</div>
+    <h4 style="margin-top:16px">Update</h4>
+    <div id="updStatus" style="font-size:.88rem">Lade Update-Stand…</div>
+    <div id="updInstallBereich" style="display:none"></div>
+    <div class="kunde-form-actions" style="margin-top:16px;">
+      <button class="btn btn-primary btn-sm" id="updCheckBtn" onclick="checkForUpdates()">Auf Updates prüfen</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('updateOverlay')?.remove()">Schließen</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  try {
+    const r = await fetch('api.php?action=system_info');
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Systeminfo nicht verfügbar');
+    _updateBetriebsart = j.info?.betriebsart === 'klassisch' ? 'klassisch' : 'docker';
+    renderSystemInfo(j.info || {});
+  } catch (e) {
+    const el = document.getElementById('updSysInfo');
+    if (el) el.textContent = 'Fehler: ' + e.message;
+  }
+  try {
+    const r = await fetch('api.php?action=update_check');
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Update-Stand nicht verfügbar');
+    renderUpdateStatus(j.update || {});
+  } catch (e) {
+    const el = document.getElementById('updStatus');
+    if (el) el.textContent = 'Fehler: ' + e.message;
+  }
+}
+
+function renderSystemInfo(info) {
+  const el = document.getElementById('updSysInfo');
+  if (!el) return;
+  const s = info.schema || {};
+  const php = info.php || {};
+  const ext = Object.entries(php.extensions || {})
+    .map(([name, ok]) => esc(name) + ' ' + (ok ? '✓' : '✗')).join(', ');
+  const sich = info.letzte_sicherung;
+  const sichText = sich ? String(sich.name) + ' (' + fmtUpdateDatum(sich.zeit) + ')' : 'keine';
+  const dv = info.datenverzeichnis || {};
+  const dvText = (dv.begrenzt ? '> ' : '') + String(dv.dateien ?? 0) + ' Dateien, '
+    + (Number(dv.bytes || 0) / 1048576).toFixed(1) + ' MB';
+  const liz = info.lizenz || {};
+  const lizText = String(liz.tier || '–') + (liz.expires ? ' (bis ' + String(liz.expires) + ')' : '');
+  const module = (info.module || []).map(m => esc(m.title || m.name) + ' ' + esc(m.version)).join(', ') || '–';
+  const zeilen = [
+    ['App-Version', esc(info.version || '–')],
+    ['Datenbankschema', esc(String(s.aktuell ?? '–')) + ' / neueste ' + esc(String(s.neueste ?? '–'))
+      + (Number(s.offen) > 0 ? ' – ' + esc(String(s.offen)) + ' offen' : '')],
+    ['DB-Treiber', esc(info.db_treiber || '–')],
+    ['PHP', esc(php.version || '–')],
+    ['Extensions', ext || '–'],
+    ['Betriebsart', esc(info.betriebsart === 'docker' ? 'Docker' : 'klassisch')],
+    ['Letzte Sicherung', esc(sichText)],
+    ['Datenverzeichnis', esc(dvText)],
+    ['Lizenz', esc(lizText)],
+    ['Module', module],
+  ];
+  el.innerHTML = '<table class="table" style="width:100%"><tbody>'
+    + zeilen.map(([k, v]) => `<tr><th style="text-align:left;width:35%">${esc(k)}</th><td>${v}</td></tr>`).join('')
+    + '</tbody></table>';
+}
+
+function fmtUpdateDatum(wert) {
+  const d = new Date(wert);
+  return isNaN(d) ? String(wert || '–') : d.toLocaleString('de-DE');
+}
+
+function updateBefehle(version) {
+  const name = 'vor-update-' + (version || 'neu');
+  if (_updateBetriebsart === 'klassisch') {
+    return 'php bin/console backup:create --name="' + name + '"\n'
+      + '# neue Dateien einspielen (data/ nicht überschreiben)\n'
+      + 'php bin/console db:migrate';
+  }
+  return 'docker compose exec -u www-data app php bin/console backup:create --name="' + name + '"\n'
+    + 'git pull   # bzw. neue Release-Dateien kopieren, data/ und .env nicht überschreiben\n'
+    + 'docker compose up -d --build';
+}
+
+function renderUpdateStatus(u) {
+  const el = document.getElementById('updStatus');
+  if (!el) return;
+  el.textContent = '';
+  const zeile = (text, stil) => {
+    const p = document.createElement('div');
+    p.textContent = text;
+    if (stil) p.style.cssText = stil;
+    el.appendChild(p);
+    return p;
+  };
+  const pre = text => {
+    const p = document.createElement('pre');
+    p.textContent = text;
+    p.style.cssText = 'white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--grey-100);padding:8px;border-radius:4px;font-size:.8rem';
+    el.appendChild(p);
+  };
+  zeile('Installierte Version: ' + String(u.aktuelle_version || '–'));
+  switch (u.status) {
+    case 'update_verfuegbar':
+      zeile('Update verfügbar: ' + String(u.neueste_version)
+        + (u.veroeffentlicht ? ' (veröffentlicht ' + String(u.veroeffentlicht) + ')' : ''), 'font-weight:600;color:var(--warning,#b45309)');
+      if (u.notes) { zeile('Änderungen:'); pre(String(u.notes)); }
+      if (typeof u.link === 'string' && u.link.startsWith('https://github.com/')) {
+        const a = document.createElement('a');
+        a.href = u.link;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'Release auf GitHub öffnen';
+        el.appendChild(a);
+      }
+      zeile('Aktualisieren (' + (_updateBetriebsart === 'docker' ? 'Docker' : 'klassisch') + '):', 'margin-top:8px');
+      pre(updateBefehle(u.neueste_version));
+      break;
+    case 'aktuell':
+      zeile('Die Software ist aktuell' + (u.neueste_version ? ' (neueste Version ' + String(u.neueste_version) + ')' : '') + '.', 'color:var(--success,#15803d)');
+      break;
+    case 'nicht_konfiguriert':
+      zeile(String(u.meldung || 'Update-Quelle nicht eingerichtet: BK_UPDATE_REPO=owner/name in .env setzen und Container neu starten.'));
+      break;
+    case 'keine_releases':
+      zeile(String(u.meldung || 'Noch keine stabile Version veröffentlicht.'));
+      break;
+    case 'ungeprueft':
+      zeile('Noch nicht geprüft – „Auf Updates prüfen“ klicken.');
+      break;
+    default:
+      zeile(String(u.meldung || 'Update-Prüfung nicht möglich.'), 'color:var(--danger,#b91c1c)');
+  }
+  if (u.geprueft) zeile('Zuletzt geprüft: ' + fmtUpdateDatum(u.geprueft), 'font-size:.8rem;color:var(--grey-500);margin-top:6px');
+  const btn = document.getElementById('updCheckBtn');
+  if (btn) btn.style.display = u.status === 'nicht_konfiguriert' ? 'none' : '';
+}
+
+async function checkForUpdates() {
+  const btn = document.getElementById('updCheckBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('api.php?action=update_check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Prüfung nicht möglich');
+    renderUpdateStatus(j.update || {});
+  } catch (e) {
+    showNotification('Fehler: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

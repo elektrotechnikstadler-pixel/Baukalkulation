@@ -378,6 +378,8 @@ $routes = [
     'save_storage_paths'           => ['App\\Handlers\\AdminActions',          'saveStoragePaths'],
     'browse_directory'             => ['App\\Handlers\\AdminActions',          'browseDirectory'],
     'download_audit_log'           => ['App\\Handlers\\AdminActions',          'downloadAuditLog'],
+    'system_info'                  => ['App\\Handlers\\AdminActions',          'systemInfo'],
+    'update_check'                 => ['App\\Handlers\\AdminActions',          'updateCheck'],
 
     // Erinnerungen
     'erinnerung_log'               => ['App\\Handlers\\AdminActions',          'erinnerungLog'],

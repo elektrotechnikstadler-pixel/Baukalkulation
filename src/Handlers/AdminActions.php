@@ -5,6 +5,8 @@ use App\Auth;
 use App\Database;
 use App\Services\AuditService;
 use App\Services\FirmenLogo;
+use App\Services\SystemInfo;
+use App\Services\UpdatePruefung;
 
 class AdminActions
 {
@@ -410,5 +412,25 @@ class AdminActions
         $this->db->prepare("INSERT INTO erinnerung_settings (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data")
                   ->execute([$json]);
         jsonOut(['ok' => true]);
+    }
+
+    // ── Update & Systeminfo ──────────────────────────────────
+    public function systemInfo(): void
+    {
+        Auth::requireRole('admin');
+        jsonOut(['ok' => true, 'info' => (new SystemInfo($this->db, DATA_DIR, BACKUP_DIR))->sammeln()]);
+    }
+
+    public function updateCheck(): void
+    {
+        Auth::requireRole('admin');
+        $force = !empty($_GET['force'] ?? $this->body['force'] ?? null);
+        $istPost = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
+        if ($force && !$istPost) {
+            jsonOut(['error' => 'Erzwungene Prüfung nur per POST.'], 405);
+        }
+        $pruefung = UpdatePruefung::ausUmgebung(DATA_DIR . 'update_check.json');
+        // GET liefert nur den gecachten Stand, damit ein Seitenaufruf keinen Abruf auslöst.
+        jsonOut(['ok' => true, 'update' => $istPost ? $pruefung->pruefen($force) : $pruefung->gecachterStand()]);
     }
 }

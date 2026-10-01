@@ -22,6 +22,13 @@
 
 ## Unveröffentlicht
 
+### Neu
+- **Update & Systeminfo** (Verwaltung, nur Administratoren): zeigt Version, Schema-Stand,
+  DB-Treiber, PHP und Extensions, Betriebsart, letzte Sicherung, Lizenz und Module.
+  „Auf Updates prüfen“ fragt die neueste Release-Version ab (Quelle `BK_UPDATE_REPO` in `.env`,
+  gedrosselt) und zeigt Datum, Änderungen und die Befehle zum Aktualisieren.
+- `bin/console app:info` und `app:check-update` (Exit 0 aktuell, 2 Update verfügbar, 1 Fehler).
+
 ---
 
 ## v3.0.1 – PostgreSQL, Migrationen, Sicherheit, Kupferpreis, Datanorm-Umlaute, Projektansicht

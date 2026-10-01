@@ -101,6 +101,7 @@
             <button class="header-dd-item" id="btnUserMgmt" onclick="openUserModal();closeAllDropdowns()" data-ico="users" style="display:none">Benutzerverwaltung</button>
             <button class="header-dd-item" id="btnStoragePaths" onclick="showStoragePaths();closeAllDropdowns()" data-ico="folder" style="display:none">Speicherpfade</button>
             <button class="header-dd-item" id="btnAllgemein" onclick="showAllgemeinSettings();closeAllDropdowns()" data-ico="settings" style="display:none">Allgemein</button>
+            <button class="header-dd-item" id="btnUpdate" onclick="openUpdateModal();closeAllDropdowns()" data-ico="download" style="display:none">Update &amp; Systeminfo</button>
             <button class="header-dd-item" id="btnSchnellnotizen" onclick="showSchnellnotizen();closeAllDropdowns()" data-ico="clipboard" style="display:none">Schnellnotizen</button>
             <button class="header-dd-item" onclick="toggleTheme();closeAllDropdowns()" id="btnThemeToggle">🌙 Dark Mode</button>
             <div class="header-dd-divider"></div>
@@ -1008,7 +1009,7 @@
   <!-- Lokal gehostet (kein CDN), damit Diagramme & Excel-Export auch ohne Internetzugang funktionieren -->
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/chart.umd.min.js"></script>
-  <script src="script.min.js?v=221"></script>
+  <script src="script.min.js?v=224"></script>
   <!-- Phase 5: ES-Modul-Bootstrap (Companion-Modus, läuft parallel zu script.js) -->
   <!-- ROLLBACK: diese Zeile entfernen → vollständiger Rollback auf v2.9.8 -->
   <script type="module" src="dist/core.js?v=100"></script>

@@ -17,11 +17,12 @@ final class ApiClient
         return $this->request('GET', $action, $query);
     }
 
-    public function post(string $action, array $body = [], array $query = []): ApiResponse
+    /** @param list<string> $headers zusätzliche Kopfzeilen, z. B. `Origin: …` */
+    public function post(string $action, array $body = [], array $query = [], array $headers = []): ApiResponse
     {
         return $this->request('POST', $action, $query, [
             CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
-        ], ['Content-Type: application/json']);
+        ], ['Content-Type: application/json', ...$headers]);
     }
 
     /** JSON-Body unverändert senden (z. B. `1e999`, das json_encode nicht erzeugen kann). */

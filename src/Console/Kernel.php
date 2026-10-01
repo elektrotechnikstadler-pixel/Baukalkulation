@@ -1,6 +1,8 @@
 <?php
 namespace App\Console;
 
+use App\Console\Command\AppCheckUpdateCommand;
+use App\Console\Command\AppInfoCommand;
 use App\Console\Command\BackupCreateCommand;
 use App\Console\Command\BackupImportCommand;
 use App\Console\Command\DbMigrateCommand;
@@ -21,6 +23,8 @@ final class Kernel extends Application
             new BackupCreateCommand(),
             new BackupImportCommand(),
             new UserResetPasswordCommand(),
+            new AppInfoCommand(),
+            new AppCheckUpdateCommand(),
         ]);
     }
 
