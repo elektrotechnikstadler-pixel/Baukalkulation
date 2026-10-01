@@ -14,10 +14,17 @@
   Optional wie SMTP-Passwort per `SecretBox` verschlüsseln. (Stand 2026-09-26)
 - **Backup-Mail ohne ZIP-Passwort:** wird derzeit unverschlüsselt (mit Warnung im Log) versendet.
   Offen, ob der Versand ohne Passwort blockiert werden soll. (Stand 2026-09-26)
+- **Aufmaß-Import aus Magicplan (CSV/XLSX):** geplant und freigegeben (Parser für den Magicplan-„Statistiken“-Export,
+  generischer Tabellen-Import, danach Schreinerei-Vorlagen), Umsetzung vorerst zurückgestellt.
+  Plan: `.github/ki/arbeitspakete/AP-20260929-aufmass-import.md`. (Stand 2026-10-01)
 
 ---
 
 ## Unveröffentlicht
+
+---
+
+## v3.0.1 – PostgreSQL, Migrationen, Sicherheit, Kupferpreis, Datanorm-Umlaute, Projektansicht
 
 ### Neu – PostgreSQL (Phase 3)
 - **Wahlweise PostgreSQL statt SQLite** (`BK_DB_DRIVER=pgsql`, Zugang über `BK_DB_*`,
