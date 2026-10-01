@@ -22,6 +22,10 @@
 
 ## Unveröffentlicht
 
+---
+
+## v3.0.2 – Update & Systeminfo
+
 ### Neu
 - **Update & Systeminfo** (Verwaltung, nur Administratoren): zeigt Version, Schema-Stand,
   DB-Treiber, PHP und Extensions, Betriebsart, letzte Sicherung, Lizenz und Module.
