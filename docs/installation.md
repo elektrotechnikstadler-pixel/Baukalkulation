@@ -328,8 +328,8 @@ Kommandozeile: `docker compose exec -u www-data app php bin/console app:info` un
 als `www-data` ausführen (`-u www-data`), sonst entstehen in `data/` Dateien, die der Webserver
 nicht mehr schreiben kann.
 
-Die Prüfung ist gedrosselt: Ein erfolgreiches Ergebnis gilt 6 Stunden, nach einem Fehlschlag
-wird frühestens nach 30 Minuten erneut abgefragt.
+Die Prüfung ist gedrosselt: Ein erfolgreiches Ergebnis gilt 6 Stunden („Auf Updates prüfen“ im
+Update-Fenster: 5 Minuten), nach einem Fehlschlag wird frühestens nach 30 Minuten erneut abgefragt.
 
 #### Automatisches Update (Updater, nur Linux-Docker-Hosts)
 

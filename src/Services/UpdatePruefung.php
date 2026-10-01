@@ -18,6 +18,7 @@ final class UpdatePruefung
     public const NOTES_MAX = 2000;
 
     private const ERFOLG_GUELTIG_SEK = 6 * 3600;
+    private const MANUELL_GUELTIG_SEK = 5 * 60;
     private const FEHLSCHLAG_PAUSE_SEK = 30 * 60;
     private const TIMEOUT_SEK = 5;
 
@@ -64,12 +65,14 @@ final class UpdatePruefung
     }
 
     /**
+     * `$manuell` (Knopf „Auf Updates prüfen“): Erfolgs-Cache gilt nur 5 Minuten statt 6 Stunden.
+     *
      * @return array{status: string, aktuelle_version: string, neueste_version: ?string, veroeffentlicht: ?string,
      *               notes: ?string, link: ?string, geprueft: ?string, meldung: ?string}
      */
-    public function pruefen(bool $force = false): array
+    public function pruefen(bool $force = false, bool $manuell = false): array
     {
-        return $this->ergebnis(false, $force);
+        return $this->ergebnis(false, $force, $manuell);
     }
 
     /**
@@ -87,7 +90,7 @@ final class UpdatePruefung
      * @return array{status: string, aktuelle_version: string, neueste_version: ?string, veroeffentlicht: ?string,
      *               notes: ?string, link: ?string, geprueft: ?string, meldung: ?string}
      */
-    private function ergebnis(bool $nurCache, bool $force): array
+    private function ergebnis(bool $nurCache, bool $force, bool $manuell = false): array
     {
         $ergebnis = [
             'status'           => 'nicht_konfiguriert',
@@ -111,7 +114,7 @@ final class UpdatePruefung
                 return $ergebnis;
             }
         } else {
-            $daten = $this->releases($force);
+            $daten = $this->releases($force, $manuell);
         }
         if ($daten === null) {
             $ergebnis['status'] = 'fehler';
@@ -141,14 +144,15 @@ final class UpdatePruefung
      *
      * @return array{geprueft: string, releases: list<array{version: string, veroeffentlicht: ?string, notes: ?string, link: ?string}>}|null
      */
-    private function releases(bool $force): ?array
+    private function releases(bool $force, bool $manuell = false): ?array
     {
         if (!$this->repoGueltig()) {
             return null;
         }
         $cache = $this->cacheLesen();
+        $gueltigSek = $manuell ? self::MANUELL_GUELTIG_SEK : self::ERFOLG_GUELTIG_SEK;
         if (!$force && $cache !== null) {
-            if ($cache['erfolg'] !== null && $this->sekundenSeit($cache['erfolg']['geprueft']) < self::ERFOLG_GUELTIG_SEK) {
+            if ($cache['erfolg'] !== null && $this->sekundenSeit($cache['erfolg']['geprueft']) < $gueltigSek) {
                 return $cache['erfolg'];
             }
             if ($cache['fehlschlag'] !== null && $this->sekundenSeit($cache['fehlschlag']) < self::FEHLSCHLAG_PAUSE_SEK) {

@@ -432,7 +432,7 @@ class AdminActions
         }
         $pruefung = UpdatePruefung::ausUmgebung(DATA_DIR . 'update_check.json');
         // GET liefert nur den gecachten Stand, damit ein Seitenaufruf keinen Abruf auslöst.
-        jsonOut(['ok' => true, 'update' => $istPost ? $pruefung->pruefen($force) : $pruefung->gecachterStand()]);
+        jsonOut(['ok' => true, 'update' => $istPost ? $pruefung->pruefen($force, manuell: true) : $pruefung->gecachterStand()]);
     }
 
     public function updateStart(): void

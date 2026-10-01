@@ -235,6 +235,25 @@ final class UpdatePruefungTest extends TestCase
         $this->assertCount(2, $this->abgerufeneUrls);
     }
 
+    public function testManuellePruefungNutztCacheFuenfMinuten(): void
+    {
+        $this->pruefung()->pruefen(false);
+        $this->pruefung(jetzt: '+4 minutes')->pruefen(false, manuell: true);
+        $this->assertCount(1, $this->abgerufeneUrls);
+
+        $ergebnis = $this->pruefung(jetzt: '+5 minutes', aktuell: '3.0.1')->pruefen(false, manuell: true);
+        $this->assertCount(2, $this->abgerufeneUrls, 'Neues Release muss per Knopf nach 5 Minuten sichtbar sein');
+        $this->assertSame('update_verfuegbar', $ergebnis['status']);
+    }
+
+    public function testManuellePruefungBeachtetFehlschlagSperre(): void
+    {
+        $this->pruefung(antwort: null)->pruefen(false);
+        $this->pruefung(jetzt: '+10 minutes')->pruefen(false, manuell: true);
+
+        $this->assertCount(1, $this->abgerufeneUrls);
+    }
+
     public function testFehlschlagWirdDreissigMinutenGedrosselt(): void
     {
         $this->pruefung(antwort: null)->pruefen(false);
