@@ -2,7 +2,7 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | zurückgestellt (Nutzer 2026-10-01; offen im CHANGELOG) |
 | Typ | Modul |
 | Testläufe rot | 0 |
 | Review-Runden | 0 |
