@@ -147,6 +147,28 @@ if [ "$ENABLE_WHATSAPP" = "true" ]; then
     fi
 fi
 
+echo ""
+echo "── Update ─────────────────────────────────────────────"
+echo "GitHub-Repository für Release-Prüfung und Update (owner/name), leer = aus."
+while :; do
+    BK_UPDATE_REPO="$(ask 'Update-Repository' "${BK_UPDATE_REPO:-}" | tr '[:upper:]' '[:lower:]')"
+    [ -z "$BK_UPDATE_REPO" ] && break
+    case $BK_UPDATE_REPO in *..*) ;; *)
+        echo "$BK_UPDATE_REPO" | grep -Eq '^[a-z0-9-]+/[a-z0-9_-][a-z0-9._-]*$' && break ;;
+    esac
+    echo "Format: owner/name (Buchstaben, Ziffern, '-', '_', '.')."
+done
+
+# Tag nie unter einen bereits vom Updater gesetzten neueren Stand senken.
+OLD_IMAGE_TAG="${APP_IMAGE_TAG:-}"
+APP_IMAGE_TAG="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")"
+if echo "$OLD_IMAGE_TAG" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    APP_IMAGE_TAG="$(printf '%s\n%s\n' "$APP_IMAGE_TAG" "$OLD_IMAGE_TAG" | sort -V | tail -n 1)"
+fi
+APP_IMAGE_VARIANT=""
+[ "$ENABLE_OCR" = "true" ] || APP_IMAGE_VARIANT="-noocr"
+BK_COMPOSE_DIR="$SCRIPT_DIR"
+
 # ── Kollisionen mit anderen Instanzen prüfen ──────────────────
 # Gleicher Projektname in zwei Ordnern: jeder Build übernimmt/erzeugt die Container der
 # anderen Instanz neu (ggf. mit falschem Datenordner).
@@ -192,6 +214,10 @@ set_env ENABLE_OCR "$ENABLE_OCR"
 set_env ENABLE_WHATSAPP "$ENABLE_WHATSAPP"
 set_env WA_API_TOKEN "$WA_API_TOKEN"
 set_env USE_BIND_MOUNT "$USE_BIND_MOUNT"
+set_env BK_COMPOSE_DIR "$BK_COMPOSE_DIR"
+set_env BK_UPDATE_REPO "$BK_UPDATE_REPO"
+set_env APP_IMAGE_TAG "$APP_IMAGE_TAG"
+set_env APP_IMAGE_VARIANT "$APP_IMAGE_VARIANT"
 
 echo ""
 echo "── Zusammenfassung ───────────────────────────────────"
@@ -202,6 +228,8 @@ echo "  App-Port:         $APP_PORT"
 echo "  OCR:              $ENABLE_OCR"
 echo "  WhatsApp:         $ENABLE_WHATSAPP"
 [ "$ENABLE_WHATSAPP" = "true" ] && echo "  WhatsApp-Port:    $WA_PORT"
+echo "  Update-Repo:      ${BK_UPDATE_REPO:-(aus)}"
+echo "  App-Image-Tag:    $APP_IMAGE_TAG$APP_IMAGE_VARIANT"
 echo "  .env geschrieben: $ENV_FILE"
 echo ""
 

@@ -40,6 +40,8 @@ $defaults = @{
     ENABLE_OCR           = 'false'
     ENABLE_WHATSAPP      = 'false'
     WA_API_TOKEN         = ''
+    BK_UPDATE_REPO       = ''
+    APP_IMAGE_TAG        = ''
 }
 
 if (Test-Path $envFile) {
@@ -112,6 +114,23 @@ if ($ENABLE_WHATSAPP -eq 'true') {
     $WA_API_TOKEN = Read-WithDefault 'WhatsApp-API-Token' $WA_API_TOKEN
 }
 
+Write-Host ''
+Write-Host '-- Update ---------------------------------------------'
+Write-Host 'GitHub-Repository fuer Release-Pruefung und Update (owner/name), leer = aus.'
+do {
+    $BK_UPDATE_REPO = (Read-WithDefault 'Update-Repository' $defaults.BK_UPDATE_REPO).Trim().ToLower()
+    $repoOk = (-not $BK_UPDATE_REPO) -or ($BK_UPDATE_REPO -cmatch '^[a-z0-9-]+/[a-z0-9_-][a-z0-9._-]*$' -and -not $BK_UPDATE_REPO.Contains('..'))
+    if (-not $repoOk) { Write-Host "Format: owner/name (Buchstaben, Ziffern, '-', '_', '.')." }
+} until ($repoOk)
+
+# Tag nie unter einen bereits vom Updater gesetzten neueren Stand senken.
+$APP_IMAGE_TAG = (Get-Content (Join-Path $PSScriptRoot 'VERSION') -Raw).Trim()
+if ($defaults.APP_IMAGE_TAG -match '^\d+\.\d+\.\d+$' -and $APP_IMAGE_TAG -match '^\d+\.\d+\.\d+$' -and [version]$defaults.APP_IMAGE_TAG -gt [version]$APP_IMAGE_TAG) {
+    $APP_IMAGE_TAG = $defaults.APP_IMAGE_TAG
+}
+$APP_IMAGE_VARIANT = if ($ENABLE_OCR -eq 'true') { '' } else { '-noocr' }
+$BK_COMPOSE_DIR = $PSScriptRoot
+
 # ── .env schreiben (übrige Einträge wie BK_*-Variablen bleiben erhalten) ──
 $values = [ordered]@{
     COMPOSE_PROJECT_NAME = $COMPOSE_PROJECT_NAME
@@ -123,6 +142,10 @@ $values = [ordered]@{
     ENABLE_OCR           = $ENABLE_OCR
     ENABLE_WHATSAPP      = $ENABLE_WHATSAPP
     WA_API_TOKEN         = $WA_API_TOKEN
+    BK_COMPOSE_DIR       = $BK_COMPOSE_DIR
+    BK_UPDATE_REPO       = $BK_UPDATE_REPO
+    APP_IMAGE_TAG        = $APP_IMAGE_TAG
+    APP_IMAGE_VARIANT    = $APP_IMAGE_VARIANT
 }
 $lines = if (Test-Path $envFile) { @(Get-Content $envFile) } elseif (Test-Path (Join-Path $PSScriptRoot '.env.example')) { @(Get-Content (Join-Path $PSScriptRoot '.env.example')) } else { @() }
 $seen = @{}
@@ -144,6 +167,8 @@ Write-Host "  App-Port:         $APP_PORT"
 Write-Host "  OCR:              $ENABLE_OCR"
 Write-Host "  WhatsApp:         $ENABLE_WHATSAPP"
 if ($ENABLE_WHATSAPP -eq 'true') { Write-Host "  WhatsApp-Port:    $WA_PORT" }
+Write-Host "  Update-Repo:      $(if ($BK_UPDATE_REPO) { $BK_UPDATE_REPO } else { '(aus)' })"
+Write-Host "  App-Image-Tag:    $APP_IMAGE_TAG$APP_IMAGE_VARIANT"
 Write-Host "  .env geschrieben: $envFile"
 Write-Host ''
 

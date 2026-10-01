@@ -329,7 +329,81 @@ nicht mehr schreiben kann.
 Die Prüfung ist gedrosselt: Ein erfolgreiches Ergebnis gilt 6 Stunden, nach einem Fehlschlag
 wird frühestens nach 30 Minuten erneut abgefragt.
 
-Ablauf eines Updates – **Build aus Quellen** (Standard, `docker-compose.yml` mit `build:`):
+#### Automatisches Update (Updater, nur Linux-Docker-Hosts)
+
+Mit `docker-compose.yml` läuft neben der App der Dienst `updater`. Er hat als einziger Zugriff
+auf den Docker-Socket (die App nicht) und nimmt aus dem Update-Fenster nur eine Versionsnummer
+entgegen. Ist er aktiv und eine neuere Release-Version verfügbar, zeigt das Fenster
+„Zielversion“ und „Update starten“. Nicht unterstützt: Windows/Docker Desktop (Pfad mit
+Laufwerksbuchstaben), `docker-compose.minimal.yml` (ohne Updater) und klassischer Betrieb – dort
+zeigt das Fenster einen Hinweis und die manuelle Anleitung.
+
+Einrichtung in der `.env` (legt `install.sh` an; danach `docker compose up -d`):
+
+```env
+# GitHub-Repository in Kleinbuchstaben (Docker-Image-Namen sind immer klein)
+BK_UPDATE_REPO=owner/baukalkulation
+# Installierte Version; pflegt der Updater selbst (vorher Kopie .env.bak-update)
+APP_IMAGE_TAG=3.0.2
+# Image-Variante passend zu ENABLE_OCR: leer = mit OCR, -noocr bei ENABLE_OCR=false
+APP_IMAGE_VARIANT=
+# Absoluter Pfad des Projektordners (Ordner mit docker-compose.yml und .env)
+BK_COMPOSE_DIR=/opt/baukalkulation
+```
+
+Voraussetzungen: Das Paket `ghcr.io/<owner>/<name>` muss auf GitHub **öffentlich** sein (der
+Updater meldet sich nicht an); Images werden nur für `linux/amd64` gebaut.
+`APP_IMAGE_VARIANT` muss zu `ENABLE_OCR` passen, sonst fehlt nach dem Update OCR bzw. das Image
+ist unnötig groß.
+
+Austauschverzeichnis `data/update/`: gehört `root` und wird nur vom Updater beschrieben (Status,
+Protokoll `update.log`, Wartungsmarker); die App legt ausschließlich `data/update/anforderung/request.json`
+ab. Anforderungen, die älter als 10 Minuten sind (z. B. weil der Updater gestoppt war), verwirft
+der Updater mit „Anforderung abgelaufen“.
+
+Ablauf nach „Update starten“ (Phasen im Fenster, Abfrage alle 3 Sekunden):
+
+1. **Prüfen** – Version muss eine veröffentlichte, stabile Release-Version und neuer als die installierte sein.
+2. **Laden** – `docker pull` des Ziel-Images; die App läuft unverändert weiter.
+3. **Sichern** – Wartungsmodus an (Speichern für alle Benutzer gesperrt, Meldung „Wartung – Update
+   läuft“, Lesen bleibt möglich), Sicherung `JJJJ-MM-TT_HH-MM_pre-update-<version>` in
+   `data/backups/` (Punkte als `-`, z. B. `pre-update-3-0-2`). Scheitert sie, bricht das Update ab
+   und die alte Version läuft weiter.
+4. **Ersetzen** – `APP_IMAGE_TAG` in `.env` setzen, App-Container neu erzeugen (kurz nicht erreichbar).
+5. **Gesundheitsprüfung** – Container gesund und gemeldete Version = Zielversion (inkl. Migration,
+   bis 7 Minuten). Danach Wartungsmodus aus, das Fenster lädt die Seite neu. Da die Anmeldung beim
+   Container-Tausch verloren geht, verfolgt das Fenster ab dann die Version über den anonymen
+   Statusaufruf und lädt bei Erreichen der Zielversion neu (danach neu anmelden).
+
+**Rückfall:** Startet die neue Version nicht, stellt der Updater `.env` wieder her und startet die
+bisherige Version (Status „Rückfall“). Gelingt auch das nicht – typisch, wenn die neue Version das
+Schema bereits migriert hat –, endet der Lauf mit Status **„Manuelles Eingreifen nötig“**. Der
+Updater hat `.env` dann bereits auf den bisherigen `APP_IMAGE_TAG` zurückgesetzt; Ursache in
+`data/update/update.log` bzw. `docker logs baukalkulation-es-updater` und `docker logs` der App
+prüfen. Die vor dem Tausch angelegte Sicherung einspielen, sobald ein App-Container läuft:
+
+```bash
+cd /opt/baukalkulation/
+docker compose up -d
+docker compose exec -u www-data app php bin/console backup:import \
+    /var/www/html/data/backups/JJJJ-MM-TT_HH-MM_pre-update-3-0-2 --mode=replace
+```
+
+Bleibt der Container mit der bisherigen Version wegen des neueren Schemas aus, Hilfe holen bzw.
+das Update nach Fehlerbehebung wiederholen – die Sicherung `pre-update-…` bleibt erhalten.
+
+**Mehrere Instanzen auf einem Host:** je Instanz eigener Projektordner, eigenes `data/` und in der
+`.env` ein eindeutiger `UPDATER_NAME` (wie `APP_NAME`), z. B. `UPDATER_NAME=baukalkulation-kuerzel-updater`.
+Ein Update betrifft nur die eigene Instanz.
+
+**Trockenlauf:** `BK_UPDATER_DRY_RUN=1` in der `.env` und `docker compose up -d updater` – der
+Updater durchläuft und protokolliert alle Phasen, verändert aber nichts (kein Pull, keine
+Sicherung, kein `.env`-Schreiben, kein Neustart). Zum Abschalten wieder `0` setzen.
+
+#### Manuelles Update
+
+Ablauf eines Updates – **Build aus Quellen** (`docker-compose.yml` mit `build:`, funktioniert immer,
+auch ohne Updater):
 
 ```bash
 cd /opt/baukalkulation/
@@ -341,12 +415,20 @@ docker compose exec -u www-data app php bin/console backup:create --name="vor-up
 #    dabei den data/ Ordner und die .env NICHT überschreiben
 git pull
 
-# 3. Image neu bauen und Container ersetzen
+# 3. Nur wenn BK_UPDATE_REPO gesetzt ist: APP_IMAGE_TAG in .env auf die neue Version setzen
+#    (Inhalt der Datei VERSION, z. B. APP_IMAGE_TAG=3.0.2), sonst trägt der neue Build den alten Tag
+
+# 4. Image neu bauen und Container ersetzen
 docker compose up -d --build
 ```
 
-`docker compose pull` allein aktualisiert die App nicht (es holt nur Fremd-Images wie PostgreSQL),
-da `app` aus den lokalen Quellen gebaut wird.
+Ohne gesetzten `APP_IMAGE_TAG` würde ein lokaler Build unter dem bisherigen Release-Tag abgelegt;
+ein späteres `docker compose pull` holt dann das echte alte Release zurück (Downgrade, App startet
+wegen des neueren Schemas nicht). Ohne `BK_UPDATE_REPO` heißt das Image `<Projektname>-app:<APP_IMAGE_TAG>`
+(Compose-Projektname aus `-p`, `COMPOSE_PROJECT_NAME` oder Verzeichnisname; leerer Tag = `local`) und Schritt 3 entfällt.
+
+`docker compose pull` allein aktualisiert die App nicht (für `app` gilt der `APP_IMAGE_TAG` aus der
+`.env`; ohne `BK_UPDATE_REPO` meldet es für `app` nur eine Warnung, weil das Image lokal gebaut wird).
 
 Beim Start migriert der Container das Schema automatisch (`bin/console db:migrate`). Schlägt die
 Migration fehl oder ist die Datenbank neuer als die App (Downgrade), startet der Container nicht –

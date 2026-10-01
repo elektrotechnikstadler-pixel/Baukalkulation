@@ -6,6 +6,7 @@ use App\Database;
 use App\Services\AuditService;
 use App\Services\FirmenLogo;
 use App\Services\SystemInfo;
+use App\Services\UpdateAuftrag;
 use App\Services\UpdatePruefung;
 
 class AdminActions
@@ -432,5 +433,49 @@ class AdminActions
         $pruefung = UpdatePruefung::ausUmgebung(DATA_DIR . 'update_check.json');
         // GET liefert nur den gecachten Stand, damit ein Seitenaufruf keinen Abruf auslöst.
         jsonOut(['ok' => true, 'update' => $istPost ? $pruefung->pruefen($force) : $pruefung->gecachterStand()]);
+    }
+
+    public function updateStart(): void
+    {
+        Auth::requireRole('admin');
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            jsonOut(['error' => 'Update nur per POST.'], 405);
+        }
+        $version = $this->body['version'] ?? null;
+        if (!is_string($version)) {
+            jsonOut(['error' => 'Zielversion fehlt.'], 400);
+        }
+        $user = Database::fetchOne($this->db, 'SELECT id FROM users WHERE username = ?', [$_SESSION['username'] ?? '']);
+        try {
+            $antwort = $this->updateAuftrag()->anfordern($version, (int) ($user['id'] ?? 0));
+        } catch (\Throwable $e) {
+            error_log('[update_start] ' . $e->getMessage());
+            jsonOut(['error' => 'Update-Anforderung konnte nicht gespeichert werden.'], 500);
+        }
+        if (!$antwort['ok']) {
+            jsonOut(['error' => UpdateAuftrag::MELDUNGEN[$antwort['code']], 'code' => $antwort['code']], 400);
+        }
+        AuditService::log('update_start', 'Update auf Version ' . $version . ' angefordert (' . $antwort['id'] . ')');
+        jsonOut(['ok' => true, 'id' => $antwort['id']], 202);
+    }
+
+    public function updateStatus(): void
+    {
+        Auth::requireRole('admin');
+        $auftrag = $this->updateAuftrag();
+        jsonOut(['ok' => true, 'update' => $auftrag->status() + [
+            'updater_aktiv' => $auftrag->updaterAktiv(),
+            'zustand'       => $auftrag->zustand(),
+            'wartung'       => UpdateAuftrag::wartungAktiv(DATA_DIR . 'update', time()),
+        ]]);
+    }
+
+    private function updateAuftrag(): UpdateAuftrag
+    {
+        return new UpdateAuftrag(
+            DATA_DIR . 'update',
+            UpdatePruefung::ausUmgebung(DATA_DIR . 'update_check.json'),
+            static fn (): \DateTimeImmutable => new \DateTimeImmutable(),
+        );
     }
 }

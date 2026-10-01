@@ -10218,6 +10218,25 @@ function showToast(msg, type) {
   el.style.color = (type === 'error' || type === 'success') ? '#fff' : '';
 }
 
+// Wartungsmodus (Update läuft): 503 der API mit „Wartung“ als Hinweis anzeigen; Offline-503 des Service Workers bleibt unberührt.
+(function () {
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const r = await origFetch(...args);
+    if (r.status === 503) {
+      const url = String(args[0]?.url || args[0] || '');
+      if (url.includes('api.php')) {
+        r.clone().json().then(j => {
+          if (j && typeof j.error === 'string' && j.error.includes('Wartung')) {
+            showToast('Wartung – Update läuft. Änderungen sind kurz nicht möglich, bitte später erneut versuchen.', 'error');
+          }
+        }).catch(() => {});
+      }
+    }
+    return r;
+  };
+})();
+
 // ============================================================
 // BENUTZERVERWALTUNG (Admin) - erweitert mit Rollen & Sichtbarkeit
 // ============================================================
@@ -22849,13 +22868,30 @@ async function saveStoragePaths() {
 
 // ── Update & Systeminfo (nur admin) ──────────────────────────
 let _updateBetriebsart = 'docker';
+let _updateCheckStand = null;
+let _updateLaufStand = null;
+let _updatePollTimer = null;
+let _updatePollId = null;
+
+function stopUpdatePolling() {
+  if (_updatePollTimer) clearTimeout(_updatePollTimer);
+  _updatePollTimer = null;
+  _updatePollId = null;
+}
+
+function closeUpdateModal() {
+  stopUpdatePolling();
+  document.getElementById('updateOverlay')?.remove();
+}
 
 async function openUpdateModal() {
-  document.getElementById('updateOverlay')?.remove();
+  closeUpdateModal();
+  _updateCheckStand = null;
+  _updateLaufStand = null;
   const overlay = document.createElement('div');
   overlay.className = 'kunde-form-overlay';
   overlay.id = 'updateOverlay';
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = e => { if (e.target === overlay) closeUpdateModal(); };
   overlay.innerHTML = `<div class="kunde-form-card" style="max-width:750px;">
     <h3>Update &amp; Systeminfo</h3>
     <div id="updSysInfo" style="font-size:.88rem">Lade Systeminfo…</div>
@@ -22864,7 +22900,7 @@ async function openUpdateModal() {
     <div id="updInstallBereich" style="display:none"></div>
     <div class="kunde-form-actions" style="margin-top:16px;">
       <button class="btn btn-primary btn-sm" id="updCheckBtn" onclick="checkForUpdates()">Auf Updates prüfen</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('updateOverlay')?.remove()">Schließen</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeUpdateModal()">Schließen</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
@@ -22887,6 +22923,20 @@ async function openUpdateModal() {
   } catch (e) {
     const el = document.getElementById('updStatus');
     if (el) el.textContent = 'Fehler: ' + e.message;
+  }
+  try {
+    const r = await fetch('api.php?action=update_status');
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Update-Status nicht verfügbar');
+    _updateLaufStand = j.update || {};
+  } catch (e) {
+    _updateLaufStand = null;
+  }
+  const lauf = _updateLaufStand;
+  if (lauf && typeof lauf.id === 'string' && lauf.phase !== 'wartet' && !lauf.ergebnis) {
+    startUpdatePolling(lauf.id, lauf.version_ziel);
+  } else {
+    renderUpdateInstall();
   }
 }
 
@@ -22992,6 +23042,213 @@ function renderUpdateStatus(u) {
   if (u.geprueft) zeile('Zuletzt geprüft: ' + fmtUpdateDatum(u.geprueft), 'font-size:.8rem;color:var(--grey-500);margin-top:6px');
   const btn = document.getElementById('updCheckBtn');
   if (btn) btn.style.display = u.status === 'nicht_konfiguriert' ? 'none' : '';
+  _updateCheckStand = u;
+}
+
+function versionGroesser(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+function renderUpdateInstall() {
+  const el = document.getElementById('updInstallBereich');
+  if (!el || _updatePollId) return;
+  el.textContent = '';
+  const u = _updateCheckStand;
+  const lauf = _updateLaufStand;
+  const ziel = u && u.status === 'update_verfuegbar' && /^\d+\.\d+\.\d+$/.test(String(u.neueste_version || ''))
+    && versionGroesser(u.neueste_version, u.aktuelle_version) ? String(u.neueste_version) : null;
+  if (!ziel) { el.style.display = 'none'; return; }
+  el.style.cssText = 'margin-top:12px;padding:10px;border:1px solid var(--grey-200,#e5e7eb);border-radius:6px;font-size:.88rem';
+  const zeile = (text, stil) => {
+    const p = document.createElement('div');
+    p.textContent = text;
+    if (stil) p.style.cssText = stil;
+    el.appendChild(p);
+  };
+  if (lauf && lauf.ergebnis && typeof lauf.meldung === 'string') {
+    zeile('Letzter Update-Lauf: ' + lauf.meldung, 'font-size:.8rem;color:var(--grey-500);margin-bottom:6px');
+  }
+  if (!lauf || !lauf.updater_aktiv) {
+    zeile('Automatisches Update nicht verfügbar: Der Updater-Dienst läuft nicht (z. B. docker-compose.minimal.yml oder klassischer Betrieb). Bitte wie oben beschrieben manuell aktualisieren.');
+    return;
+  }
+  if (lauf.zustand !== 'bereit') {
+    zeile(lauf.zustand === 'nicht_unterstuetzt'
+      ? 'Automatisches Update auf diesem Host nicht unterstützt (nur Linux-Docker-Hosts). Bitte wie oben beschrieben manuell aktualisieren.'
+      : 'Updater nicht eingerichtet (BK_UPDATE_REPO in .env prüfen). Bitte wie oben beschrieben manuell aktualisieren.');
+    return;
+  }
+  zeile('Automatisches Update', 'font-weight:600;margin-bottom:6px');
+  const reihe = document.createElement('div');
+  reihe.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const label = document.createElement('label');
+  label.textContent = 'Zielversion:';
+  label.htmlFor = 'updZielVersion';
+  const sel = document.createElement('select');
+  sel.id = 'updZielVersion';
+  sel.className = 'form-control';
+  sel.style.width = 'auto';
+  const opt = document.createElement('option');
+  opt.value = ziel;
+  opt.textContent = ziel;
+  sel.appendChild(opt);
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary btn-sm';
+  btn.id = 'updStartBtn';
+  btn.textContent = 'Update starten';
+  btn.onclick = () => startUpdate();
+  reihe.append(label, sel, btn);
+  el.appendChild(reihe);
+}
+
+async function startUpdate() {
+  const sel = document.getElementById('updZielVersion');
+  const version = sel ? sel.value : '';
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return;
+  if (!confirm('Update auf Version ' + version + ' starten?\n\nVorher wird eine Sicherung erstellt. Die App ist während des Updates kurz nicht erreichbar; andere Benutzer können solange nichts speichern.')) return;
+  const btn = document.getElementById('updStartBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('api.php?action=update_start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok || typeof j.id !== 'string') throw new Error(j.error || 'Update konnte nicht gestartet werden');
+    startUpdatePolling(j.id, version);
+  } catch (e) {
+    showNotification('Fehler: ' + e.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+const UPDATE_PHASEN = {
+  wartet: 'Warte auf den Updater…',
+  pruefe: 'Anforderung wird geprüft…',
+  lade: 'Neue Version wird geladen…',
+  sichere: 'Sicherung wird erstellt…',
+  ersetze: 'App wird umgestellt (kurz nicht erreichbar)…',
+  pruefe_gesundheit: 'Neue Version startet…',
+  rueckfall: 'Rückfall auf die bisherige Version',
+  fertig: 'Update abgeschlossen',
+  fehlgeschlagen: 'Update fehlgeschlagen',
+  manuell: 'Manuelles Eingreifen nötig',
+};
+
+function startUpdatePolling(id, zielVersion) {
+  stopUpdatePolling();
+  _updatePollId = id;
+  const start = Date.now();
+  let ziel = typeof zielVersion === 'string' && /^\d+\.\d+\.\d+$/.test(zielVersion) ? zielVersion : '';
+  // Nach dem Container-Tausch ist die Session weg (401) – dann über das anonyme "check" die Version verfolgen.
+  let abgemeldet = false;
+  let abgemeldetSeit = 0;
+  let letztePhase = '';
+  const btn = document.getElementById('updCheckBtn');
+  if (btn) btn.style.display = 'none';
+  const anzeigen = (titel, meldung, hinweis, farbe) => {
+    const el = document.getElementById('updInstallBereich');
+    if (!el) return;
+    el.style.cssText = 'margin-top:12px;padding:10px;border:1px solid var(--grey-200,#e5e7eb);border-radius:6px;font-size:.88rem';
+    el.textContent = '';
+    const t = document.createElement('div');
+    t.textContent = titel;
+    t.style.cssText = 'font-weight:600' + (farbe ? ';color:' + farbe : '');
+    el.appendChild(t);
+    if (meldung) { const m = document.createElement('div'); m.textContent = meldung; el.appendChild(m); }
+    if (hinweis) {
+      const h = document.createElement('div');
+      h.textContent = hinweis;
+      h.style.cssText = 'font-size:.8rem;color:var(--grey-500);margin-top:4px';
+      el.appendChild(h);
+    }
+  };
+  anzeigen('Update angefordert', '', 'Status wird alle 3 Sekunden abgefragt.');
+  const tick = async () => {
+    if (_updatePollId !== id) return;
+    if (!document.getElementById('updateOverlay')) { stopUpdatePolling(); return; }
+    let st = null;
+    let version = '';
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000);
+      const url = abgemeldet ? 'api.php?action=check' : 'api.php?action=update_status';
+      const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+      clearTimeout(to);
+      if (!abgemeldet && r.status === 401) {
+        abgemeldet = true;
+        abgemeldetSeit = Date.now();
+      } else if (r.ok) {
+        const j = await r.json();
+        if (abgemeldet) {
+          if (j && typeof j.version === 'string') version = j.version;
+        } else if (j && j.ok) {
+          st = j.update || {};
+        }
+      }
+    } catch (e) { /* Neustart: Netzfehler/Timeout tolerieren */ }
+    if (_updatePollId !== id) return;
+    if (abgemeldet) {
+      if (ziel && version === ziel) {
+        anzeigen(UPDATE_PHASEN.fertig, 'Version ' + ziel + ' läuft.', 'Seite wird neu geladen – bitte neu anmelden.', 'var(--success,#15803d)');
+        stopUpdatePolling();
+        setTimeout(() => location.reload(), 2000);
+        return;
+      }
+      // Health-Limit des Updaters (T_HEALTH 420 s) + 60 s; nach Rueckfall-Phase sofort
+      if (ziel && version && (Date.now() - abgemeldetSeit > (420 + 60) * 1000
+        || letztePhase === 'rueckfall' || letztePhase === 'manuell')) {
+        anzeigen('Update nicht übernommen', 'Es läuft weiterhin Version ' + version + ' statt ' + ziel + '.',
+          'Bitte neu anmelden und im Fenster „Update & Systeminfo“ den Status prüfen. Details stehen in data/update/update.log auf dem Server.',
+          'var(--danger,#b91c1c)');
+        stopUpdatePolling();
+        return;
+      }
+      anzeigen('Update läuft…', 'Die App wurde neu gestartet, die Anmeldung ist dabei abgelaufen.', 'Es wird weiter abgefragt, bis die neue Version läuft.');
+    } else if (!st) {
+      anzeigen('Update läuft…', 'Server gerade nicht erreichbar (Neustart) – es wird weiter abgefragt.', '');
+    } else if (st.id !== id) {
+      anzeigen(UPDATE_PHASEN.wartet, '', 'Der Updater übernimmt die Anforderung in wenigen Sekunden.');
+    } else {
+      if (typeof st.version_ziel === 'string' && /^\d+\.\d+\.\d+$/.test(st.version_ziel)) ziel = st.version_ziel;
+      if (typeof st.phase === 'string') letztePhase = st.phase;
+      const titel = UPDATE_PHASEN[st.phase] || 'Update läuft…';
+      const meldung = typeof st.meldung === 'string' ? st.meldung : '';
+      if (st.ergebnis === 'erfolg') {
+        anzeigen(titel, meldung, 'Seite wird neu geladen…', 'var(--success,#15803d)');
+        stopUpdatePolling();
+        setTimeout(() => location.reload(), 2000);
+        return;
+      }
+      if (st.ergebnis) {
+        const hinweis = st.ergebnis === 'manuell'
+          ? 'Sicherung pre-update-… mit „bin/console backup:import“ einspielen – siehe Anleitung „Aktualisieren“ (docs/installation.md).'
+          : '';
+        anzeigen(titel, meldung, hinweis, 'var(--danger,#b91c1c)');
+        stopUpdatePolling();
+        return;
+      }
+      anzeigen(titel, meldung, 'Bitte Fenster geöffnet lassen.');
+    }
+    if (Date.now() - start > 30 * 60 * 1000) {
+      anzeigen('Keine Rückmeldung nach 30 Minuten',
+        abgemeldet
+          ? 'Die neue Version ' + (ziel || '') + ' meldet sich nicht. Möglicherweise wurde auf die bisherige Version zurückgeschaltet.'
+          : 'Der Updater hat das Update nicht abgeschlossen.',
+        'Seite neu laden, anmelden und im Fenster „Update & Systeminfo“ Version und Status prüfen. Details stehen in data/update/update.log auf dem Server.',
+        'var(--danger,#b91c1c)');
+      stopUpdatePolling();
+      return;
+    }
+    _updatePollTimer = setTimeout(tick, 3000);
+  };
+  _updatePollTimer = setTimeout(tick, 1000);
 }
 
 async function checkForUpdates() {
@@ -23006,6 +23263,7 @@ async function checkForUpdates() {
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || 'Prüfung nicht möglich');
     renderUpdateStatus(j.update || {});
+    renderUpdateInstall();
   } catch (e) {
     showNotification('Fehler: ' + e.message, 'error');
   } finally {

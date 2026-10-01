@@ -40,9 +40,19 @@ final class ApiClient
         ]);
     }
 
-    private function request(string $method, string $action, array $query, array $opts = [], array $headers = []): ApiResponse
+    /** Anderen Endpunkt (z. B. `din1090_api.php`) mit derselben Session aufrufen; ohne `action`-Parameter. */
+    public function skript(string $method, string $script, array $query = [], ?array $body = null): ApiResponse
     {
-        $url = $this->baseUrl . '/api.php?' . http_build_query(['action' => $action] + $query);
+        $opts = $body === null ? [] : [CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE)];
+        $headers = $body === null ? [] : ['Content-Type: application/json'];
+        return $this->request($method, $script, $query, $opts, $headers, $script);
+    }
+
+    private function request(string $method, string $action, array $query, array $opts = [], array $headers = [], ?string $script = null): ApiResponse
+    {
+        $url = $script === null
+            ? $this->baseUrl . '/api.php?' . http_build_query(['action' => $action] + $query)
+            : $this->baseUrl . '/' . $script . ($query ? '?' . http_build_query($query) : '');
         if ($this->cookies) {
             $pairs = [];
             foreach ($this->cookies as $k => $v) {

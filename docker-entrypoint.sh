@@ -29,9 +29,10 @@ if [ ! -f /var/www/html/data/index.php ]; then
 fi
 
 echo "[entrypoint] Berechtigungen auf data/ korrigieren..."
-chown -R www-data:www-data /var/www/html/data/ || true
-find /var/www/html/data -type f -exec chmod 660 {} \; || true
-find /var/www/html/data -type d -exec chmod 750 {} \; || true
+# data/update/ verwaltet der Updater-Sidecar (root-eigen, nur anforderung/ für www-data) – auslassen.
+find /var/www/html/data -path /var/www/html/data/update -prune -o -exec chown -h www-data:www-data {} + || true
+find /var/www/html/data -path /var/www/html/data/update -prune -o -type f -exec chmod 660 {} \; || true
+find /var/www/html/data -path /var/www/html/data/update -prune -o -type d -exec chmod 750 {} \; || true
 echo "[entrypoint] Berechtigungen gesetzt."
 
 # Cron-Daemon starten (für automatisches Backup-per-Mail + Erinnerungen).

@@ -93,6 +93,11 @@ foreach ([DATA_DIR] as $_d) {
     }
 }
 
+// ── Wartungsmodus während eines Updates (gleiche Regel wie api.php) ──
+if (\App\Services\UpdateAuftrag::wartungSperrt($_SERVER['REQUEST_METHOD'] ?? 'GET', '', [], DATA_DIR . 'update', time())) {
+    jsonOut(['error' => \App\Services\UpdateAuftrag::WARTUNG_MELDUNG], 503);
+}
+
 // ── DB verbinden ─────────────────────────────────────────────
 try {
     $db = Database::connect();

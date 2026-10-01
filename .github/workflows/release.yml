@@ -47,6 +47,17 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
+      - id: meta_noocr
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=false
+            suffix=-noocr
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -54,9 +65,26 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           provenance: true
           sbom: true
 
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.app
+          push: true
+          build-args: |
+            ENABLE_OCR=false
+          tags: ${{ steps.meta_noocr.outputs.tags }}
+          labels: ${{ steps.meta_noocr.outputs.labels }}
+          cache-from: type=gha
+          provenance: true
+          sbom: true
+
+      # Erst nach beiden Images: eine sichtbare Release hat immer ein ziehbares Image.
       - uses: softprops/action-gh-release@v2
         with:
           body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -8,10 +8,17 @@
 # Modulare Installation für kleine NAS:
 #   - OCR aus:  ENABLE_OCR=false im .env oder export setzen → kleineres Image
 #   - WhatsApp: docker compose --profile whatsapp up -d
+#
+# Update: App-Image ghcr.io/${BK_UPDATE_REPO}:${APP_IMAGE_TAG}${APP_IMAGE_VARIANT}
+#   (Werte in .env, APP_IMAGE_TAG pflegt der Updater). Ohne BK_UPDATE_REPO heißt
+#   das Image <Projektname>-app:<APP_IMAGE_TAG> (leer = local, kein Registry-Namensraum) und wird wie
+#   bisher lokal gebaut. APP_IMAGE_VARIANT=-noocr passend zu ENABLE_OCR=false.
 # =======================================================
 
 services:
   app:
+    # Ohne BK_UPDATE_REPO einteiliger Name je Projekt (mehrere Instanzen je Host) – nie ein fremder Registry-Namensraum.
+    image: ${BK_UPDATE_REPO:+ghcr.io/}${BK_UPDATE_REPO:-${COMPOSE_PROJECT_NAME:-baukalkulation-es}-app}:${APP_IMAGE_TAG:-local}${APP_IMAGE_VARIANT:-}
     build:
       context: .
       dockerfile: Dockerfile.app
@@ -43,6 +50,8 @@ services:
       BK_SYSTEMADMIN_PASSWORD: "${BK_SYSTEMADMIN_PASSWORD:-}"
       # Update-Quelle (GitHub owner/name); leer = Update-Prüfung nicht eingerichtet
       BK_UPDATE_REPO: "${BK_UPDATE_REPO:-}"
+      # Image-Variante (leer = mit OCR, "-noocr" = ohne); nur Anzeige/Prüfung
+      APP_IMAGE_VARIANT: "${APP_IMAGE_VARIANT:-}"
     volumes:
       - ${DATA_DIR:-./data}:/var/www/html/data
       - ${UPLOADS_DIR:-./data/uploads}:/var/www/html/data/uploads
@@ -96,6 +105,43 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+  # ─── Updater: automatisches Update aus GHCR (nur Linux-Docker-Hosts) ───
+  # Verarbeitet Update-Anforderungen der App aus ${DATA_DIR}/update/anforderung/
+  # (update/ selbst gehört root, nur anforderung/ ist für www-data beschreibbar): prüft die
+  # Release, zieht das Image, sichert, setzt APP_IMAGE_TAG in .env, ersetzt den
+  # App-Container und fällt bei Fehler zurück. Ohne BK_UPDATE_REPO tut er nichts;
+  # unter Docker Desktop/Windows meldet er "nicht unterstützt".
+  # Docker-Socket rw = root-äquivalent: keine Ports, nimmt nur eine Versionsnummer an.
+  # Projektverzeichnis: Quelle "." (Compose löst sie zum absoluten Host-Pfad
+  # auf) bzw. BK_COMPOSE_DIR wird unter /compose eingebunden. Der Updater prüft,
+  # dass diese Quelle dem Label working_dir des App-Containers entspricht, und
+  # verknüpft /compose intern unter genau diesem Host-Pfad – relative Bind-Pfade
+  # (./data, ./secrets) lösen beim Neuerzeugen der App dadurch wie auf dem Host auf.
+  # Mehrere Instanzen: je Instanz UPDATER_NAME eindeutig setzen.
+  updater:
+    build:
+      context: ./updater
+    container_name: ${UPDATER_NAME:-baukalkulation-es-updater}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      BK_UPDATE_REPO: "${BK_UPDATE_REPO:-}"
+      BK_UPDATE_APP_CONTAINER: "${APP_NAME:-baukalkulation-es-app}"
+      BK_UPDATER_DRY_RUN: "${BK_UPDATER_DRY_RUN:-0}"
+      BK_COMPOSE_DIR: "${BK_COMPOSE_DIR:-}"
+      TZ: "${TZ:-Europe/Berlin}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_DIR:-./data}/update:/update
+      - ${BK_COMPOSE_DIR:-.}:/compose
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    mem_limit: 128m
 
   # ─── Optional: WhatsApp-Bridge (nur mit Profil starten) ───
   # Aktivieren: docker compose --profile whatsapp up -d

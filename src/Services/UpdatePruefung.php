@@ -51,10 +51,15 @@ final class UpdatePruefung
             && !str_contains($this->repo, '..');
     }
 
-    /** @return list<string> stabile Versionen ohne `v`, absteigend */
-    public function verfuegbareVersionen(): array
+    public function aktuelleVersion(): string
     {
-        $daten = $this->releases(false);
+        return $this->aktuelleVersion;
+    }
+
+    /** @return list<string> stabile Versionen ohne `v`, absteigend */
+    public function verfuegbareVersionen(bool $force = false): array
+    {
+        $daten = $this->releases($force);
         return $daten === null ? [] : array_column($daten['releases'], 'version');
     }
 

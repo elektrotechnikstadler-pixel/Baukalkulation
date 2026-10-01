@@ -167,6 +167,13 @@ try {
 $action = $_GET['action'] ?? '';
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 
+// ── Wartungsmodus während eines Updates (Marker vom Updater-Sidecar) ──
+if (\App\Services\UpdateAuftrag::wartungSperrt(
+    $_SERVER['REQUEST_METHOD'] ?? 'GET', is_string($action) ? $action : '', ['check', 'logout', 'update_status'], DATA_DIR . 'update', time()
+)) {
+    jsonOut(['error' => \App\Services\UpdateAuftrag::WARTUNG_MELDUNG], 503);
+}
+
 // ── Session-Lock für Nicht-Session-Aktionen früh freigeben ──
 $sessionWriteActions = ['check', 'setup', 'login', 'logout'];
 if (!in_array($action, $sessionWriteActions, true)) {
@@ -380,6 +387,8 @@ $routes = [
     'download_audit_log'           => ['App\\Handlers\\AdminActions',          'downloadAuditLog'],
     'system_info'                  => ['App\\Handlers\\AdminActions',          'systemInfo'],
     'update_check'                 => ['App\\Handlers\\AdminActions',          'updateCheck'],
+    'update_start'                 => ['App\\Handlers\\AdminActions',          'updateStart'],
+    'update_status'                => ['App\\Handlers\\AdminActions',          'updateStatus'],
 
     // Erinnerungen
     'erinnerung_log'               => ['App\\Handlers\\AdminActions',          'erinnerungLog'],

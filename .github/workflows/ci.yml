@@ -142,6 +142,16 @@ jobs:
       - run: pip install mkdocs-material
       - run: mkdocs build --strict
 
+  updater:
+    name: Updater-Sidecar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: shellcheck --shell=sh updater/updater.sh
+      - name: Docker-Build
+        run: docker build updater
+
   docker:
     name: Docker-Build
     runs-on: ubuntu-latest
