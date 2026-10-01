@@ -109,6 +109,10 @@ esac
 if [ -z "${AUTOHEAL_LABEL:-}" ] || [ "$AUTOHEAL_LABEL" = "autoheal" ]; then
     AUTOHEAL_LABEL="autoheal_$(echo "$COMPOSE_PROJECT_NAME" | tr '-' '_')"
 fi
+case "${UPDATER_NAME:-}" in
+    "$COMPOSE_PROJECT_NAME"*) ;;
+    *) UPDATER_NAME="$COMPOSE_PROJECT_NAME-updater" ;;
+esac
 echo ""
 echo "── Ports ─────────────────────────────────────────────"
 APP_PORT="$(ask 'App-Port (HTTP)' "$DEF_APP_PORT")"
@@ -179,7 +183,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     if [ -n "$other_dirs" ]; then
         conflict="$conflict\n  - Projektname '$COMPOSE_PROJECT_NAME' wird schon von einer anderen Installation benutzt: $other_dirs"
     fi
-    for cname in "$APP_NAME" "$AUTOHEAL_NAME"; do
+    for cname in "$APP_NAME" "$AUTOHEAL_NAME" "$UPDATER_NAME"; do
         owner="$(docker ps -a --filter "name=^/${cname}\$" --format '{{.Label "com.docker.compose.project"}}')"
         if [ -n "$owner" ] && [ "$owner" != "$COMPOSE_PROJECT_NAME" ]; then
             conflict="$conflict\n  - Container '$cname' gehört zu Projekt '$owner'"
@@ -208,6 +212,7 @@ set_env COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT_NAME"
 set_env APP_NAME "$APP_NAME"
 set_env AUTOHEAL_NAME "$AUTOHEAL_NAME"
 set_env AUTOHEAL_LABEL "$AUTOHEAL_LABEL"
+set_env UPDATER_NAME "$UPDATER_NAME"
 set_env APP_PORT "$APP_PORT"
 set_env WA_PORT "$WA_PORT"
 set_env ENABLE_OCR "$ENABLE_OCR"
@@ -224,6 +229,7 @@ echo "── Zusammenfassung ─────────────────
 echo "  Projektname:      $COMPOSE_PROJECT_NAME"
 echo "  Container-Name:   $APP_NAME"
 echo "  Autoheal:         $AUTOHEAL_NAME (Label $AUTOHEAL_LABEL)"
+echo "  Updater:          $UPDATER_NAME"
 echo "  App-Port:         $APP_PORT"
 echo "  OCR:              $ENABLE_OCR"
 echo "  WhatsApp:         $ENABLE_WHATSAPP"
@@ -317,5 +323,7 @@ echo ""
 echo "============================================================"
 echo "  Fertig. App erreichbar unter:"
 echo "    http://<server-ip>:$APP_PORT"
-echo "  Standard-Login: admin / admin  (bitte sofort ändern!)"
+echo "  Erster Aufruf: ersten Administrator anlegen."
+echo "  Support-Konto 'Systemadmin', Startpasswort anzeigen mit:"
+echo "    docker exec $APP_NAME cat /var/www/html/data/systemadmin-passwort.txt"
 echo "============================================================"

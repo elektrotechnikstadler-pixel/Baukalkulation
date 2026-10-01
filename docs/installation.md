@@ -395,7 +395,8 @@ Bleibt der Container mit der bisherigen Version wegen des neueren Schemas aus, H
 das Update nach Fehlerbehebung wiederholen – die Sicherung `pre-update-…` bleibt erhalten.
 
 **Mehrere Instanzen auf einem Host:** je Instanz eigener Projektordner, eigenes `data/` und in der
-`.env` ein eindeutiger `UPDATER_NAME` (wie `APP_NAME`), z. B. `UPDATER_NAME=baukalkulation-kuerzel-updater`.
+`.env` ein eindeutiger `UPDATER_NAME` (wie `APP_NAME`), z. B. `UPDATER_NAME=baukalkulation-kuerzel-updater`
+(`install.sh`/`install.ps1` setzen ihn ab 3.0.8 automatisch auf `<Projektname>-updater`).
 Ein Update betrifft nur die eigene Instanz.
 
 **Trockenlauf:** `BK_UPDATER_DRY_RUN=1` in der `.env` und `docker compose up -d updater` – der

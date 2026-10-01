@@ -86,6 +86,7 @@ $APP_NAME = Read-WithDefault 'Container-Name' $defAppName
 $AUTOHEAL_NAME = if ($defaults.AUTOHEAL_NAME -and $defaults.AUTOHEAL_NAME.StartsWith($COMPOSE_PROJECT_NAME)) { $defaults.AUTOHEAL_NAME } else { "$COMPOSE_PROJECT_NAME-autoheal" }
 # Label darf nicht "autoheal" bleiben, sonst startet jeder Autoheal auch die Apps der anderen Instanzen neu.
 $AUTOHEAL_LABEL = if ($defaults.AUTOHEAL_LABEL -and $defaults.AUTOHEAL_LABEL -ne 'autoheal') { $defaults.AUTOHEAL_LABEL } else { 'autoheal_' + ($COMPOSE_PROJECT_NAME -replace '-', '_') }
+$UPDATER_NAME = if ($defaults.UPDATER_NAME -and $defaults.UPDATER_NAME.StartsWith($COMPOSE_PROJECT_NAME)) { $defaults.UPDATER_NAME } else { "$COMPOSE_PROJECT_NAME-updater" }
 Write-Host ''
 Write-Host '-- Ports ----------------------------------------------'
 $APP_PORT = Read-WithDefault 'App-Port (HTTP)' $defaults.APP_PORT
@@ -137,6 +138,7 @@ $values = [ordered]@{
     APP_NAME             = $APP_NAME
     AUTOHEAL_NAME        = $AUTOHEAL_NAME
     AUTOHEAL_LABEL       = $AUTOHEAL_LABEL
+    UPDATER_NAME         = $UPDATER_NAME
     APP_PORT             = $APP_PORT
     WA_PORT              = $WA_PORT
     ENABLE_OCR           = $ENABLE_OCR
@@ -163,6 +165,7 @@ Write-Host '-- Zusammenfassung ------------------------------------'
 Write-Host "  Projektname:      $COMPOSE_PROJECT_NAME"
 Write-Host "  Container-Name:   $APP_NAME"
 Write-Host "  Autoheal:         $AUTOHEAL_NAME (Label $AUTOHEAL_LABEL)"
+Write-Host "  Updater:          $UPDATER_NAME"
 Write-Host "  App-Port:         $APP_PORT"
 Write-Host "  OCR:              $ENABLE_OCR"
 Write-Host "  WhatsApp:         $ENABLE_WHATSAPP"
@@ -200,5 +203,7 @@ Write-Host ''
 Write-Host '============================================================'
 Write-Host '  Fertig. App erreichbar unter:'
 Write-Host "    http://<server-ip>:$APP_PORT"
-Write-Host '  Standard-Login: admin / admin  (bitte sofort aendern!)'
+Write-Host '  Erster Aufruf: ersten Administrator anlegen.'
+Write-Host "  Support-Konto 'Systemadmin', Startpasswort anzeigen mit:"
+Write-Host "    docker exec $APP_NAME cat /var/www/html/data/systemadmin-passwort.txt"
 Write-Host '============================================================'

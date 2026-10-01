@@ -37,6 +37,20 @@
 
 ---
 
+## v3.0.8 – Installationsskript für mehrere Instanzen
+
+### Fehlerbehebungen
+- `install.sh`/`install.ps1` vergeben dem Updater jetzt einen eigenen Container-Namen
+  (`UPDATER_NAME=<Projektname>-updater`) und prüfen ihn auf Konflikte. Bisher hieß der Updater
+  jeder Instanz `baukalkulation-es-updater`, eine zweite Instanz brach beim Start mit
+  „container name already in use“ ab.
+- Der veraltete Hinweis „Standard-Login: admin / admin“ am Ende der Installation ist ersetzt durch
+  den Hinweis auf den ersten Administrator und das Startpasswort des Systemadmin-Kontos.
+- `install.sh` und `bin/console` sind im Repository ausführbar (vorher „Permission denied“ nach
+  `git clone`).
+
+---
+
 ## v3.0.7 – Update-Prüfung zeigt neue Versionen sofort
 
 ### Fehlerbehebungen
