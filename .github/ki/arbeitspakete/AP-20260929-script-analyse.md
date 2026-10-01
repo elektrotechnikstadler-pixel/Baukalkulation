@@ -155,7 +155,7 @@ Bytes über die Leitung sinken spürbar nur durch Gzip/Brotli am Server bzw. C(2
 | `Dockerfile.app` | `COPY public/script.js` → `COPY public/js/` | B |
 | `docs/entwicklung.md`, `.github/instructions/frontend.instructions.md`, `AGENTS.md` (falls nötig) | Neue Dateiaufteilung, Befehle, Regel „neue Funktion in passende Bereichsdatei“ | B |
 | `CHANGELOG.md`, `VERSION` (+ `version:sync`) | Release-Eintrag | A, B |
-| `deploy/` | nur per `make deploy` | A, B |
+| `deploy/` | entfällt (Release über GitHub, E-077) | – |
 
 ### 2.5 Struktur (Vorlage copier-astral)
 
@@ -214,8 +214,7 @@ Bytes über die Leitung sinken spürbar nur durch Gzip/Brotli am Server bzw. C(2
    `public/js/00-kern.js` … `public/js/90-start.js` (Error-Handler zuerst, Start-IIFE zuletzt); `public/script.js`
    entfällt. Prüfbar: Verkettung aller Dateien == alte `script.js` (Textvergleich), check-frontend-Snapshot
    unverändert, `script.min.js` identisch oder funktionsgleich.
-10. `build: Folgeanpassungen` – `check-versions.mjs`, `Dockerfile.app`, CI-Diff-Prüfung auf `public/js/**`,
-    `sync-deploy` prüfen.
+10. `build: Folgeanpassungen` – `check-versions.mjs`, `Dockerfile.app`, CI-Diff-Prüfung auf `public/js/**`.
 11. `docs: Frontend-Aufteilung` – `docs/entwicklung.md`, `frontend.instructions.md` (neue Regel: Änderungen in
     `public/js/*.js`, danach `npm run minify`), ggf. `AGENTS.md`.
 12. `chore: Version/Cache-Busting/CHANGELOG`.
@@ -233,7 +232,7 @@ Bytes über die Leitung sinken spürbar nur durch Gzip/Brotli am Server bzw. C(2
 | Entfernen von `dist/core.js` bricht etwas | grep belegt: keine Leser der gesetzten Globals; Rollback = eine Zeile |
 | Rechte/Sicherheit | keine Änderung an `canDo`/Rechteprüfungen; Umbauten ändern kein `innerHTML`-Escaping |
 | Modul-Lizenz/Feature-Flag | `loadOptionalModule`/`applyModuleSettings` nur verschoben, nicht geändert; Smoke mit aktiviertem Modul |
-| `deploy/` veraltet | `make deploy` im Release-Schritt |
+| Image ohne neue Dateien | `Dockerfile.app`/`.dockerignore` prüfen; Release über GitHub (E-077) |
 
 ### 2.9 Berücksichtigte Erkenntnisse
 

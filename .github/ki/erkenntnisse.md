@@ -80,6 +80,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-074 | Vom Entwickler zusätzlich eingeführte öffentliche Methoden/Festlegungen im selben Schritt testen lassen | `gecachterStand()` und GET-Verhalten waren ungetestet | AP-20261001-update | nur hier |
 | E-075 | Abläufe über einen Container-Neustart dürfen keine Session voraussetzen; Rückfall im UI genauso abnehmen wie Erfolg; globale Sperren für alle Einstiegspunkte (`api.php`, `din1090_api.php`) planen | Polling nach Tausch hängend, Wartung umgehbar | AP-20261001-update | nur hier |
 | E-073 | Versionierung ab 3.0.1: nach jedem abgeschlossenen AP Patch-Version erhöhen und Tag `vX.Y.Z` auf `main` setzen (keine Branches) | Vorgabe Nutzer 2026-10-01 | Nutzer | ki-leitstand.agent.md |
+| E-076 | Commits immer mit expliziten Pfaden (`git commit -- <pfade>`), auch `--amend` | Amend nahm fremde gestagte Dateien mit (vor Push korrigiert) | Release 3.0.6 | AGENTS.md, ki-leitstand.agent.md (auf Wunsch) |
+| E-077 | Ab 3.0.6 kein `deploy/`-Spiegel: Release = Push `main` + Tag, Instanzen updaten aus dem GitHub-Release | Vorgabe Nutzer 2026-10-01 | Nutzer | AGENTS.md, ki-leitstand.agent.md, struktur.instructions.md |
 
 ## Abgelöst
 

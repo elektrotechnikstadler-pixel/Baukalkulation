@@ -42,7 +42,7 @@ Modul-Schalter (`appSettings.modul_*`) gebunden; eine Gruppe ohne sichtbaren Ein
 - `mobile.html` / `mobile_light.html` (eigene Oberfläche, eigenes Inline-JS, lädt `script.js`
   nicht; Aktionsleiste über `mobile_btn_order`) – keine Änderung nötig.
 - Inaktives Vue-Frontend `src/frontend/` (referenziert `btnAngeboteSub` nur dort, bleibt unberührt).
-- `deploy/` (generiert).
+- `deploy/` (entfällt, Auslieferung über GitHub-Release, E-077).
 
 ### Ist-Zustand (Analyse)
 

@@ -29,4 +29,5 @@ Abläufe werden übernommen, Werkzeuge durch PHP-Gegenstücke ersetzt. Keine Pyt
 - Vor jeder Struktur- oder Tooling-Entscheidung die Vorlage prüfen und Aufbau/Namen übernehmen.
 - Optionale Bausteine der Vorlage (Doku, Docker, Renovate, Sicherheits-Scan, prek) sind aktiv; PyPI und Codecov entfallen.
 - Abweichung nur mit Begründung im Plan; dauerhafte Abweichungen in dieser Tabelle nachtragen.
-- Bleibende Besonderheiten: Webroot `public/`, Modulsystem, SQLite + PostgreSQL, `deploy/`-Spiegel.
+- Bleibende Besonderheiten: Webroot `public/`, Modulsystem, SQLite + PostgreSQL.
+- Auslieferung nur über GitHub (Tag → `release.yml` → Image/Release → Updater); keinen `deploy/`-Spiegel oder Upload-Ordner einführen.

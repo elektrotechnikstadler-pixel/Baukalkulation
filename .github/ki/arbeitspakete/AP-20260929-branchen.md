@@ -87,7 +87,7 @@ liegen im bestehenden JSON in `settings.data`.
   CI-Jobs oder CLI-Befehle.
 - Die Doku braucht nur einen CHANGELOG-Eintrag. `docs/` bleibt unverändert, weil die
   Branchenwahl dort bisher nicht beschrieben ist.
-- `deploy/` wird nicht angefasst, es wird über `make deploy` erzeugt.
+- Kein `deploy/`-Spiegel mehr; Auslieferung über GitHub-Release (E-077).
 
 ### 2.5 Berücksichtigte Erkenntnisse
 

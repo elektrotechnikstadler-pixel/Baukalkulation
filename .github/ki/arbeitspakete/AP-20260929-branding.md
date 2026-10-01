@@ -69,7 +69,7 @@ Erst Machbarkeit/Bestand prüfen, dann Lösung planen. Nur die Rolle Admin darf 
 | `VERSION`, `package.json`, `public/manifest.json`, `CHANGELOG.md` | Minor-Version (`npm run version:sync`), Änderungseintrag inkl. Sicherheitsfix |
 | `tests/Unit/BrandingServiceTest.php`, `tests/Api/BrandingTest.php` (neu) | siehe Abnahmekriterien |
 
-Nicht anfassen: `deploy/` (generiert), `legacy_baseline`/`LegacySchema.php`, `src/frontend/`.
+Nicht anfassen: `legacy_baseline`/`LegacySchema.php`, `src/frontend/`.
 
 ### 2.4 Struktur (Vorlage copier-astral)
 
@@ -126,7 +126,7 @@ Nicht anfassen: `deploy/` (generiert), `legacy_baseline`/`LegacySchema.php`, `sr
 | Teilwirkung der Farben | ~97 feste Farbwerte in `script.js` bleiben (v. a. Druck/PDF). Admin-Hinweis in der Karte: „wirkt auf die Oberfläche, nicht auf Belege“. |
 | Lesbarkeit | Kontrastwarnung; Standard nur einen Klick entfernt; eigenes Logo im Dunkelmodus auf hellem Chip. |
 | Modul-Lizenz/Feature-Flag | Kernfunktion ohne Modul/Flag (siehe offene Frage 5). |
-| `deploy/` | Nicht von Hand ändern; wird über `make deploy` erzeugt. |
+| Auslieferung | Kein `deploy/`-Spiegel; Release über GitHub (E-077). |
 
 ### 2.9 Abnahmekriterien
 

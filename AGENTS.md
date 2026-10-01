@@ -19,9 +19,10 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 - Schema nur per neuer Phinx-Migration; `legacy_baseline` und `LegacySchema.php` nie ändern.
 - Keine Secrets, Kundendaten oder Inhalte aus `data/` in Code, Tests oder `.md`-Dateien.
 - Kein `@`-Unterdrücken – der globale Error-Handler wirft trotzdem.
-- `deploy/` ist generiert (`make deploy`) – nie direkt bearbeiten.
+- Kein `deploy/`-Spiegel mehr: Instanzen holen Updates nur aus dem GitHub-Release (`deploy/` weder erzeugen noch bearbeiten).
 - Privilegierte Dienste (Updater mit Docker-Socket) schreiben nie in Verzeichnisse, die die App austauschen kann (E-018).
-- Commits nach Conventional Commits, nur lokal; kein Push, kein History-Rewrite ohne Rückfrage.
+- Commits nach Conventional Commits mit expliziten Pfaden (`git commit -- <pfade>`, auch bei `--amend`).
+- Release = `git push origin main` + `git push origin vX.Y.Z`; sonst kein Push, kein Force-Push, kein History-Rewrite ohne Rückfrage.
 
 ## Zusammenarbeit
 

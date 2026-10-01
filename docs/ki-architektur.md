@@ -10,7 +10,7 @@ Lernschleife verbessert die Regeldateien (`.md`) nach jedem Arbeitspaket.
 - **Getrennte Verantwortung:** Wer Code schreibt, prüft ihn nicht selbst.
 - **Lernendes System:** Fehler werden einmal gemacht, danach steht eine Regel in der passenden Datei.
 - **Sparsamer Kontext:** Jede Rolle lädt nur das Wissen, das sie gerade braucht.
-- **Mensch entscheidet:** Plan-Freigabe, Eskalationen, Push und Release bleiben beim Menschen.
+- **Mensch entscheidet:** Plan-Freigabe und Eskalationen bleiben beim Menschen; nach Tor G3 veröffentlicht der Leitstand per Push von `main` + Tag (Release über GitHub).
 
 ## 2. Überblick
 
@@ -34,7 +34,7 @@ flowchart LR
 
 | Rolle | Aufgabe | Darf | Darf nicht | Ergebnis |
 |---|---|---|---|---|
-| **KI-Leitstand** | Ablauf steuern, Rollen aufrufen, Tore prüfen, Schleifen begrenzen | Arbeitspaket-Datei führen, Subagenten starten, lokal committen | Code schreiben, Tore überspringen, pushen | Arbeitspaket mit Status, Abschlussbericht |
+| **KI-Leitstand** | Ablauf steuern, Rollen aufrufen, Tore prüfen, Schleifen begrenzen | Arbeitspaket-Datei führen, Subagenten starten, committen, Release pushen (`main` + Tag) | Code schreiben, Tore überspringen, Force-Push | Arbeitspaket mit Status, Abschlussbericht |
 | **Architekt / Planer** | Anforderung klären, Code analysieren, Lösung entwerfen | Lesen, Suchen, Web-Recherche, Plan schreiben | Produktivcode ändern | Plan mit Schritten, Risiken, Abnahmekriterien |
 | **Entwickler** | Plan umsetzen, kleinste sinnvolle Änderung | Code ändern, Befehle ausführen | Plan eigenmächtig erweitern, Tests abschwächen | Umsetzungsnotiz, grüne Prüfungen |
 | **Tester** | Abnahmekriterien in Tests übersetzen, Regressionen finden | Nur `tests/` ändern, Tests ausführen | Produktivcode ändern | Testbericht (neu/geändert, Ergebnis SQLite + PG) |
@@ -95,7 +95,7 @@ PHPStan statt ty, PHPUnit statt pytest, `bin/console` statt Typer-CLI).
   nach der Vorlage und nennt Abweichungen mit Begründung im Plan.
 - **Reviewer:** prüft Struktur-Konformität als eigenen Punkt der Prüfliste.
 - **Retro:** Stichprobe gegen die Vorlage; dauerhafte Abweichungen werden in der Abbildungstabelle festgehalten.
-- Bleibende Besonderheiten der Baukalkulation: Webroot `public/`, Modulsystem, SQLite + PostgreSQL, `deploy/`-Spiegel.
+- Bleibende Besonderheiten der Baukalkulation: Webroot `public/`, Modulsystem, SQLite + PostgreSQL; Auslieferung nur über GitHub-Releases.
 
 ## 7. Lernschleife – besser und effizienter werden
 
@@ -140,7 +140,7 @@ flowchart LR
 |---|---|---|
 | 1 Grundgerüst | `AGENTS.md`, 6 Instructions (inkl. Struktur), 5 Agents, Skill *modul-anlegen*, Vorlage, Lernprotokoll, `erkenntnisse.md`, `/retro` | angelegt |
 | 2 Einschwingen | Erstes Arbeitspaket: Struktur-Abgleich gegen copier-astral (Lücken schließen); danach 3–5 echte Arbeitspakete, erste Retro, Regeln schärfen | nächster Schritt |
-| 3 Erzwingen | Hooks statt Bitten: Tester darf nur `tests/` schreiben, Reviewer nichts; `php-cs-fixer` nach Edits; Blockade gefährlicher Befehle (`push`, `reset --hard`) | geplant |
+| 3 Erzwingen | Hooks statt Bitten: Tester darf nur `tests/` schreiben, Reviewer nichts; `php-cs-fixer` nach Edits; Blockade gefährlicher Befehle (`push --force`, `reset --hard`) | geplant |
 | 4 Optimieren | Unterschiedliche Modelle je Rolle (Reviewer ≠ Entwickler reduziert blinde Flecken), weitere Skills (Release, Datenbank-Transfer), ggf. MCP für Issues | geplant |
 
 ## 9. Erweiterung
@@ -161,5 +161,5 @@ flowchart LR
 ## 11. Grenzen und Sicherheit
 
 - Keine Kundendaten, Passwörter oder Inhalte aus `data/` in Arbeitspakete, Tests oder Regeln.
-- Kein `git push`, kein Umschreiben der Historie, kein Löschen fremder Dateien ohne Rückfrage.
-- Die KI-Dateien liegen in `.github/` und `AGENTS.md` und gelangen nicht in `deploy/`.
+- Push nur im Release-Schritt (`main` + Tag); kein Force-Push, kein Umschreiben der Historie, kein Löschen fremder Dateien ohne Rückfrage.
+- Die KI-Dateien liegen in `.github/` und `AGENTS.md`; sie sind im Repository, gelangen aber nicht ins Docker-Image (`.dockerignore`).
