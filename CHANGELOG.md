@@ -17,10 +17,36 @@
 - **Aufmaß-Import aus Magicplan (CSV/XLSX):** geplant und freigegeben (Parser für den Magicplan-„Statistiken“-Export,
   generischer Tabellen-Import, danach Schreinerei-Vorlagen), Umsetzung vorerst zurückgestellt.
   Plan: `.github/ki/arbeitspakete/AP-20260929-aufmass-import.md`. (Stand 2026-10-01)
+- **Weitere geplante Arbeitspakete (Entwicklung pausiert):** Menübaum neu gliedern
+  (`AP-20260929-menuebaum.md`), Grundfarben und Logo je Instanz (`AP-20260929-branding.md`),
+  Branchen Schreinerei/Zimmerei/Heizung-Sanitär (`AP-20260929-branchen.md`), Verschlankung
+  `script.js` Stufe 0+A (`AP-20260929-script-analyse.md`); Pläne freigegeben unter
+  `.github/ki/arbeitspakete/`. (Stand 2026-10-01)
+- **Updater – vor dem ersten echten Einsatz:** ShellCheck, `docker build updater` und die Abnahmen
+  M1–M5 (Update, Update mit PostgreSQL, Rückfall, zwei Instanzen, Doppelanforderung) auf einem
+  Linux-Docker-Host durchführen; Voraussetzung sind ein GitHub-Repository mit Releases und öffentliche
+  GHCR-Images. Restrisiko: ein leeres fremdes Verzeichnis anstelle von `data/update` würde
+  übernommen (nur bei bereits kompromittierter App) – Instanzkennung im Marker nachrüsten.
+  (Stand 2026-10-01)
+- **PostgreSQL-Testläufe** für die Änderungen ab Kupferpreis/Datanorm (v3.0.1) bis v3.0.3 stehen aus
+  (Docker-Dienst lokal nicht verfügbar); in der CI laufen sie automatisch. (Stand 2026-10-01)
 
 ---
 
 ## Unveröffentlicht
+
+---
+
+## v3.0.3 – Automatisches Update
+
+### Neu
+- **Automatisches Update per Updater** (nur Docker auf Linux-Hosts): Im Fenster „Update & Systeminfo“
+  startet ein Administrator das Update auf eine neuere Release-Version. Der Dienst `updater`
+  sichert vorher (`pre-update-<version>`), lädt das Image von GHCR, ersetzt den App-Container,
+  prüft die Gesundheit und fällt bei Fehler auf die bisherige Version zurück. Phasen sind im
+  Fenster sichtbar; während des Updates sind Schreibaktionen gesperrt („Wartung – Update läuft“).
+  Einrichtung über `.env` (`BK_UPDATE_REPO`, `APP_IMAGE_TAG`, `APP_IMAGE_VARIANT`, `BK_COMPOSE_DIR`),
+  siehe Anleitung „Aktualisieren“. Release-Images zusätzlich als Variante `-noocr`.
 
 ---
 
