@@ -33,6 +33,7 @@
 - CI testet zusätzlich gegen PostgreSQL 15 und 17; lokal `make test-pgsql`.
 
 ### Behoben
+- Datanorm: Nach dem Update einmal neu indexieren; bereits übernommene Positionen bleiben unverändert.
 - Docker-Image seit der Umstellung auf `public/`: Die `.htaccess` der Projektwurzel erzeugte eine
   Redirect-Schleife (HTTP 500 auf alle Anfragen).
 - Einspielen einer Sicherung stellte **archivierte Baustellen** nicht wieder her; ihre IDs konnten

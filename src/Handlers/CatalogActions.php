@@ -68,9 +68,12 @@ class CatalogActions
         // Warengruppen
         $wgMap  = [];
         if ($wrgFile && file_exists($wrgFile)) {
+            $wrgEncoding = $this->detectDatanormEncoding($wrgFile);
             $fh = fopen($wrgFile, 'r');
+            $firstLine = true;
             while (($line = fgets($fh)) !== false) {
-                $line = mb_convert_encoding(rtrim($line, "\r\n"), 'UTF-8', 'ISO-8859-1');
+                $line = $this->decodeDatanormLine($line, $wrgEncoding, $firstLine);
+                $firstLine = false;
                 $p = explode(';', $line);
                 if (($p[0] ?? '') !== 'S') continue;
                 $hg = trim($p[1] ?? ''); $ug = trim($p[2] ?? ''); $name = trim($p[3] ?? '');
@@ -103,9 +106,12 @@ class CatalogActions
         $out = fopen($indexFile, 'w');
         if (!$out) jsonOut(['error' => "Index-Datei '$indexFile' nicht beschreibbar.", 'count' => 0], 500);
         $fh  = fopen($artFile, 'r');
+        $artEncoding = $this->detectDatanormEncoding($artFile);
+        $firstLine = true;
         $einheitMap = ['STK'=>'Stk.','STCK'=>'Stk.','ST'=>'Stk.','STUE'=>'Stk.','MTR'=>'m','M'=>'m','M2'=>'m²','QM'=>'m²','M3'=>'m³','CBM'=>'m³','KG'=>'kg','T'=>'t','L'=>'l','LTR'=>'l','LFM'=>'lfm','VE'=>'VE','PACK'=>'VE','PCK'=>'VE','PAK'=>'VE','BDL'=>'VE','ROL'=>'Rolle','RG'=>'Ring','SET'=>'Set','PAA'=>'Paar','STD'=>'h','H'=>'h'];
         while (($line = fgets($fh)) !== false) {
-            $line = mb_convert_encoding(rtrim($line, "\r\n"), 'UTF-8', 'ISO-8859-1');
+            $line = $this->decodeDatanormLine($line, $artEncoding, $firstLine);
+            $firstLine = false;
             $p = explode(';', $line);
             if (($p[0] ?? '') !== 'A') continue;
             $artNr = trim($p[2] ?? ''); $text1 = trim($p[3] ?? ''); $text2 = trim($p[4] ?? '');
@@ -128,7 +134,65 @@ class CatalogActions
         fclose($fh);
         fclose($out);
 
-        jsonOut(['ok' => true, 'count' => $count, 'source' => $datanormDir]);
+        jsonOut(['ok' => true, 'count' => $count, 'source' => $datanormDir, 'encoding' => $artEncoding]);
+    }
+
+    private function detectDatanormEncoding(string $path): string
+    {
+        $fh = fopen($path, 'rb');
+        if ($fh === false) return 'CP850';
+        $cp850Count = 0;
+        $windows1252Count = 0;
+        $utf8Count = 0;
+        $firstLine = true;
+        while (($line = fgets($fh)) !== false) {
+            if ($firstLine && str_starts_with($line, "\xEF\xBB\xBF")) {
+                $line = substr($line, 3);
+                $utf8Count++;
+            }
+            $firstLine = false;
+            $line = rtrim($line, "\r\n");
+            if (mb_check_encoding($line, 'UTF-8')) {
+                $utf8Characters = preg_match_all('/[^\x00-\x7F]/u', $line);
+                if ($utf8Characters !== false) $utf8Count += $utf8Characters;
+                continue;
+            }
+            $cp850Count += $this->countDatanormBytes($line, "\x81", "\x84", "\x8E", "\x94", "\x99", "\x9A", "\xE1");
+            $windows1252Count += $this->countDatanormBytes($line, "\xC4", "\xD6", "\xDC", "\xDF", "\xE4", "\xF6", "\xFC");
+        }
+        fclose($fh);
+
+        if ($utf8Count > max($cp850Count, $windows1252Count)) return 'UTF-8';
+        return $windows1252Count > $cp850Count ? 'Windows-1252' : 'CP850';
+    }
+
+    private function countDatanormBytes(string $sample, string ...$bytes): int
+    {
+        $count = 0;
+        foreach ($bytes as $byte) {
+            $count += substr_count($sample, $byte);
+        }
+        return $count;
+    }
+
+    private function decodeDatanormLine(string $line, string $encoding, bool $firstLine): string
+    {
+        $line = rtrim($line, "\r\n");
+        if ($firstLine && str_starts_with($line, "\xEF\xBB\xBF")) $line = substr($line, 3);
+        if (mb_check_encoding($line, 'UTF-8')) return $line;
+
+        $cp850Count = $this->countDatanormBytes($line, "\x81", "\x84", "\x8E", "\x94", "\x99", "\x9A", "\xE1");
+        $windows1252Count = $this->countDatanormBytes($line, "\xC4", "\xD6", "\xDC", "\xDF", "\xE4", "\xF6", "\xFC");
+        if ($cp850Count !== $windows1252Count) {
+            $encoding = $cp850Count > $windows1252Count ? 'CP850' : 'Windows-1252';
+        }
+
+        if ($encoding === 'CP850' && !in_array('CP850', mb_list_encodings(), true)) {
+            $converted = iconv('CP850', 'UTF-8', $line);
+            if ($converted === false) throw new \RuntimeException('CP850-Konvertierung fehlgeschlagen.');
+            return $converted;
+        }
+        return mb_convert_encoding($line, 'UTF-8', $encoding);
     }
 
     public function datanormSearch(): void
