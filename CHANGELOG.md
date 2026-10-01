@@ -37,6 +37,18 @@
 
 ---
 
+## v3.0.5 – Semgrep-Befunde
+
+### Sicherheit
+- VDE 0100: Im Vorlagen-Dialog wurde die RCD-Bezeichnung einer Vorlage ungefiltert ins HTML
+  eingesetzt (XSS über gespeicherte Vorlagen); jetzt maskiert.
+- OCI-Punchout: Die Rücksprungadresse an den Lieferanten wird nur noch mit einem gültigen
+  Host-Header gebildet; sonst Abbruch.
+- CI: Semgrep-Fehlalarme geprüft und begründet markiert; die Regel „tainted-filename“ ist
+  ausgenommen, da alle Dateipfade per Whitelist, `basename()` bzw. realpath-Prüfung bereinigt werden.
+
+---
+
 ## v3.0.4 – Standardpasswort entfernt
 
 ### Sicherheit
