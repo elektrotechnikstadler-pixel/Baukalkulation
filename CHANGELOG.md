@@ -37,6 +37,17 @@
 
 ---
 
+## v3.0.4 – Standardpasswort entfernt
+
+### Sicherheit
+- Das frühere feste Systemadmin-Startpasswort steht nicht mehr im Quellcode. Beim Upgrade einer
+  Installation von v2.x auf 3.x erhält das Konto „Systemadmin“ jetzt **immer** ein individuelles
+  Passwort (`data/systemadmin-passwort.txt` bzw. `BK_SYSTEMADMIN_PASSWORD`, Änderung bei der ersten
+  Anmeldung erzwungen) – auch wenn das alte Passwort bereits geändert worden war.
+- Gitleaks-Fehlalarme (Testpasswort, Doku-Text) in `.gitleaksignore` aufgenommen.
+
+---
+
 ## v3.0.3 – Automatisches Update
 
 ### Neu
@@ -2495,7 +2506,7 @@ DB-Schema und API-Format bleiben unverändert.
 
 ### §S: reset_next_build.php nach scripts/ verschoben + Klartext-PW-Ausgabe entfernt
 - Datei lag im Web-Root und gab das initiale Systemadmin-Passwort im Klartext
-  in der CLI aus ("Fixed login: Systemadmin / Stadler2580!").
+  in der CLI aus ("Fixed login: Systemadmin / [Passwort entfernt]").
 - Neu: scripts/reset_next_build.php (außerhalb des direkt aufrufbaren Bereichs
   bleiben Web-Aufrufe weiterhin durch den CLI-Guard verhindert).
 - $baseDir nutzt jetzt dirname(__DIR__) statt __DIR__, damit relative Pfade
@@ -4524,7 +4535,7 @@ manifest.json, sw.js, Änderungshinweise.txt)
 
 ## v1.7.1 – 2026-04-29
 Sicherheits-Hotfixes (K1–K4):
-- K1: Default-Passwort 'Stadler2580!' bleibt für Systemadmin, aber
+- K1: Default-Passwort bleibt für Systemadmin, aber
   mustChangePassword=1 ist gesetzt; Server erzwingt Passwortänderung
   vor jeder anderen Aktion (api.php-Dispatcher prüft Whitelist).
 - K2: Session-Invalidierung bei sicherheitsrelevanten Änderungen.
