@@ -12447,7 +12447,7 @@ function applyModuleSettings() {
   const _btnVde = document.getElementById('btnVde0100');
   if (_btnVde) _btnVde.style.display = _showVde ? '' : 'none';
   if (_showVde) {
-    loadOptionalModule('modules/vde0100/vde0100.js?v=93', 'modules/vde0100/vde0100.css?v=93', '⚡ VDE 0100', 'btnVde0100', 'showVde0100', 'vde0100View');
+    loadOptionalModule('modules/vde0100/vde0100.js?v=94', 'modules/vde0100/vde0100.css?v=94', '⚡ VDE 0100', 'btnVde0100', 'showVde0100', 'vde0100View');
   }
 }
 

@@ -448,7 +448,8 @@ if (isset($routes[$action])) {
     }
 
     [$class, $method] = $routes[$action];
-    (new $class($db, $body))->$method();
+    // Klasse stammt aus der festen Routing-Tabelle, nie direkt aus der Anfrage.
+    (new $class($db, $body))->$method(); // nosemgrep: php.lang.security.injection.tainted-object-instantiation.tainted-object-instantiation
 } else {
     jsonOut(['error' => 'Unbekannte Aktion: ' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8')], 400);
 }

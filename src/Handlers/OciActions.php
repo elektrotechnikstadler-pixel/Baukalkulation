@@ -174,9 +174,16 @@ class OciActions
 
         // HOOK_URL aufbauen (absolute URL ableiten)
         $proto    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $host     = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+        // Nur ein syntaktisch gültiger Hostname (optional mit Port) – sonst könnte ein manipulierter
+        // Host-Header den Lieferanten an eine fremde Rückkehradresse leiten.
+        if (!preg_match('/^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](?::\d{1,5})?$/D', $host)) {
+            http_response_code(400);
+            echo '<!DOCTYPE html><html><body><p>Fehler: Ungültiger Host.</p></body></html>';
+            exit;
+        }
         $script   = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/');
-        $hookUrl  = $proto . '://' . $host . $script . '/api.php?action=oci_hook&t=' . urlencode($nonce);
+        $hookUrl  = $proto . '://' . $host . $script . '/api.php?action=oci_hook&t=' . urlencode($nonce); // nosemgrep: php.lang.security.injection.tainted-url-host.tainted-url-host
 
         $supplierUrl = htmlspecialchars($lieferant['url'],      ENT_QUOTES, 'UTF-8');
         $user        = htmlspecialchars($lieferant['username'], ENT_QUOTES, 'UTF-8');

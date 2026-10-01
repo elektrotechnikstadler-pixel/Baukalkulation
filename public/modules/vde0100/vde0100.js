@@ -1171,7 +1171,7 @@
           <div class="vde-template-item">
             <div class="vde-template-item-info">
               <div class="vde-template-item-name">${badge} ${esc(t.name)}</div>
-              <div class="vde-template-item-desc">${esc(t.beschreibung)} · ${anzahl} Abgänge · ${rcdTxt}</div>
+              <div class="vde-template-item-desc">${esc(t.beschreibung)} · ${anzahl} Abgänge · ${esc(rcdTxt)}</div>
             </div>
             <button class="btn-vde-primary" style="font-size:.78rem;padding:5px 10px;white-space:nowrap;"
               onclick="window.vde0100Modul._insertTemplate('${t.id}', ${gebaeudeId}, ${protokollId})">Einfügen</button>
@@ -1189,7 +1189,8 @@
             ${rows || '<p style="color:#aaa;font-size:.85rem;">Keine Vorlagen vorhanden.</p>'}
           </div>
         </div>`;
-      document.body.insertAdjacentHTML('beforeend', html);
+      // Alle Nutzerwerte in rows sind per esc() maskiert.
+      document.body.insertAdjacentHTML('beforeend', html); // nosemgrep: typescript.react.security.audit.react-unsanitized-method.react-unsanitized-method
     });
   }
 

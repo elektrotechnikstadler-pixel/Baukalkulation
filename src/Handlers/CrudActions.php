@@ -175,7 +175,8 @@ class CrudActions
 
         header('Content-Type: application/json; charset=utf-8');
         header('Content-Disposition: attachment; filename="kunde_' . $id . '_dsgvo_export.json"');
-        echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        // JSON-Download (Content-Type application/json, attachment) – kein HTML-Kontext.
+        echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE); // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
         exit;
     }
 

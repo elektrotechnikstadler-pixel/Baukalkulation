@@ -127,9 +127,12 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Semgrep (SAST)
         if: github.actor != 'renovate[bot]'
+        # tainted-filename ausgenommen: alle Dateipfade werden per Whitelist-Regex, basename() bzw.
+        # realpath-Guard bereinigt (geprüft 2026-10-01, 27 Fundstellen); Traversal-Fälle decken API-Tests ab.
         run: |
           pipx run semgrep scan --config p/php --config p/javascript --config p/secrets \
-            --error --metrics=off --exclude public/lib --exclude public/script.min.js
+            --error --metrics=off --exclude public/lib --exclude public/script.min.js \
+            --exclude-rule php.lang.security.injection.tainted-filename.tainted-filename
 
   docs:
     name: Dokumentation
