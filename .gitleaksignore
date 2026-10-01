@@ -1,0 +1,6 @@
+# Geprüfte Fehlalarme (keine echten Geheimnisse)
+# Testpasswort eines Wegwerf-Benutzers in einem API-Test
+2b08d23629bbf9de6e2c98abaca75a26c4c57bb0:tests/Api/AuthTest.php:generic-api-key:85
+2b08d23629bbf9de6e2c98abaca75a26c4c57bb0:tests/Api/AuthTest.php:generic-api-key:88
+# Beschreibungstext "API: ..." in einem Arbeitspaket
+ec045dd58b813a273ad061c018e4b1288597f1f8:.github/ki/arbeitspakete/AP-20260929-kupferpreis.md:generic-api-key:146

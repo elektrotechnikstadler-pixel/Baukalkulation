@@ -65,10 +65,15 @@ final class MigrationTest extends ApiTestCase
         $zip->close();
         $db = $this->db();
         $db->exec("UPDATE settings SET data = json_set(data, '$.smtp_pass', 'Alt-Klartext-1') WHERE id = 1");
+        $altHash = (string) $db->query("SELECT password FROM users WHERE username = 'Systemadmin'")->fetchColumn();
+        $this->assertNotSame('', $altHash);
         $db = null;
 
         $client = $this->server->client();
-        $this->assertStatus(401, $client->post('login', ['username' => 'Systemadmin', 'password' => 'Stadler2580!']));
+        $this->assertStatus(200, $client->get('check'));
+        $neu = $this->db()->query("SELECT password, mustChangePassword FROM users WHERE username = 'Systemadmin'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertNotSame($altHash, $neu['password']);
+        $this->assertSame(1, (int) $neu['mustChangePassword']);
 
         $password = trim((string) file($this->server->dataPath('systemadmin-passwort.txt'))[1]);
         $this->assertOk($client->post('login', ['username' => 'Systemadmin', 'password' => $password]));

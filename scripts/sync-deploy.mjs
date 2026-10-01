@@ -18,7 +18,7 @@ const EXCLUDE = [
     /^\.github\//,
     /^docs\/(?!installation\.md$)/,
     /^src\/frontend\/__tests__\//,
-    /^(\.editorconfig|\.gitattributes|\.gitignore|\.php-cs-fixer\.dist\.php|\.pre-commit-config\.yaml)$/,
+    /^(\.editorconfig|\.gitattributes|\.gitignore|\.gitleaksignore|\.php-cs-fixer\.dist\.php|\.pre-commit-config\.yaml)$/,
     /^(cliff\.toml|mkdocs\.yml|renovate\.json|Makefile|phpunit\.xml\.dist|phpstan[^/]*\.neon[^/]*|AGENTS\.md)$/,
     /^(Änderungshinweise|Nächste Änderungen)\.txt$/,
 ];

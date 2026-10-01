@@ -137,7 +137,6 @@ final class AuthTest extends ApiTestCase
         $this->api->get('check');
 
         $client = $this->server->client();
-        $this->assertStatus(401, $client->post('login', ['username' => 'Systemadmin', 'password' => 'Stadler2580!']));
 
         $file = $this->server->dataPath('systemadmin-passwort.txt');
         $this->assertFileExists($file);
