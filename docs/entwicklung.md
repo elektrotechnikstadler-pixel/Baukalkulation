@@ -125,9 +125,13 @@ Release:
 
 ```bash
 # VERSION anpassen, npm run version:sync, CHANGELOG.md ergänzen, committen
-git tag v2.11.0
-git push --tags
+git tag vX.Y.Z
+git push origin main
+git push origin vX.Y.Z
 ```
+
+Es gibt keinen `deploy/`-Upload-Ordner mehr: Instanzen holen Updates ausschließlich aus den
+GitHub-Releases (Updater bzw. Update-Fenster, oder Git-Checkout des Tags).
 
 Die Release-Pipeline prüft, dass Tag und `VERSION` übereinstimmen, baut das Docker-Image
 (`ghcr.io/<owner>/<repo>:<version>`) mit SBOM und erstellt ein GitHub-Release mit

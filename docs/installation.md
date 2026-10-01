@@ -53,8 +53,10 @@ Das Skript fragt Ports, OCR und WhatsApp ab, schreibt `.env` und startet anschli
 
 ## 1. Dateien auf den Server kopieren
 
-Das komplette Repository (ohne `tests/`, `docs/`, `.github/`) in ein Verzeichnis auf dem Server kopieren (z.B. `/opt/baukalkulation/`).
-Fertig zusammengestellt liegt es nach `npm run deploy:sync` im Ordner `deploy/` – diesen Ordner hochladen. Aufbau:
+Das Repository von GitHub holen (`git clone` und den gewünschten Release-Tag `vX.Y.Z` auschecken,
+oder das Quellarchiv des GitHub-Release entpacken) – z.B. nach `/opt/baukalkulation/`.
+`tests/`, `docs/` und `.github/` werden zur Laufzeit nicht benötigt. Updates kommen ebenfalls aus
+den GitHub-Releases (siehe Abschnitt Update). Aufbau:
 
 ```
 ├── public/                      ← einziger Webroot (DocumentRoot)

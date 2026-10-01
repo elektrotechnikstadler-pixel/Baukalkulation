@@ -8,7 +8,7 @@
 #   C) Info       : sw.js CACHE_VERSION
 #
 # Verhalten: standardmäßig nur WARNEN (Exit 0). Mit -Strict → Exit 1.
-# Aufruf:    pwsh deploy\deploy\scripts\check-versions.ps1
+# Aufruf:    pwsh scripts\check-versions.ps1
 #            (oder über die VS-Code-Task "Versions-Check")
 # WICHTIG: Bei jeder Asset-Änderung ?v= in index.html UND sw.js
 #          erhöhen und sw.js CACHE_VERSION bumpen.
@@ -16,7 +16,7 @@
 param([switch]$Strict)
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot   # -> deploy\deploy
+$root = Split-Path -Parent $PSScriptRoot
 $problems = New-Object System.Collections.Generic.List[string]
 
 function Read-File($rel) {

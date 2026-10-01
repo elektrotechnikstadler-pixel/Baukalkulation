@@ -9,8 +9,7 @@
         "preview": "vite preview",
         "minify":  "terser public/script.js --compress passes=2 --mangle --output public/script.min.js",
         "check-versions": "node scripts/check-versions.mjs",
-        "version:sync": "node scripts/sync-version.mjs",
-        "deploy:sync": "node scripts/sync-deploy.mjs"
+        "version:sync": "node scripts/sync-version.mjs"
     },
     "devDependencies": {
         "terser": "^5.49.0",
