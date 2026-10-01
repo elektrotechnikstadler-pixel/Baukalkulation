@@ -37,6 +37,18 @@
 
 ---
 
+## v3.0.7 – Update-Prüfung zeigt neue Versionen sofort
+
+### Fehlerbehebungen
+- Update-Fenster: „Auf Updates prüfen“ nutzte ein bis zu 6 Stunden altes Ergebnis und meldete
+  deshalb „aktuell“, obwohl bereits eine neue Version veröffentlicht war. Die Prüfung per Knopf
+  fragt GitHub jetzt erneut ab, sobald das letzte Ergebnis älter als 5 Minuten ist.
+
+### Sonstiges
+- Kein `deploy/`-Upload-Ordner mehr; Updates kommen ausschließlich aus den GitHub-Releases.
+
+---
+
 ## v3.0.6 – KI-Scan Lesefehler
 
 ### Fehlerbehebungen
