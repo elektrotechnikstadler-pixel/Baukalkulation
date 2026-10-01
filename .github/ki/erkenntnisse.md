@@ -25,6 +25,9 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-013 | Ohne Anmeldung erreichbare Endpunkte (`check`, `get_logo` …) in jedem AP auf ungefilterte Ausgabe prüfen | `check` lieferte IBAN/SMTP an Anonyme | AP-20260929-sicherheit | nur hier |
 | E-014 | Ausnahmetexte nie in gespeicherte oder ausgelieferte Felder schreiben – feste Meldung, Details per `error_log()` | Globaler Error-Handler macht Warnungen zu Exceptions mit Interna | AP-20260929-kupferpreis | nur hier |
 | E-015 | Zustandsändernde Aktionen und Flags (z. B. `force`) nur per POST; 405 erst nach Rollen-/Flag-Prüfung | GET-Links umgehen die Origin-Prüfung | AP-20260929-kupferpreis | nur hier |
+| E-016 | Drosselung umgehende Flags (`force`) nie standardmäßig aus dem Frontend senden; Abnahme prüft den UI-Pfad, nicht nur die API | Update-Knopf umging Drosselung (GitHub-Rate-Limit) | AP-20261001-update | nur hier |
+| E-017 | Standard-Image-Namen nie in einem fremden Registry-Namensraum (`ghcr.io/local/…` gehört einer realen Organisation); ohne Repo lokaler Name je Compose-Projekt | Lieferketten-Risiko (Blocker) | AP-20261001-update | nur hier |
+| E-018 | Privilegierte Prozesse schreiben nie in Verzeichnisse, die ein weniger privilegierter Prozess beschreiben oder austauschen kann; Eigentum per root-Marker nachweisen, `mktemp`, keine Symlinks folgen | Symlink-Angriff auf root-Sidecar (2 Majors) | AP-20261001-update | AGENTS.md |
 
 ## Backup / Migration
 
@@ -64,6 +67,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-062 | Composer-Constraints mit `^` direkt in `composer.json` eintragen | `composer.bat` verschluckt `^` | Umbau Phase 1 | nur hier |
 | E-063 | Kein `@`-Operator | Globaler Error-Handler wirft trotzdem | Umbau Phase 2 | AGENTS.md |
 | E-064 | PostgreSQL-Tests nur starten, wenn der eigene Wegwerf-Container läuft – bei belegtem Port abbrechen, nie gegen einen unbekannten Server testen | Tests leeren das Schema `public`; Port 55432 war von einem Rest-Container belegt | AP-20260929-sicherheit | nur hier |
+| E-065 | Befehle im Container als `www-data` ausführen (`docker compose exec -u www-data app …`) – in Doku und UI | Sonst root-eigene Dateien in `data/`, Webserver kann nicht mehr schreiben | AP-20261001-update | nur hier |
+| E-066 | Ist ein Custom Agent per Name nicht verfügbar, generischen Subagenten mit Verweis auf die `.agent.md` beauftragen | Agent-Registry lud die Rollen zeitweise nicht | AP-20261001-update | nur hier |
 
 ## Planung / Zusammenarbeit
 
@@ -72,6 +77,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
 | E-071 | Tester schreibt nur unter `tests/`; bei Grenzverletzung Entwurf durch Entwickler prüfen lassen, nie ungeprüft übernehmen | Abgebrochener Tester-Lauf legte Produktivcode an | AP-20260929-kupferpreis | tester.agent.md (Hook-Kandidat Stufe 3) |
 | E-072 | Behauptungen von Subagenten („gelöscht“, „ins AP geschrieben“) per `git status`/Dateiinhalt prüfen; Teilaufträge klein schneiden | Tester meldete Löschung ohne Ausführung; Reviewer schrieb Runde 1 nicht ins AP | AP-20260929-projektansicht | nur hier |
+| E-074 | Vom Entwickler zusätzlich eingeführte öffentliche Methoden/Festlegungen im selben Schritt testen lassen | `gecachterStand()` und GET-Verhalten waren ungetestet | AP-20261001-update | nur hier |
+| E-075 | Abläufe über einen Container-Neustart dürfen keine Session voraussetzen; Rückfall im UI genauso abnehmen wie Erfolg; globale Sperren für alle Einstiegspunkte (`api.php`, `din1090_api.php`) planen | Polling nach Tausch hängend, Wartung umgehbar | AP-20261001-update | nur hier |
 | E-073 | Versionierung ab 3.0.1: nach jedem abgeschlossenen AP Patch-Version erhöhen und Tag `vX.Y.Z` auf `main` setzen (keine Branches) | Vorgabe Nutzer 2026-10-01 | Nutzer | ki-leitstand.agent.md |
 
 ## Abgelöst

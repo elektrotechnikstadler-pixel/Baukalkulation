@@ -20,6 +20,7 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 - Keine Secrets, Kundendaten oder Inhalte aus `data/` in Code, Tests oder `.md`-Dateien.
 - Kein `@`-Unterdrücken – der globale Error-Handler wirft trotzdem.
 - `deploy/` ist generiert (`make deploy`) – nie direkt bearbeiten.
+- Privilegierte Dienste (Updater mit Docker-Socket) schreiben nie in Verzeichnisse, die die App austauschen kann (E-018).
 - Commits nach Conventional Commits, nur lokal; kein Push, kein History-Rewrite ohne Rückfrage.
 
 ## Zusammenarbeit

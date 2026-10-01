@@ -32,3 +32,12 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-01 | projektansicht | Planung | Tester meldete Löschung, Reviewer schrieb nicht ins AP | Subagent-Angaben ungeprüft | 1 | E-072 |
 | 2026-10-01 | projektansicht | Tests | Erkennung aus Stichprobe (Major) | fehlende Randfall-Tests | 1 | E-035 |
 | 2026-10-01 | projektansicht | Frontend | Filtersumme/Zuklappzustand nach Inline-Änderung veraltet | – | 1 | – |
+| 2026-10-01 | update S1 | Sicherheit | Update-Knopf sendete immer `force` (Major) | UI-Pfad nicht abgenommen | 1 | E-016 |
+| 2026-10-01 | update S1 | Planung | Docker-Anleitung aktualisierte die App nicht (Major) | `build:` statt `image:` übersehen | 1 | – |
+| 2026-10-01 | update S1 | Werkzeuge | CLI als root erzeugt root-eigene Cache-Datei | `exec` ohne `-u www-data` | 1 | E-065 |
+| 2026-10-01 | update S1 | Tests | Zusatzmethode ungetestet | – | 1 | E-074 |
+| 2026-10-01 | update S1 | Werkzeuge | Custom Agent „Tester“ nicht gefunden | Registry | 1 | E-066 |
+| 2026-10-01 | update S2 | Sicherheit | Fremder Registry-Namensraum als Standard-Image (Blocker) | Platzhalter `local` | 1 | E-017 |
+| 2026-10-01 | update S2 | Sicherheit | Symlink-Angriffe auf root-Sidecar (2× Major) | gemeinsames Austauschverzeichnis | 2 | E-018 |
+| 2026-10-01 | update S2 | Planung | Polling nach Container-Tausch ohne Session, din1090_api ohne Wartung | Neustart/Einstiegspunkte nicht geplant | 1 | E-075 |
+| 2026-10-01 | update S2 | Werkzeuge | Entwickler-Lauf ohne Bericht, Testdateien im Projektwurzelverzeichnis | großer Auftrag | 4 | E-032, E-072 |
