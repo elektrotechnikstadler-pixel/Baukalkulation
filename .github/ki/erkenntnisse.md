@@ -72,6 +72,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
 | E-071 | Tester schreibt nur unter `tests/`; bei Grenzverletzung Entwurf durch Entwickler prüfen lassen, nie ungeprüft übernehmen | Abgebrochener Tester-Lauf legte Produktivcode an | AP-20260929-kupferpreis | tester.agent.md (Hook-Kandidat Stufe 3) |
 | E-072 | Behauptungen von Subagenten („gelöscht“, „ins AP geschrieben“) per `git status`/Dateiinhalt prüfen; Teilaufträge klein schneiden | Tester meldete Löschung ohne Ausführung; Reviewer schrieb Runde 1 nicht ins AP | AP-20260929-projektansicht | nur hier |
+| E-073 | Versionierung ab 3.0.1: nach jedem abgeschlossenen AP Patch-Version erhöhen und Tag `vX.Y.Z` auf `main` setzen (keine Branches) | Vorgabe Nutzer 2026-10-01 | Nutzer | ki-leitstand.agent.md |
 
 ## Abgelöst
 

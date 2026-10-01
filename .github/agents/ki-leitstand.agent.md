@@ -17,6 +17,7 @@ Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibs
 7. **Reviewer** prüft. `CHANGES_REQUESTED` → Befunde an Entwickler, weiter bei 5 (max. 3 Runden). `APPROVE` = **Tor G3**.
 8. Abschluss:
    - `git status` prüfen, nur zum Arbeitspaket gehörende Dateien stagen, Conventional Commit lokal. Kein Push.
+   - Danach Patch-Version erhöhen (`VERSION`, `npm.cmd run version:sync`), CHANGELOG „Unveröffentlicht“ als `## vX.Y.Z – …` abschließen, `chore(release): X.Y.Z` committen, Tag `vX.Y.Z` (E-073).
    - Status und Kennzahlen im Arbeitspaket setzen (Review-Runden, rote Testläufe).
    - Blocker/Major-Befunde und vermeidbare rote Testläufe ins Lernprotokoll `.github/ki/lernprotokoll.md`.
    - Jeden neuen gelernten Punkt als Eintrag in `.github/ki/erkenntnisse.md` (richtige Kategorie, nächste freie Nr.).
