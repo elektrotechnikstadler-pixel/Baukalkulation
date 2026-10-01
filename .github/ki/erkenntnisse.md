@@ -41,6 +41,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-032 | Gesamtläufe (SQLite ~2 min, PostgreSQL ~5 min) asynchron mit Logdatei starten; Subagenten führen keine Gesamtläufe aus | Subagenten lieferten bei langen Läufen kein Ergebnis (2×) | AP sicherheit, kupferpreis | ki-leitstand.agent.md |
 | E-033 | Parser-Randfälle nur in der betroffenen Zeile manipulieren; fremdes Zahlenformat in oberster Westmetall-Zeile → ältere Zeile ist akzeptiert (Veraltet nach 5 Tagen) | Sonst besteht auch ein falscher Fallback | AP-20260929-kupferpreis | nur hier |
 | E-034 | Externe Abrufe von Anfang an injizierbar planen | Gutfall (Admin-`force`) sonst nicht testbar | AP-20260929-kupferpreis | nur hier |
+| E-035 | Zeichensatz von Importdateien zeilenweise entscheiden (UTF-8 gültig → UTF-8, sonst Indizbytes CP850/Windows-1252, Datei-Vorgabe nur bei Gleichstand); Tests mit ASCII-Präfix und Mischdateien | Datanorm von FEGA & Schmitt ist CP850; Stichprobe allein klassifiziert falsch | AP-20260929-projektansicht | nur hier |
 
 ## Frontend
 
@@ -70,6 +71,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 |---|---|---|---|---|
 | E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
 | E-071 | Tester schreibt nur unter `tests/`; bei Grenzverletzung Entwurf durch Entwickler prüfen lassen, nie ungeprüft übernehmen | Abgebrochener Tester-Lauf legte Produktivcode an | AP-20260929-kupferpreis | tester.agent.md (Hook-Kandidat Stufe 3) |
+| E-072 | Behauptungen von Subagenten („gelöscht“, „ins AP geschrieben“) per `git status`/Dateiinhalt prüfen; Teilaufträge klein schneiden | Tester meldete Löschung ohne Ausführung; Reviewer schrieb Runde 1 nicht ins AP | AP-20260929-projektansicht | nur hier |
 
 ## Abgelöst
 

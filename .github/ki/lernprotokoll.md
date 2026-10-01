@@ -28,3 +28,7 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-09-29 | kupferpreis | Sicherheit | Exception-Text in `fetchError`; `force` per GET | – | 1 | E-014, E-015 |
 | 2026-09-29 | kupferpreis | Tests | Plausibilitätstest ersetzte alle Zeilen | – | 1 | E-033 |
 | 2026-09-29 | kupferpreis | Werkzeuge | PostgreSQL-Lauf nicht möglich (Docker-Dienst beendet) | Umgebung | 1 | E-064 |
+| 2026-10-01 | projektansicht | Werkzeuge | Tester-Lauf ohne Rückgabe (nur Generator angelegt) | zu großer Teilauftrag | 3 | E-032, E-072 |
+| 2026-10-01 | projektansicht | Planung | Tester meldete Löschung, Reviewer schrieb nicht ins AP | Subagent-Angaben ungeprüft | 1 | E-072 |
+| 2026-10-01 | projektansicht | Tests | Erkennung aus Stichprobe (Major) | fehlende Randfall-Tests | 1 | E-035 |
+| 2026-10-01 | projektansicht | Frontend | Filtersumme/Zuklappzustand nach Inline-Änderung veraltet | – | 1 | – |
