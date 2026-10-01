@@ -41,3 +41,5 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-01 | update S2 | Sicherheit | Symlink-Angriffe auf root-Sidecar (2× Major) | gemeinsames Austauschverzeichnis | 2 | E-018 |
 | 2026-10-01 | update S2 | Planung | Polling nach Container-Tausch ohne Session, din1090_api ohne Wartung | Neustart/Einstiegspunkte nicht geplant | 1 | E-075 |
 | 2026-10-01 | update S2 | Werkzeuge | Entwickler-Lauf ohne Bericht, Testdateien im Projektwurzelverzeichnis | großer Auftrag | 4 | E-032, E-072 |
+| 2026-10-01 | release 3.0.8 | Struktur | `install.sh` nach `git clone` nicht ausführbar | Commit unter Windows mit Modus 100644 | 1 | E-078 |
+| 2026-10-01 | release 3.0.8 | Struktur | 2. Instanz: Updater-Container-Name kollidiert | Installer setzte `UPDATER_NAME` nicht | 1 | E-079 |
