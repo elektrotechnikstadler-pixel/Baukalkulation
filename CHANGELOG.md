@@ -37,6 +37,16 @@
 
 ---
 
+## v3.0.6 – KI-Scan Lesefehler
+
+### Fehlerbehebungen
+- KI-Scan (Desktop und Mobil): Statt „Fehler: [object ProgressEvent]“ erscheint jetzt ein
+  verständlicher Hinweis, wenn die gewählte Datei nicht gelesen werden kann (geändert, verschoben,
+  gesperrt oder nur in der Cloud). Die Datei wird direkt bei der Auswahl in den Speicher kopiert;
+  Analyse, Vorschau und Beleg-Ablage hängen danach nicht mehr an der Datei auf dem Datenträger.
+
+---
+
 ## v3.0.5 – Semgrep-Befunde
 
 ### Sicherheit
