@@ -3269,14 +3269,24 @@ function _kiScanDrop(event) {
   if (file) _kiScanFileChosen(file);
 }
 
-function _kiScanFileChosen(file) {
+async function _kiScanFileChosen(file) {
   if (!file) return;
   const errEl = document.getElementById('kiScanError');
+  const btn = document.getElementById('kiScanAnalyzeBtn');
   errEl.style.display = 'none';
+  btn.disabled = true;
+  window._kiScanPendingFile = null;
   if (file.size > 10 * 1024 * 1024) {
     errEl.textContent = 'Datei zu groß (max. 10 MB). Bitte eine kleinere Datei wählen.';
     errEl.style.display = 'block';
-    document.getElementById('kiScanAnalyzeBtn').disabled = true;
+    return;
+  }
+  // Sofort in den Speicher kopieren: spätere Lesezugriffe (Scan, Vorschau, Beleg) hängen dann nicht mehr an der Datei auf dem Datenträger.
+  try {
+    file = new File([await file.arrayBuffer()], file.name, { type: file.type, lastModified: file.lastModified });
+  } catch (e) {
+    errEl.textContent = 'Datei konnte nicht gelesen werden (' + (e.name || 'Fehler') + '). Ist sie noch in einem anderen Programm geöffnet, wurde sie verschoben/geändert oder liegt sie nur in der Cloud (OneDrive)? Bitte Datei schließen bzw. lokal speichern und erneut auswählen.';
+    errEl.style.display = 'block';
     return;
   }
   window._kiScanPendingFile = file;
@@ -3291,7 +3301,7 @@ function _kiScanFileChosen(file) {
     img.style.display = 'none';
     preview.style.display = '';
   }
-  document.getElementById('kiScanAnalyzeBtn').disabled = false;
+  btn.disabled = false;
 }
 
 async function _kiScanRun() {
@@ -3307,7 +3317,7 @@ async function _kiScanRun() {
     const b64 = await new Promise((resolve, reject) => {
       const fr = new FileReader();
       fr.onload  = () => resolve(fr.result.split(',')[1]);
-      fr.onerror = reject;
+      fr.onerror = () => reject(new Error('Datei konnte nicht gelesen werden (' + (fr.error?.name || 'Lesefehler') + '). Bitte Datei erneut auswählen.'));
       fr.readAsDataURL(file);
     });
     const resp = await fetch('api.php?action=ai_scan_material', {
