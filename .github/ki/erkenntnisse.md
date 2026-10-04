@@ -51,6 +51,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
 | E-040 | In `vite.config.js` `publicDir: false` belassen | Sonst kopiert Vite `public/` nach `public/dist/` | Umbau Phase 1 | nur hier |
+| E-041 | Soll/Ist der Zeiterfassung nur über `src/Services/Sollzeit.php` bzw. das Gegenstück `public/sollzeit.js` berechnen (beide synchron halten); JS `getDay()` = ISO für Mo–Sa, nur Sonntag 0 ↔ 7 | Soll-Logik war 5-fach dupliziert und lief auseinander | AP-20261004-sollzeit-wochentage | nur hier |
 
 ## Struktur (Vorlage copier-astral)
 
@@ -76,13 +77,14 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 |---|---|---|---|---|
 | E-070 | Zusätzlich angelegte Testdateien im AP (Abschnitt 3/4) aufführen | Reviewer fand undokumentierten Test | AP-20260929-sicherheit | nur hier |
 | E-071 | Tester schreibt nur unter `tests/`; bei Grenzverletzung Entwurf durch Entwickler prüfen lassen, nie ungeprüft übernehmen | Abgebrochener Tester-Lauf legte Produktivcode an | AP-20260929-kupferpreis | tester.agent.md (Hook-Kandidat Stufe 3) |
-| E-072 | Behauptungen von Subagenten („gelöscht“, „ins AP geschrieben“) per `git status`/Dateiinhalt prüfen; Teilaufträge klein schneiden | Tester meldete Löschung ohne Ausführung; Reviewer schrieb Runde 1 nicht ins AP | AP-20260929-projektansicht | nur hier |
+| E-072 | Behauptungen von Subagenten („gelöscht“, „ins AP geschrieben“, Befunde „Hoch“) per `git status`/Dateiinhalt bzw. an der Fundstelle prüfen; Teilaufträge klein schneiden | Tester meldete Löschung ohne Ausführung; Reviewer schrieb Runde 1 nicht ins AP; Architekt meldete falschen „Hoch“-Befund (getDay) – 2. Auftreten | AP-20260929-projektansicht, AP-20261004-sollzeit-wochentage | ki-leitstand.agent.md |
 | E-074 | Vom Entwickler zusätzlich eingeführte öffentliche Methoden/Festlegungen im selben Schritt testen lassen | `gecachterStand()` und GET-Verhalten waren ungetestet | AP-20261001-update | nur hier |
 | E-075 | Abläufe über einen Container-Neustart dürfen keine Session voraussetzen; Rückfall im UI genauso abnehmen wie Erfolg; globale Sperren für alle Einstiegspunkte (`api.php`, `din1090_api.php`) planen | Polling nach Tausch hängend, Wartung umgehbar | AP-20261001-update | nur hier |
 | E-073 | Versionierung ab 3.0.1: nach jedem abgeschlossenen AP Patch-Version erhöhen und Tag `vX.Y.Z` auf `main` setzen (keine Branches) | Vorgabe Nutzer 2026-10-01 | Nutzer | ki-leitstand.agent.md |
 | E-076 | Commits immer mit expliziten Pfaden (`git commit -- <pfade>`), auch `--amend` | Amend nahm fremde gestagte Dateien mit (vor Push korrigiert) | Release 3.0.6 | AGENTS.md, ki-leitstand.agent.md (auf Wunsch) |
 | E-077 | Ab 3.0.6 kein `deploy/`-Spiegel: Release = Push `main` + Tag, Instanzen updaten aus dem GitHub-Release | Vorgabe Nutzer 2026-10-01 | Nutzer | AGENTS.md, ki-leitstand.agent.md, struktur.instructions.md |
 | E-078 | Shell-Skripte im Repo mit Modus 100755 (`git update-index --chmod=+x`); `git commit -- <pfade>` übernimmt unter Windows den Modus nicht – dafür temporären Index (`GIT_INDEX_FILE`) nutzen, fremd Gestagtes bleibt unberührt | `install.sh` nach `git clone` „Permission denied“ | Release 3.0.8 | nur hier |
+| E-080 | Gutschriften aus dem Tages-Soll (Urlaub, Krank, Feiertag, „Ist = Soll“) nur an Tagen ins Ist, die auch im Soll enthalten sind – Soll und Ist aus derselben Tagesfunktion | Monats-Mail schrieb Feiertage doppelt gut (Major) | AP-20261004-sollzeit-wochentage | nur hier |
 | E-079 | Jeder Container-Name in Compose (`APP_NAME`, `AUTOHEAL_NAME`, `UPDATER_NAME`) braucht im Installer einen projektbezogenen Standard und eine Konfliktprüfung | 2. Instanz brach mit „container name already in use“ (Updater) ab | Release 3.0.8 | nur hier |
 
 ## Abgelöst

@@ -43,3 +43,6 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-01 | update S2 | Werkzeuge | Entwickler-Lauf ohne Bericht, Testdateien im Projektwurzelverzeichnis | großer Auftrag | 4 | E-032, E-072 |
 | 2026-10-01 | release 3.0.8 | Struktur | `install.sh` nach `git clone` nicht ausführbar | Commit unter Windows mit Modus 100644 | 1 | E-078 |
 | 2026-10-01 | release 3.0.8 | Struktur | 2. Instanz: Updater-Container-Name kollidiert | Installer setzte `UPDATER_NAME` nicht | 1 | E-079 |
+| 2026-10-04 | sollzeit-wochentage | Planung | Architekt meldete „Hoch“-Befund (getDay-Versatz), widerlegt durch Leitstand | Subagent-Befund ungeprüft | 2 | E-072 |
+| 2026-10-04 | sollzeit-wochentage | Planung | Monats-Mail: Feiertag doppelt als Ist (Major) | Soll und Ist aus unterschiedlicher Logik | 1 | E-080 |
+| 2026-10-04 | sollzeit-wochentage | Tests | API-Test zu strikt auf JSON-Typ von 0 (1 roter Lauf) | – | 1 | – |
