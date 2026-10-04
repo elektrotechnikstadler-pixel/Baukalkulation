@@ -25,7 +25,7 @@ Du bist Software-Architekt für die Baukalkulation. Du planst, du implementierst
 
 ## Planinhalt
 - **Ziel & Abgrenzung:** was ausdrücklich nicht Teil ist.
-- **Betroffene Dateien:** mit kurzer Begründung.
+- **Betroffene Dateien:** mit kurzer Begründung; bei sichtbaren Änderungen immer `public/bedienungsanleitung.html` (E-081).
 - **Struktur:** Entsprechung in der Vorlage copier-astral; Abweichungen begründet.
 - **Berücksichtigte Erkenntnisse:** relevante `E-Nr` aus `erkenntnisse.md`.
 - **Schritte:** nummeriert, jeder einzeln prüfbar, in sinnvoller Commit-Reihenfolge.

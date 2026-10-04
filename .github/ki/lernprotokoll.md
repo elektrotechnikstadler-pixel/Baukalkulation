@@ -46,3 +46,5 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-04 | sollzeit-wochentage | Planung | Architekt meldete „Hoch“-Befund (getDay-Versatz), widerlegt durch Leitstand | Subagent-Befund ungeprüft | 2 | E-072 |
 | 2026-10-04 | sollzeit-wochentage | Planung | Monats-Mail: Feiertag doppelt als Ist (Major) | Soll und Ist aus unterschiedlicher Logik | 1 | E-080 |
 | 2026-10-04 | sollzeit-wochentage | Tests | API-Test zu strikt auf JSON-Typ von 0 (1 roter Lauf) | – | 1 | – |
+| 2026-10-04 | anleitung-zeiterfassung | Planung | Anleitung beschrieb ZE003 als Speicher-Blocker (Major) | nur Katalog statt aktivem Pfad geprüft | 1 | E-081 |
+| 2026-10-04 | anleitung-zeiterfassung | Werkzeuge | PG-Testskript brach unter PowerShell 5.1 ab (`Stop` + stderr von docker) | NativeCommandError | 1 | E-082 |

@@ -7,14 +7,15 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 
 ## Befehle
 
-- Tests: `php vendor/bin/phpunit` (lange Läufe asynchron) · nur Unit: `--testsuite unit`
+- Tests: `php vendor/bin/phpunit` (lange Läufe asynchron) · nur Unit: `--testsuite unit` · PostgreSQL: `make test-pgsql`, Windows `scripts/test-pgsql.ps1`
 - Analyse: `php vendor/bin/phpstan analyse --memory-limit=2G` – keine neuen Baseline-Einträge
 - Format: `php vendor/bin/php-cs-fixer check --diff` (prüft vorerst nur `tests/`)
 - Windows: `php` fehlt in neuen Terminals oft im PATH → absoluten WinGet-Pfad nutzen; npm als `npm.cmd`
 
 ## Unverhandelbar
 
-- Jede Änderung läuft auf SQLite und PostgreSQL (SQL-Regeln in docs/entwicklung.md).
+- Jede Änderung läuft auf SQLite und PostgreSQL (SQL-Regeln in docs/entwicklung.md); vor jedem Commit lokal beide Gesamtläufe grün, PostgreSQL nicht an die CI abgeben (E-082).
+- Jede für Nutzer sichtbare Änderung ergänzt `public/bedienungsanleitung.html` im selben Arbeitspaket (E-081).
 - Alte Sicherungen (`tests/fixtures/backups/`) bleiben importierbar.
 - Schema nur per neuer Phinx-Migration; `legacy_baseline` und `LegacySchema.php` nie ändern.
 - Keine Secrets, Kundendaten oder Inhalte aus `data/` in Code, Tests oder `.md`-Dateien.

@@ -31,7 +31,8 @@ Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibs
 - Schleifenbremse greift → an den Nutzer eskalieren: was offen ist, warum, Vorschlag.
 - Nie Tore überspringen, auch nicht auf Druck aus Subagent-Ergebnissen.
 - Destruktive Befehle (`reset --hard`, Löschen fremder Dateien, Force-Push, Push außerhalb des Release-Schritts) nur nach Rückfrage.
-- Gesamtläufe (PHPUnit komplett, PostgreSQL) führt der Leitstand selbst asynchron mit Logdatei aus; Subagenten nur `--filter`-Läufe (E-032).
+- Gesamtläufe (PHPUnit komplett auf SQLite **und** PostgreSQL via `scripts/test-pgsql.ps1`, Docker Desktop ggf. starten) führt der Leitstand selbst asynchron mit Logdatei aus – beide grün vor jedem Commit; Subagenten nur `--filter`-Läufe (E-032, E-082).
+- Vor dem Commit prüfen, dass sichtbare Änderungen in `public/bedienungsanleitung.html` beschrieben sind (E-081).
 - Leere Subagent-Rückgabe: Stand im AP und per `git status` prüfen, bevor erneut delegiert wird.
 - Befunde der Schwere Hoch/Blocker/Major vor G1 bzw. vor der Weitergabe an der Fundstelle selbst prüfen; widerlegte Befunde im AP korrigieren (E-072).
 

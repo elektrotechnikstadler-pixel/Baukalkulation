@@ -86,6 +86,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-078 | Shell-Skripte im Repo mit Modus 100755 (`git update-index --chmod=+x`); `git commit -- <pfade>` übernimmt unter Windows den Modus nicht – dafür temporären Index (`GIT_INDEX_FILE`) nutzen, fremd Gestagtes bleibt unberührt | `install.sh` nach `git clone` „Permission denied“ | Release 3.0.8 | nur hier |
 | E-080 | Gutschriften aus dem Tages-Soll (Urlaub, Krank, Feiertag, „Ist = Soll“) nur an Tagen ins Ist, die auch im Soll enthalten sind – Soll und Ist aus derselben Tagesfunktion | Monats-Mail schrieb Feiertage doppelt gut (Major) | AP-20261004-sollzeit-wochentage | nur hier |
 | E-079 | Jeder Container-Name in Compose (`APP_NAME`, `AUTOHEAL_NAME`, `UPDATER_NAME`) braucht im Installer einen projektbezogenen Standard und eine Konfliktprüfung | 2. Instanz brach mit „container name already in use“ (Updater) ab | Release 3.0.8 | nur hier |
+| E-081 | Jede für Nutzer sichtbare Änderung ergänzt `public/bedienungsanleitung.html` im selben AP; Aussagen aus dem Code belegen und vom Reviewer gegen den aktiven UI-/API-Pfad prüfen lassen (nicht nur gegen Kataloge) | Vorgabe Nutzer 2026-10-04; Anleitung versprach ZE003 als Speicher-Blocker (Major) | AP-20261004-anleitung-zeiterfassung | AGENTS.md, ki-leitstand.agent.md, architekt.agent.md |
+| E-082 | Vor jedem Commit Gesamtlauf auf SQLite und PostgreSQL lokal (`scripts/test-pgsql.ps1`, Docker Desktop starten); PostgreSQL nicht an die CI delegieren | Vorgabe Nutzer 2026-10-04 | Nutzer | AGENTS.md, ki-leitstand.agent.md |
 
 ## Abgelöst
 
