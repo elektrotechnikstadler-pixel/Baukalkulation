@@ -15,6 +15,7 @@
   nav.toc { position:sticky; top:16px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px 16px; font-size:.86rem; }
   nav.toc strong { display:block; margin-bottom:8px; color:var(--blue-d); text-transform:uppercase; letter-spacing:.5px; font-size:.72rem; }
   nav.toc a { display:block; color:var(--ink); text-decoration:none; padding:3px 0; border-radius:4px; }
+  nav.toc a.toc-sub { margin-left:12px; font-size:.8rem; }
   nav.toc a:hover { color:var(--blue-d); }
   main.content { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 28px 32px; }
   section { padding-top:18px; scroll-margin-top:16px; }
@@ -22,6 +23,9 @@
   h3 { font-size:1.02rem; margin:18px 0 6px; }
   p, li { font-size:.92rem; }
   ul, ol { padding-left:22px; }
+  .se-table { width:100%; border-collapse:collapse; table-layout:fixed; margin:10px 0 16px; font-size:.82rem; }
+  .se-table th, .se-table td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+  .se-table th { background:#eef6f8; }
   code { background:var(--bg); padding:1px 6px; border-radius:4px; font-size:.85em; }
   .tip { background:#e6f7fb; border-left:4px solid var(--blue); padding:10px 14px; border-radius:6px; margin:12px 0; font-size:.9rem; }
   .warn { background:#fff4e5; border-left:4px solid #f0a020; padding:10px 14px; border-radius:6px; margin:12px 0; font-size:.9rem; }
@@ -38,6 +42,10 @@
     .wrap{ display:block; max-width:none; padding:0; } main.content{ border:none; padding:0; }
     header.doc{ background:none; color:#000; border-bottom:2px solid #000; }
     h2{ page-break-after:avoid; } section{ page-break-inside:avoid; }
+    section#zeiterfassung{ page-break-inside:auto; }
+    section#zeiterfassung h3{ page-break-after:avoid; }
+    .se-table{ font-size:8pt; }
+    .se-table tr{ page-break-inside:avoid; }
   }
 </style>
 </head>
@@ -48,7 +56,7 @@
 </div>
 <header class="doc">
   <h1>📖 Bedienungsanleitung – Baukalkulation ES</h1>
-  <p>Version 2.10.86 · Handbuch für die tägliche Arbeit mit Projekten, Zeiterfassung, Auswertung und Verwaltung</p>
+  <p>Version 3.0.10 · Handbuch für die tägliche Arbeit mit Projekten, Zeiterfassung, Auswertung und Verwaltung</p>
 </header>
 
 <div class="wrap">
@@ -60,6 +68,17 @@
     <a href="#kataloge">4. Kataloge</a>
     <a href="#kunden">5. Kunden &amp; Rechnungen</a>
     <a href="#zeiterfassung">6. Zeiterfassung</a>
+    <a class="toc-sub" href="#ze-erfassen">Erfassen und bearbeiten</a>
+    <a class="toc-sub" href="#ze-kategorien">Buchungskategorien</a>
+    <a class="toc-sub" href="#ze-sollzeit">Sollarbeitszeit</a>
+    <a class="toc-sub" href="#ze-feiertage">Feiertage</a>
+    <a class="toc-sub" href="#ze-urlaub">Urlaub</a>
+    <a class="toc-sub" href="#ze-krank">Krankheit</a>
+    <a class="toc-sub" href="#ze-gleitzeit">Gleitzeitkonto</a>
+    <a class="toc-sub" href="#ze-pruefungen">Prüfungen und Warnungen</a>
+    <a class="toc-sub" href="#ze-verwaltung">Zeitverwaltung</a>
+    <a class="toc-sub" href="#ze-auswertung">Auswertungen und Erinnerungen</a>
+    <a class="toc-sub" href="#ze-projekte">Projekte und Rechte</a>
     <a href="#wochenplanung">7. Wochenplanung</a>
     <a href="#termine">8. Termine &amp; Kalender</a>
     <a href="#dashboard">9. Dashboard</a>
@@ -77,7 +96,7 @@
       <h2>1. Anmeldung &amp; Start</h2>
       <p>Melden Sie sich mit Ihrem Benutzernamen und Passwort an. Nach der Anmeldung gelangen Sie – je nach Einstellung – auf die zuletzt geöffnete Ansicht oder das Dashboard.</p>
       <ul>
-        <li>Die installierte <strong>Version</strong> sehen Sie jederzeit unten links in der Fußzeile (z.&nbsp;B. <code>v2.10.86</code>).</li>
+        <li>Die installierte <strong>Version</strong> sehen Sie jederzeit unten links in der Fußzeile (z.&nbsp;B. <code>v3.0.10</code>).</li>
         <li>Die App funktioniert auch als <strong>PWA</strong> (installierbar) und arbeitet bei kurzen Verbindungsabbrüchen offline weiter.</li>
       </ul>
     </section>
@@ -142,13 +161,86 @@
 
     <section id="zeiterfassung">
       <h2>6. Zeiterfassung (Stunden)</h2>
-      <p>Mitarbeiter erfassen ihre Arbeitszeit pro Tag. Erfasste Stunden sind die <strong>maßgebliche Quelle</strong> und bleiben auch dann erhalten, wenn ein Projekt archiviert oder gelöscht wird.</p>
+      <p>Die Zeiterfassung speichert Arbeits- und Abwesenheitseinträge je Mitarbeiter und Datum. Für Soll/Ist und Gleitzeit gelten die nachstehenden Regeln; maßgeblich ist jeweils die aktuelle Sollzeit des Mitarbeiterprofils.</p>
+
+      <h3 id="ze-erfassen">Erfassen und bearbeiten</h3>
+      <p>Am Desktop öffnen Sie <strong>Zeitverwaltung → Stundenerfassung</strong>. In der mobilen Ansicht tippen Sie auf <strong>Stunden</strong> und anschließend auf <strong>+</strong>; in Mobile-Light erfassen Sie direkt in der Stundenerfassung. Wählen Sie Datum und Typ. Bei <strong>Arbeit</strong> können Sie Baustelle, Stundenkategorie und Bemerkung angeben.</p>
+      <p>Ist unter <strong>Verwaltung → Allgemein → Erweiterte Zeiterfassung</strong> die Option aktiviert, erfassen Sie bei Arbeit zusätzlich <strong>Von</strong>, <strong>Bis</strong> und <strong>Pause</strong>; die Dauer wird daraus berechnet. Beim Typ <strong>Sonstiger Fehlgrund</strong> können Sie zwischen „Ganzer Tag“ und „Zeitspanne“ wählen. Bei Urlaub, Krank und anderen passenden Typen lässt sich ein Datumsbereich angeben; die Erfassung legt Einträge für die berücksichtigten Tage an.</p>
+      <p>Eigene Einträge können Sie in den mobilen Ansichten bearbeiten. In der Desktop-Erfassung ist das Löschen für nicht automatische Einträge ab fünf Tagen vor heute freigeschaltet; das schließt zukünftige Einträge ein. Berechtigte Personen können Einträge außerdem über die Stundenauswertung nachtragen, bearbeiten und löschen.</p>
+      <div class="warn">Beim Speichern wird der vollständige Zeiterfassungsstand abgeglichen. Erkennt der Server, dass dadurch viele Einträge verschwinden würden, stoppt er zunächst und verlangt eine ausdrückliche Bestätigung. Ohne Bestätigung bleiben die Daten unverändert.</div>
+
+      <h3 id="ze-kategorien">Buchungskategorien</h3>
+      <p>„Ist“ bezeichnet die für den Soll/Ist-Vergleich und den Gleitzeitsaldo angerechneten Stunden. Eingabestunden und Ist-Stunden sind bei Abwesenheits- und Freizeittypen nicht immer dasselbe.</p>
+      <table class="se-table">
+        <thead><tr><th>Kategorie</th><th>Stunden-Eingabe</th><th>Zählt als Ist</th><th>Hinweise</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Arbeit</strong></td><td>Stunden; bei erweiterter Erfassung aus Von/Bis abzüglich Pause</td><td>Erfasste Stunden</td><td>Baustelle und Stundenkategorie können zugeordnet werden.</td></tr>
+          <tr><td><strong>Urlaub</strong></td><td>Keine Stundeneingabe</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Wird auf das Jahreskontingent angerechnet.</td></tr>
+          <tr><td><strong>Krank</strong></td><td>Keine Stundeneingabe</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Der Kranktag wird in Übersichten gezählt.</td></tr>
+          <tr><td><strong>Feiertag</strong></td><td>Automatisch, wenn für den Feiertag kein anderer Eintrag besteht</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Automatische Gutschrift nur bei positivem Tages-Soll.</td></tr>
+          <tr><td><strong>Gleitzeit</strong></td><td>Keine Stundeneingabe</td><td>0 h</td><td>Markiert einen Gleittag; der Eintrag selbst schreibt keine Ist-Stunden gut.</td></tr>
+          <tr><td><strong>Abwesend</strong></td><td>Stunden und Grund erforderlich</td><td>0 h</td><td>Die Dauer wird dokumentiert, zählt aber nicht als Arbeitszeit.</td></tr>
+          <tr><td><strong>Sonstiger Fehlgrund</strong></td><td>Ganzer Tag ohne Stunden oder optional Zeitspanne mit Von/Bis</td><td>0 h</td><td>Auch eine erfasste Zeitspanne wird nicht als Ist angerechnet.</td></tr>
+          <tr><td><strong>Eigene Typen</strong></td><td>Je Einstellung keine, manuelle Stunden oder automatisch Tages-Soll</td><td>Arbeitszeit aus: 0 h; Arbeitszeit an: erfasste Stunden; zusätzlich „Ist = Soll“: Tages-Soll</td><td>Einstellungen unter Verwaltung → Allgemein → Erfassungstypen. Ältere Einträge als einfacher Text gelten als Arbeitszeit.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="ze-sollzeit">Sollarbeitszeit je Mitarbeiter</h3>
+      <p>Öffnen Sie <strong>Verwaltung → Benutzerverwaltung</strong>, wählen Sie bei einem Mitarbeiter <strong>Daten</strong> und speichern Sie die Sollzeit im Mitarbeiterprofil. Mit „Sollzeit je Wochentag“ tragen Sie eigene Werte für Montag bis Sonntag ein. <strong>0 Stunden bedeutet: an diesem Wochentag ist kein Soll vorgesehen.</strong> Bei ausgeschalteter Option gelten stattdessen „Soll/Tag“ und die ausgewählten Arbeitstage.</p>
+      <p>Beim ersten Einschalten werden die bisherigen Sollstunden für die bisherigen Arbeitstage vorbelegt; nicht konfigurierte Tage erhalten 0. Die Sollzeit im Mitarbeiterprofil kann ein Administrator ändern. Administratoren und Master können zusätzlich in der mobilen Zeitübersicht über <strong>Zeiten</strong> (Ansicht <strong>Zeitübersicht</strong>) im Tab <strong>Übersicht</strong> die Felder <strong>Soll/Tag</strong> und <strong>Tage/Wo</strong> anpassen. Dort gibt es keine Eingabe einzelner Wochentags-Sollstunden. <strong>Änderungen an der Sollzeit wirken rückwirkend auf alle Auswertungen und das Gleitzeitkonto.</strong> Eine Sollzeit-Historie pro Gültigkeitszeitraum gibt es nicht.</p>
+
+      <h3 id="ze-feiertage">Feiertage</h3>
+      <p>Die Anwendung berücksichtigt ihren hinterlegten bayerischen Feiertagskalender (feste und bewegliche Feiertage) sowie zusätzliche betriebliche Feiertage. Eigene Feiertage verwalten Sie unter <strong>Verwaltung → Allgemein → Feiertage &amp; arbeitsfreie Tage</strong>.</p>
+      <p>Fällt ein Feiertag auf einen Tag mit positivem Soll und gibt es an diesem Datum keinen Zeiteintrag, erscheint eine automatische Feiertagsgutschrift in Höhe des Tages-Solls. An einem Tag ohne Soll gibt es keine Gutschrift. Das Monatssoll bleibt in den normalen Soll/Ist-Auswertungen bestehen; die Feiertagsgutschrift gleicht das Tages-Soll im Ist aus. In der Monats-E-Mail werden Feiertage nicht separat ausgewiesen. Für deren Monatssoll zieht der Cron nur die hinterlegten bayerischen Feiertage ab; zusätzliche betriebliche Feiertage mindern es dort nicht.</p>
+
+      <h3 id="ze-urlaub">Urlaub</h3>
+      <p>Der Urlaubsanspruch wird je Mitarbeiter und Jahr in den Mitarbeiterdaten festgelegt. Bei einer Urlaubsbuchung prüft das System das verbleibende Jahreskontingent; ist es ausgeschöpft, wird die Buchung abgelehnt. Urlaub zählt im Ist mit dem Tages-Soll des jeweiligen Datums, an Tagen ohne Soll mit 0 Stunden. Eine mehrtägige Eingabe legt einzelne Tagesbuchungen an; Wochenenden und hinterlegte Feiertage werden bei der Erfassung übersprungen.</p>
+      <p>In der Stundenerfassung sehen Sie genommene Urlaubstage und den Anspruch. Im Jahreswechsel-Assistenten können berechtigte Personen den Anspruch für das Folgejahr übernehmen und anpassen.</p>
+
+      <h3 id="ze-krank">Krankheit</h3>
+      <p>Erfassen Sie Krankheit mit Typ <strong>Krank</strong>, bei Bedarf für einen Datumsbereich. Krankheit zählt pro Datum mit dem aktuellen Tages-Soll; an einem freien Tag werden 0 Stunden angerechnet. Die Zahl der Krankheitstage wird in der Stundenerfassung und den Mitarbeiterübersichten angezeigt.</p>
+
+      <h3 id="ze-gleitzeit">Gleitzeitkonto</h3>
+      <p>Das Gleitzeitkonto können Administratoren unter <strong>Verwaltung → Allgemein</strong> aktivieren. Der laufende Saldo addiert für jeden Monat ab dem eingestellten Startdatum die Differenz <strong>Ist minus Soll</strong> sowie manuelle Gleitzeitkonto-Buchungen. Einzelne manuelle Buchungen können einen positiven oder negativen Stundenbetrag und einen verpflichtenden Kommentar enthalten. Der Erfassungstyp „Gleitzeit“ selbst zählt als 0 Ist-Stunden.</p>
+      <p><strong>Beispiel April 2026:</strong> Bei 8 Sollstunden von Montag bis Freitag hat der Monat 22 Solltage und damit 176 Sollstunden. Angenommen, an 17 Tagen werden je 8 Stunden und an einem weiteren Tag 6 Stunden gearbeitet: Das sind 142 Arbeitsstunden. Zwei Urlaubstage ergeben 16 Ist-Stunden, zwei bayerische Feiertage mit Tages-Soll weitere 16 Ist-Stunden. Insgesamt sind das 174 Ist-Stunden; der Monatsbeitrag zum Konto beträgt <strong>174 − 176 = −2 Stunden</strong>. Für den vollständigen Kontostand kommen die übrigen Monate ab Startdatum und alle manuellen Buchungen hinzu.</p>
+      <p>Im Jahreswechsel-Assistenten kann ein berechtigter Benutzer einen gewählten Saldo als Buchung am 1. Januar des Folgejahres übertragen oder den Betrag vorher anpassen.</p>
+
+      <h3 id="ze-pruefungen">Prüfungen und Warnungen</h3>
+      <p>Der Katalog beschreibt mögliche Fehlbuchungen; nicht jeder dort aufgeführte Code wird aktuell beim Speichern oder in der Auswertung ausgelöst. Die Wirkung im Programm ist:</p>
+      <table class="se-table">
+        <thead><tr><th>Code</th><th>Bedeutung</th><th>Wirkung heute</th></tr></thead>
+        <tbody>
+          <tr><td>ZE001</td><td>Arbeitszeiten überschneiden sich am selben Tag.</td><td>Verhindert das Speichern überlappender Arbeitseinträge im selben Payload, wenn beide gültige Von-/Bis-Zeiten haben.</td></tr>
+          <tr><td>ZE002</td><td>Endzeit liegt nicht nach der Startzeit.</td><td>Verhindert das Speichern eines Arbeitseintrags mit gültigen Von-/Bis-Zeiten, wenn Bis kleiner oder gleich Von ist.</td></tr>
+          <tr><td>ZE003</td><td>Für Arbeitszeit fehlt ein Projekt.</td><td>Wird aktuell weder beim Speichern geprüft noch durch Klassifikation oder Auswertung angezeigt; der Code steht nur im Katalog.</td></tr>
+          <tr><td>ZE004</td><td>Arbeitseintrag hat nicht mehr als 0 Stunden.</td><td>Verhindert das Speichern nicht. Bei aktivierter Anomalieanzeige erscheint Arbeit mit 0 h in der Stundenauswertung, aber nicht mit dem Code ZE004.</td></tr>
+          <tr><td>ZE005</td><td>Zugeordnetes Projekt existiert nicht mehr; die Arbeitszeit bleibt gültig.</td><td>Wird als Hinweisstatus gespeichert; in „Auffällige Buchungen“ ausgeblendet und nicht repariert.</td></tr>
+          <tr><td>ZE006</td><td>Stunden wurden trotz aktivem Auto-Import noch nicht ins Projekt gebucht.</td><td>Wird als Fehlbuchung in der Stundenauswertung angezeigt; „Reparieren“ kann die Projektbuchung nachtragen. Speichern wird nicht verhindert.</td></tr>
+          <tr><td>ZE007</td><td>Im Projekt gibt es eine Buchung ohne passenden Zeiteintrag.</td><td>Wird bei der Projektprüfung als Ghost-Befund ausgegeben; verhindert das Speichern nicht.</td></tr>
+          <tr><td>ZE008</td><td>Mehr als 10 Stunden an einem Tag (§ 3 ArbZG).</td><td>Bei aktivierter Anomalieanzeige erscheinen mehr als 10 h in der Stundenauswertung ohne ZE008-Code; der Code selbst wird aktuell nicht erzeugt.</td></tr>
+          <tr><td>ZE009</td><td>Gesetzliche Mindestpause ist nicht eingehalten (§ 4 ArbZG).</td><td>Wird aktuell nicht durch einen Prüfpfad erzeugt; für bereits gespeicherte Befunde ist ein Anzeigetext hinterlegt.</td></tr>
+          <tr><td>ZE010</td><td>Datum fehlt oder ist ungültig.</td><td>Verhindert das Speichern.</td></tr>
+          <tr><td>ZE011</td><td>Dieselbe clientUuid kommt mehrfach im Speicherdatensatz vor.</td><td>Verhindert das Speichern.</td></tr>
+          <tr><td>ZE012</td><td>Jahreskontingent für Urlaub ist ausgeschöpft.</td><td>Eine Buchung, die das Kontingent mit zusätzlichen Urlaubstagen überschreitet, wird durch eine separate Limitprüfung abgelehnt; die Antwort liefert dabei keinen ZE012-Code. Bestehende Über-Limit-Altdaten werden bei reinen Bearbeitungen geduldet.</td></tr>
+        </tbody>
+      </table>
+      <p>Die <strong>Wochenprüfung</strong> stellt Soll, Ist und Differenz je Mitarbeiter und Kalenderwoche gegenüber. Wochen und einzelne erfasste Tage lassen sich als geprüft markieren; die Prüfung zeigt außerdem fehlende Einträge an Soll-Arbeitstagen. In der Stundenauswertung können Sie auffällige Buchungen filtern, darunter fehlende Arbeitstage, Unter-Soll, mehr als 10 Stunden, Arbeit mit 0 Stunden und Zeitüberschneidungen. Diese Hinweise ergänzen die ZE-Fehlercodes.</p>
+
+      <h3 id="ze-verwaltung">Zeitverwaltung für berechtigte Personen</h3>
+      <p>Über <strong>Zeitverwaltung → Zeitübersicht</strong> öffnen berechtigte Personen eine Monatsübersicht mit den Ansichten <strong>Übersicht</strong>, <strong>Je Monteur</strong> und <strong>Je Tag</strong>. Die Anzeige berücksichtigt die Sichtbarkeitseinstellung des Mitarbeiters „In Zeitverwaltung anzeigen“; außerdem gelten die Rechte der angemeldeten Rolle. Die Zeitübersicht enthält Monatswerte für Soll, Ist und Differenz sowie die passenden Einzelbuchungen.</p>
+      <p>Die <strong>Stundenauswertung</strong> bietet Mitarbeiterfilter, Datumsbereich, Suche, Wochenprüfung und PDF-Export. Berechtigte Personen können dort Einträge nachtragen, bearbeiten oder löschen und Gleitzeitkonto-Buchungen verwalten.</p>
+
+      <h3 id="ze-auswertung">Auswertungen, Exporte und Erinnerungen</h3>
       <ul>
-        <li><strong>Typen:</strong> Arbeit (mit Projekt &amp; Stunden), Urlaub, Krank, Gleitzeit, Sonstiges, Feiertag.</li>
-        <li><strong>Auto-Import:</strong> Arbeitsstunden können automatisch als Buchung ins jeweilige Projekt übernommen werden.</li>
-        <li><strong>Prüfung:</strong> Warnungen weisen z.&nbsp;B. auf fehlende Projektbuchungen (ZE006) oder auf ein nicht mehr vorhandenes Projekt (ZE005) hin – die Arbeitszeit bleibt gültig.</li>
+        <li>Die Stundenerfassung kann als <strong>PDF</strong> ausgegeben werden. Zeitübersicht und Stundenauswertung haben ebenfalls PDF-Exporte; die Mitarbeiter-Auswertung bietet einen <strong>CSV-Export</strong>.</li>
+        <li>Im Jahreswechsel-Assistenten können die Stundenbuchungen eines Jahres als <strong>Excel-Datei</strong> heruntergeladen werden. Das Abschließen eines Jahres blendet Buchungen nur aus; es löscht sie nicht.</li>
+        <li>Wenn die monatliche Stundenauswertung per E-Mail eingerichtet und aktiviert ist, erstellt der Cron eine PDF-Auswertung des Vormonats mit Soll, Ist, Differenz, Arbeitsstunden sowie Urlaubs- und Krankheitstagen. Feiertage werden in dieser E-Mail aus dem Monatssoll herausgerechnet.</li>
+        <li>Der Cron für die Stunden-Erinnerung prüft den Vortag (außer Sonntag): Er sucht Mitarbeiter, die in der Wochenplanung einer Baustelle zugeteilt waren, aber keinen Arbeitseintrag gebucht haben. Fehlende Einträge werden protokolliert und als Ergebnis/Benachrichtigung gespeichert.</li>
       </ul>
-      <div class="warn">Beim Speichern der eigenen Stunden schützt eine Sicherung vor versehentlichem Massen-Löschen: Würden viele Einträge auf einmal entfernt, bricht der Vorgang ab und es wird nichts verändert.</div>
+
+      <h3 id="ze-projekte">Projektübernahme und Rechte</h3>
+      <p>Bei einer Arbeitsbuchung können Sie eine Baustelle auswählen. Ist unter <strong>Verwaltung → Allgemein → Stunden Auto-Import</strong> die automatische Übernahme aktiviert, wird die Arbeitszeit als Projektbuchung übernommen; <strong>Jetzt importieren</strong> stößt den Abgleich manuell an. Die Zeiterfassung bleibt die Quelle der Stundenbuchung; eine fehlende Projektübernahme wird gegebenenfalls als ZE006 angezeigt.</p>
+      <p>Jeder angemeldete Benutzer kann seine eigene Zeiterfassung verwenden. Das Ändern von Mitarbeiterdaten ist Administratoren vorbehalten. Fremde Stunden und deren Auswertung sind nur mit der jeweils erforderlichen Zeitverwaltungs- oder Auswertungsberechtigung sichtbar und bearbeitbar.</p>
     </section>
 
     <section id="wochenplanung">
@@ -256,6 +348,6 @@
   </main>
 </div>
 
-<footer class="doc">Baukalkulation ES · Bedienungsanleitung · Stand Version 2.10.86</footer>
+<footer class="doc">Baukalkulation ES · Bedienungsanleitung · Stand Version 3.0.10</footer>
 </body>
 </html>

@@ -73,7 +73,8 @@ Regeln für neues SQL:
 - Sicherungen enthalten immer eine SQLite-Datei; bei PostgreSQL erzeugt `BackupWriter` sie
   über `App\Database\TableCopier` aus einem konsistenten Lese-Snapshot.
 
-Tests gegen PostgreSQL: `make test-pgsql` (startet einen Wegwerf-Container) oder manuell mit
+Tests gegen PostgreSQL: `make test-pgsql` (startet einen Wegwerf-Container), unter Windows
+`powershell -File scripts/test-pgsql.ps1 -Php <pfad\php.exe>` (Docker Desktop muss laufen), oder manuell mit
 `BK_DB_DRIVER=pgsql BK_DB_HOST=… BK_DB_PORT=… BK_DB_NAME=… BK_DB_USER=… BK_DB_PASSWORD=…`.
 Ist `pdo_pgsql` nicht in der `php.ini` aktiv, zusätzlich `BK_TEST_PHP_ARGS="-d extension=pdo_pgsql"`
 setzen und PHPUnit mit `php -d extension=pdo_pgsql vendor/bin/phpunit` starten. Achtung: Die
