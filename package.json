@@ -1,6 +1,6 @@
 {
     "name": "baukalkulation-es",
-    "version": "3.0.9",
+    "version": "3.0.10",
     "private": true,
     "description": "Baukalkulation ES – Frontend Build System (Vite)",
     "scripts": {

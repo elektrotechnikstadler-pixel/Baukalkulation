@@ -37,6 +37,19 @@
 
 ---
 
+## v3.0.10 – Bedienungsanleitung Zeiterfassung
+
+### Dokumentation
+- Bedienungsanleitung, Abschnitt Zeiterfassung, ausführlich ergänzt: Erfassen (Desktop, Mobil,
+  Mobil-Light), alle Buchungskategorien mit Anrechnung, Sollarbeitszeit (auch je Wochentag),
+  Feiertage, Urlaub, Krank, Gleitzeitkonto mit Beispielrechnung, Prüfungen und Fehlbuchungs-Codes,
+  Zeitverwaltung, Exporte, Monats-Mail, Übernahme in Projekte und Rechte.
+
+### Sonstiges
+- Entwicklung: PostgreSQL-Testlauf unter Windows per `scripts/test-pgsql.ps1`.
+
+---
+
 ## v3.0.9 – Sollarbeitszeit je Wochentag
 
 ### Neu
