@@ -10649,7 +10649,7 @@ async function setUserPersonalnummer(username, personalnummer) {
 // -- Benutzer-Profil Modal (Daten) ----------------------------
 async function openUserProfileModal(username) {
   // Load profile data
-  let profile = { username, anschrift:'', email:'', telefon:'', sollstundenTag:8, sollTageWoche:5, urlaubstageProJahr:{}, stundenKategorie:'' };
+  let profile = { username, anschrift:'', email:'', telefon:'', sollstundenTag:8, sollTageWoche:5, sollzeitJeWochentag:false, sollstundenMo:0, sollstundenDi:0, sollstundenMi:0, sollstundenDo:0, sollstundenFr:0, sollstundenSa:0, sollstundenSo:0, urlaubstageProJahr:{}, stundenKategorie:'' };
   try {
     const r = await fetch('api.php?action=get_user_profile&username=' + encodeURIComponent(username));
     const j = await r.json();
@@ -10669,10 +10669,15 @@ async function openUserProfileModal(username) {
 
   const atSet = getUserArbeitstage(profile);
   const atLabels = [['Mo',1],['Di',2],['Mi',3],['Do',4],['Fr',5],['Sa',6]];
+  const sollzeitFields = [['Mo','sollstundenMo'],['Di','sollstundenDi'],['Mi','sollstundenMi'],['Do','sollstundenDo'],['Fr','sollstundenFr'],['Sa','sollstundenSa'],['So','sollstundenSo']];
   const atCheckboxes = atLabels.map(([lbl,d]) =>
     `<label style="display:flex;align-items:center;gap:4px;font-size:.88rem;cursor:pointer;user-select:none">
        <input type="checkbox" id="upAt_${d}" ${atSet.has(d) ? 'checked' : ''}> ${lbl}
      </label>`
+  ).join('');
+  const sollzeitInputs = sollzeitFields.map(([day, field]) =>
+    `<div><label class="form-label" for="upSoll_${field}">${day} (h)</label>
+      <input id="upSoll_${field}" type="number" class="form-control" style="width:100%" value="${esc(profile[field] ?? 0)}" min="0" max="24" step="0.5"></div>`
   ).join('');
 
   ov.innerHTML = `<div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto">
@@ -10687,14 +10692,23 @@ async function openUserProfileModal(username) {
           <input id="upTelefon" type="tel" class="form-control" style="width:100%" value="${esc(profile.telefon||'')}"></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--grey-100);margin:4px 0">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="margin-bottom:10px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem">
+        <input type="checkbox" id="upSollzeitJeWochentag" ${profile.sollzeitJeWochentag ? 'checked' : ''} data-weekday-soll-initialized="${profile.sollzeitJeWochentag ? 'true' : 'false'}" onchange="toggleUserWeekdaySoll()">
+        Sollzeit je Wochentag
+      </label></div>
+      <div id="upSollLegacy" style="display:${profile.sollzeitJeWochentag ? 'none' : 'block'}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label class="form-label">Soll/Tag (h)</label>
-          <input id="upSollTag" type="number" class="form-control" style="width:100%" value="${profile.sollstundenTag||8}" min="0" max="24" step="0.5"></div>
-        <div><label class="form-label">Urlaub ${currentYear}</label>
-          <input id="upUrlaub" type="number" class="form-control" style="width:100%" value="${urlaubJ}" min="0" step="1"></div>
+          <input id="upSollTag" type="number" class="form-control" style="width:100%" value="${esc(profile.sollstundenTag ?? 8)}" min="0" max="24" step="0.5"></div>
+        </div>
+        <div style="margin-top:10px"><label class="form-label">Arbeitstage</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">${atCheckboxes}</div></div>
       </div>
-      <div><label class="form-label">Arbeitstage</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">${atCheckboxes}</div></div>
+      <div id="upSollWeekdays" style="display:${profile.sollzeitJeWochentag ? 'grid' : 'none'};grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+        ${sollzeitInputs}
+      </div>
+      <div><label class="form-label">Urlaub ${currentYear}</label>
+        <input id="upUrlaub" type="number" class="form-control" style="width:100%" value="${esc(urlaubJ)}" min="0" step="1"></div>
       <div><label class="form-label">Stundenkategorie</label>
         <select id="upStdKat" class="form-control" style="width:100%">
           <option value="">— Keine —</option>
@@ -10715,17 +10729,49 @@ async function openUserProfileModal(username) {
   document.body.appendChild(ov);
 }
 
+function toggleUserWeekdaySoll() {
+  const enabled = document.getElementById('upSollzeitJeWochentag')?.checked || false;
+  const legacy = document.getElementById('upSollLegacy');
+  const weekdays = document.getElementById('upSollWeekdays');
+  if (legacy) legacy.style.display = enabled ? 'none' : 'block';
+  if (weekdays) weekdays.style.display = enabled ? 'grid' : 'none';
+  const checkbox = document.getElementById('upSollzeitJeWochentag');
+  if (enabled && checkbox?.dataset.weekdaySollInitialized !== 'true') {
+    const fields = ['sollstundenMo','sollstundenDi','sollstundenMi','sollstundenDo','sollstundenFr','sollstundenSa','sollstundenSo'];
+    if (fields.every(field => Number(document.getElementById(`upSoll_${field}`)?.value || 0) === 0)) {
+      const dailySoll = Number(document.getElementById('upSollTag')?.value);
+      const fallbackSoll = Number.isFinite(dailySoll) ? dailySoll : 8;
+      fields.forEach((field, index) => {
+        const day = index + 1;
+        const input = document.getElementById(`upSoll_${field}`);
+        if (input) input.value = document.getElementById(`upAt_${day}`)?.checked ? fallbackSoll : 0;
+      });
+    }
+    checkbox.dataset.weekdaySollInitialized = 'true';
+  }
+}
+
 async function saveUserProfile(username) {
   const currentYear = new Date().getFullYear();
   const arbeitsTage = [1,2,3,4,5,6].filter(d => document.getElementById(`upAt_${d}`)?.checked).join(',') || '1,2,3,4,5';
+  const weekdayFields = ['sollstundenMo','sollstundenDi','sollstundenMi','sollstundenDo','sollstundenFr','sollstundenSa','sollstundenSo'];
+  const parseProfileNumber = (value, fallback) => {
+    if (value === null || value.trim() === '') return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+  const weekdaySoll = Object.fromEntries(weekdayFields.map(field => [field, parseProfileNumber(document.getElementById(`upSoll_${field}`)?.value ?? '', 0)]));
+  const useWeekdaySoll = document.getElementById('upSollzeitJeWochentag').checked;
   const data = {
     username,
     anschrift: document.getElementById('upAnschrift').value,
     email: document.getElementById('upEmail').value,
     telefon: document.getElementById('upTelefon').value,
-    sollstundenTag: parseFloat(document.getElementById('upSollTag').value) || 8,
+    sollstundenTag: parseProfileNumber(document.getElementById('upSollTag').value, 8),
     arbeitstage: arbeitsTage,
     sollTageWoche: arbeitsTage.split(',').length,
+    sollzeitJeWochentag: useWeekdaySoll,
+    ...weekdaySoll,
     urlaubstageProJahr: { [currentYear]: parseInt(document.getElementById('upUrlaub').value) || 30 },
     stundenKategorie: document.getElementById('upStdKat').value,
     mobileLightOnly: document.getElementById('upMobileLightOnly').checked,
@@ -11919,13 +11965,14 @@ async function saExportZeiterfassungExcel(year) {
     const yStr = String(year);
     let count = 0;
     Object.keys(data).sort().forEach(username => {
+      const user = saAllUsers.find(item => item.username === username) || { username, sollstundenTag: 8, arbeitstage: '1,2,3,4,5' };
       const entries = (data[username]?.entries || [])
         .filter(e => e.datum && e.datum.startsWith(yStr))
         .sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
       entries.forEach(e => {
         const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || ('#'+e.baustelleId)) : '';
         const typLabel = (typeof _seTypLabel === 'function') ? _seTypLabel(e.typ) : (e.typ||'');
-        const stunden = countsTowardIst(e.typ) ? Number(e.stunden||0) : '';
+        const stunden = bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []);
         if (erweitert) {
           rows.push([username, e.datum, typLabel, e.von||'', e.bis||'', e.pause||'', bName, e.bemerkung||'', stunden]);
         } else {
@@ -14888,40 +14935,47 @@ function dateToKey(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-function getWorkingDaysInMonth(year, month, arbeitstage) {
-  // month: 0-based; arbeitstage: Set of DoW numbers (1=Mon…6=Sat), default Mon-Fri
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : new Set([1,2,3,4,5]);
+function getWorkingDaysInMonth(year, month, user) {
+  const config = user || { arbeitstage: '1,2,3,4,5', sollstundenTag: 8 };
+  const workdays = getUserArbeitstage(config);
   let count = 0;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(year, month, d);
-    const dow = dt.getDay(); // 0=Sun, 6=Sat
-    if (atSet.has(dow)) {
-      count++;
-    }
+    const weekday = dt.getDay() === 0 ? 7 : dt.getDay();
+    const weekdayMode = config.sollzeitJeWochentag === true || Number(config.sollzeitJeWochentag) === 1;
+    if (workdays.has(weekday) && (!weekdayMode || bkTagesSoll(config, dt) > 0)) count++;
   }
   return count;
 }
 
-function calcSollMonat(sollTag, year, month, arbeitstage) {
-  // arbeitstage: Set<int> of working DoW numbers, or null/number (legacy) → default Mon-Fri
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : new Set([1,2,3,4,5]);
-  const workDays = getWorkingDaysInMonth(year, month, atSet);
-  return sollTag * workDays;
+function calcSollMonat(user, year, month) {
+  let soll = 0;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) soll += bkTagesSoll(user, new Date(year, month, day));
+  return soll;
 }
 
-/** Gibt Set<int> der Arbeitstage-DoW-Nummern zurück (1=Mo…6=Sa).
+/** Gibt Set<int> der ISO-Arbeitstage (1=Mo…7=So) zurück.
  * @param {object} user – User-Objekt mit arbeitstage (String) oder sollTageWoche (Zahl)
  * @returns {Set<number>}
  */
 function getUserArbeitstage(user) {
+  if (user?.sollzeitJeWochentag === true || Number(user?.sollzeitJeWochentag) === 1) {
+    const fields = ['sollstundenMo','sollstundenDi','sollstundenMi','sollstundenDo','sollstundenFr','sollstundenSa','sollstundenSo'];
+    return new Set(fields.map((field, index) => Number(user[field]) > 0 ? index + 1 : null).filter(Boolean));
+  }
   const raw = user?.arbeitstage;
-  if (raw && typeof raw === 'string') {
-    const days = raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n >= 1 && n <= 6);
+  if (raw && typeof raw === 'object') {
+    const days = Object.entries(raw).filter(([, enabled]) => enabled).map(([day]) => Number(day)).filter(day => Number.isInteger(day) && day >= 1 && day <= 7);
+    if (days.length > 0) return new Set(days);
+  } else if (raw && typeof raw === 'string') {
+    const days = raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n >= 1 && n <= 7);
     if (days.length > 0) return new Set(days);
   }
   // Fallback: fortlaufend ab Montag basierend auf sollTageWoche
-  const n = Math.min(user?.sollTageWoche || 5, 6);
+  const configuredDays = Number(user?.sollTageWoche);
+  const n = Math.min(Math.max(0, Number.isFinite(configuredDays) ? configuredDays : 5), 7);
   const s = new Set();
   for (let i = 1; i <= n; i++) s.add(i);
   return s;
@@ -14937,8 +14991,7 @@ function getUserArbeitstage(user) {
  * @param {number|null} month  - Monat (0-basiert) oder null für ganzes Jahr
  * @returns {Array} virtuelle Einträge mit { datum, typ:'feiertag', stunden, bemerkung, _virtual:true }
  */
-function getVirtuelleFeiertagEintraege(realEntries, sollTag, arbeitstage, year, month) {
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : new Set([1,2,3,4,5]);
+function getVirtuelleFeiertagEintraege(realEntries, user, year, month) {
   const entryDates = new Set((realEntries || []).map(e => e.datum).filter(Boolean));
   const result = [];
   const holidays = getBavarianHolidays(year);
@@ -14946,12 +14999,12 @@ function getVirtuelleFeiertagEintraege(realEntries, sollTag, arbeitstage, year, 
   holidays.forEach(h => {
     if (h.getFullYear() !== year) return;
     if (month !== null && month !== undefined && h.getMonth() !== month) return;
-    const dow = h.getDay();
-    if (!atSet.has(dow)) return;
+    const soll = bkTagesSoll(user, h);
+    if (soll <= 0) return;
     const key = dateToKey(h);
     if (entryDates.has(key)) return;
     const name = holidayNameMap.get(key) || 'Feiertag';
-    result.push({ datum: key, typ: 'feiertag', stunden: sollTag, bemerkung: name, _virtual: true });
+    result.push({ datum: key, typ: 'feiertag', stunden: soll, bemerkung: name, _virtual: true });
   });
   return result;
 }
@@ -14963,14 +15016,12 @@ function getVirtuelleFeiertagEintraege(realEntries, sollTag, arbeitstage, year, 
  * @param {number} sollTag     - Soll-Stunden pro Arbeitstag
  * @param {Set}    arbeitstage - DoW-Nummern (1=Mo…6=Sa) der Arbeitstage
  */
-function calcSollWoche(mondayDate, sollTag, arbeitstage) {
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : getUserArbeitstage({ sollTageWoche: (arbeitstage || 5) });
+function calcSollWoche(mondayDate, user) {
   let soll = 0;
   for (let d = 0; d < 7; d++) {
     const day = new Date(mondayDate);
     day.setDate(mondayDate.getDate() + d);
-    const dow = day.getDay();
-    if (atSet.has(dow)) soll += sollTag;
+    soll += bkTagesSoll(user, day);
   }
   return soll;
 }
@@ -15406,6 +15457,10 @@ function countsTowardIst(typ) {
   return isArbeitTyp(typ) || typ === 'urlaub' || typ === 'krank';
 }
 
+function sumIstStunden(entries, user) {
+  return (entries || []).reduce((sum, entry) => sum + bkIstStundenEintrag(user, entry, appSettings?.ze_custom_typen || []), 0);
+}
+
 /** Gibt das Anzeige-Label für einen Typ zurück. */
 function _seTypLabel(typ) {
   const found = _seGetTypen().find(t => t.value === typ);
@@ -15426,13 +15481,13 @@ function _fillSeTypSelect(selectId, selectedValue) {
  * Warnt bei: fehlende Arbeitstage (ohne Feiertage, letzte 2 Wochen),
  * Einträge mit >12h.
  */
-function _renderSeWarnings(entries, sollTag, arbeitstage) {
+function _renderSeWarnings(entries, user) {
   const bannerEl = document.getElementById('seDesktopWarningBanner');
   if (!bannerEl) return;
-  _lastSeWarnArgs = { entries, sollTag, arbeitstage };
+  _lastSeWarnArgs = { entries, user };
 
   const warnings = [];
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : getUserArbeitstage({ sollTageWoche: (arbeitstage || 5) });
+  const atSet = getUserArbeitstage(user);
 
   // 1. Einträge >12h
   entries.forEach(e => {
@@ -15450,7 +15505,7 @@ function _renderSeWarnings(entries, sollTag, arbeitstage) {
   const entryDates = new Set(entries.map(e => e.datum || ''));
   const holidayCacheWarn = {};
   for (let d = new Date(twoWeeksAgo); d < today; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay();
+    const dow = d.getDay() === 0 ? 7 : d.getDay();
     if (!atSet.has(dow)) continue;
     const y = d.getFullYear();
     if (!holidayCacheWarn[y]) holidayCacheWarn[y] = new Set(getBavarianHolidays(y).map(h => dateToKey(h)));
@@ -15517,11 +15572,11 @@ function _ackHint(idx) {
   if (!sig) return;
   const arr = _getAckedHints();
   if (!arr.includes(sig)) { arr.push(sig); localStorage.setItem(_hintAckKey(), JSON.stringify(arr)); }
-  if (_lastSeWarnArgs) _renderSeWarnings(_lastSeWarnArgs.entries, _lastSeWarnArgs.sollTag, _lastSeWarnArgs.arbeitstage);
+  if (_lastSeWarnArgs) _renderSeWarnings(_lastSeWarnArgs.entries, _lastSeWarnArgs.user);
 }
 function _resetAckedHints() {
   localStorage.removeItem(_hintAckKey());
-  if (_lastSeWarnArgs) _renderSeWarnings(_lastSeWarnArgs.entries, _lastSeWarnArgs.sollTag, _lastSeWarnArgs.arbeitstage);
+  if (_lastSeWarnArgs) _renderSeWarnings(_lastSeWarnArgs.entries, _lastSeWarnArgs.user);
 }
 
 
@@ -15556,7 +15611,7 @@ function newZeitUuid() {
 }
 let seDesktopSollTag = 8;
 let seDesktopSollTageWoche = 5;
-let seDesktopArbeitstage = null;
+let seDesktopUser = { sollstundenTag: 8, sollTageWoche: 5, arbeitstage: '1,2,3,4,5' };
 let seDesktopUrlaubProJahr = {};
 let seDesktopGleitzeitBuchungen = [];
 
@@ -15599,16 +15654,16 @@ async function openStundenerfassungModal() {
     if (zeitJ.ok) { zeitEntriesDesktop = zeitJ.entries || []; _zeitLoaded = true; _zeitRev = typeof zeitJ.zeitRev === 'number' ? zeitJ.zeitRev : null; }
     else { showNotification('Stundenerfassung konnte nicht geladen werden – Speichern ist zum Schutz deiner Daten gesperrt.', 'error'); }
     if (sollJ.ok) {
-      seDesktopSollTag = sollJ.sollstundenTag || 8;
-      seDesktopSollTageWoche = sollJ.sollTageWoche || 5;
-      seDesktopArbeitstage = getUserArbeitstage(sollJ);
+      seDesktopUser = { ...sollJ };
+      seDesktopSollTag = sollJ.sollstundenTag ?? 8;
+      seDesktopSollTageWoche = sollJ.sollTageWoche ?? 5;
       seDesktopUrlaubProJahr = sollJ.urlaubstageProJahr || {};
     }
     if (gzJ.ok) seDesktopGleitzeitBuchungen = gzJ.buchungen || [];
   } catch(e) { console.warn('Zeiterfassung laden fehlgeschlagen:', e); showNotification('Stundenerfassung konnte nicht geladen werden – Speichern ist zum Schutz deiner Daten gesperrt. Bitte erneut öffnen.', 'error'); }
 
   // Mitarbeiter-Feedback: fehlende Tage + >12h Einträge prüfen
-  _renderSeWarnings(zeitEntriesDesktop, seDesktopSollTag, seDesktopArbeitstage || getUserArbeitstage({ sollTageWoche: seDesktopSollTageWoche }));
+  _renderSeWarnings(zeitEntriesDesktop, seDesktopUser);
 
   renderSeDesktop();
   show('stundenerfassungModal');
@@ -15710,17 +15765,16 @@ function getGleitzeitStartMonth(year) {
   return startMonth; // Gleiches Jahr ? ab Startmonat
 }
 
-function calcGleitzeitSaldo(entries, sollTag, year, buchungen, arbeitstage) {
-  const atSet = (arbeitstage instanceof Set) ? arbeitstage : new Set([1,2,3,4,5]);
+function calcGleitzeitSaldo(entries, user, year, buchungen) {
   const now = new Date();
   const startMo = getGleitzeitStartMonth(year);
   let saldo = 0;
   for (let mo = startMo; mo <= (year < now.getFullYear() ? 11 : now.getMonth()); mo++) {
     const mk = year + '-' + String(mo + 1).padStart(2, '0');
     const moEntries = entries.filter(e => e.datum && e.datum.startsWith(mk));
-    const moArbeit = moEntries.filter(e => countsTowardIst(e.typ)).reduce((s, e) => s + (e.stunden || 0), 0);
-    const moFeiertag = getVirtuelleFeiertagEintraege(entries, sollTag, atSet, year, mo).reduce((s, e) => s + (e.stunden || 0), 0);
-    saldo += (moArbeit + moFeiertag) - calcSollMonat(sollTag, year, mo, atSet);
+    const moIst = sumIstStunden(moEntries, user);
+    const moFeiertag = getVirtuelleFeiertagEintraege(entries, user, year, mo).reduce((s, e) => s + bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []), 0);
+    saldo += (moIst + moFeiertag) - calcSollMonat(user, year, mo);
   }
   const sd = appSettings.gleitzeit_startdatum || '';
   (buchungen || []).forEach(b => {
@@ -15747,16 +15801,15 @@ function renderSeDesktop() {
   const now = new Date();
   const currentMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthEntries = zeitEntriesDesktop.filter(e => e.datum && e.datum.startsWith(currentMonth));
-  const atSet = seDesktopArbeitstage || getUserArbeitstage({ sollTageWoche: seDesktopSollTageWoche });
-  const vtFeiertage = getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopSollTag, atSet, now.getFullYear(), now.getMonth());
-  const monthHours = monthEntries.filter(e => e.typ === 'arbeit' || (countsTowardIst(e.typ) && e.typ !== 'feiertag')).reduce((s,e) => s + (e.stunden||0), 0)
-    + vtFeiertage.reduce((s,e) => s + (e.stunden||0), 0);
+  const vtFeiertage = getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopUser, now.getFullYear(), now.getMonth());
+  const monthHours = sumIstStunden(monthEntries, seDesktopUser)
+    + sumIstStunden(vtFeiertage, seDesktopUser);
   const monthUrlaub = monthEntries.filter(e => e.typ === 'urlaub').length;
   const monthGleitzeit = monthEntries.filter(e => e.typ === 'gleitzeit').length;
   const monthKrank = monthEntries.filter(e => e.typ === 'krank').length;
 
   // Soll-Stunden für aktuellen Monat berechnen
-  const sollMonat = calcSollMonat(seDesktopSollTag, now.getFullYear(), now.getMonth(), atSet);
+  const sollMonat = calcSollMonat(seDesktopUser, now.getFullYear(), now.getMonth());
   const diffMonat = monthHours - sollMonat;
   const diffMonatSign = diffMonat >= 0 ? '+' : '';
   const diffMonatColor = diffMonat >= 0 ? '#28A745' : '#FF3B30';
@@ -15764,7 +15817,7 @@ function renderSeDesktop() {
   // Gleitzeitkonto: kumuliert ab Startdatum + Buchungen (nur wenn aktiviert)
   const year = now.getFullYear();
   const gleitzeitAktiv = appSettings.gleitzeit_enabled !== false;
-  const gleitzeitSaldo = gleitzeitAktiv ? calcGleitzeitSaldo(zeitEntriesDesktop, seDesktopSollTag, year, seDesktopGleitzeitBuchungen, atSet) : 0;
+  const gleitzeitSaldo = gleitzeitAktiv ? calcGleitzeitSaldo(zeitEntriesDesktop, seDesktopUser, year, seDesktopGleitzeitBuchungen) : 0;
   const gzSign = gleitzeitSaldo >= 0 ? '+' : '';
   const gzColor = gleitzeitSaldo >= 0 ? '#28A745' : '#FF3B30';
 
@@ -15833,7 +15886,7 @@ function renderSeDesktop() {
   }
 
   // Virtuelle Feiertag-Eintraege fuer das aktuelle Jahr einfuegen
-  const vtAll = getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopSollTag, atSet, now.getFullYear());
+  const vtAll = getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopUser, now.getFullYear());
   const allRows = [...sorted, ...vtAll].sort((a,b) => {
     const da = a.datum||'', db2 = b.datum||'';
     const aIsCurrentMonth = da.startsWith(currentMonth);
@@ -15919,7 +15972,6 @@ function addStundenerfassungDesktop() {
       return;
     }
   } else {
-    const _atSet = seDesktopArbeitstage || getUserArbeitstage({ sollTageWoche: seDesktopSollTageWoche });
     if (sonstigZeitspanne) {
       von = document.getElementById('seDesktopVon').value;
       bis = document.getElementById('seDesktopBis').value;
@@ -15931,7 +15983,7 @@ function addStundenerfassungDesktop() {
       const _isManualCustomArbeit = isArbeitTyp(typ) && typ !== 'arbeit' && !seTypIstGleichSoll(typ);
       stunden = (typ === 'arbeit' || isAbwesendTyp(typ) || _isManualCustomArbeit)
         ? (parseFloat(document.getElementById('seDesktopStunden').value) || 0)
-        : (countsTowardIst(typ) && _atSet.has(new Date(datum + 'T00:00:00').getDay()) ? seDesktopSollTag : 0);
+        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) : 0);
     }
     // Hinweis bei >10h Tagessumme im Normal-Modus
     if (typ === 'arbeit') {
@@ -16192,9 +16244,8 @@ function delSeDesktop(id) {
 function exportSeDesktopPDF() {
   const year = new Date().getFullYear();
   const months = Array.from({length:12}, (_,i) => i);
-  const sollTag = seDesktopSollTag || 8;
+  const sollTag = seDesktopSollTag ?? 8;
   const tageWoche = seDesktopSollTageWoche || 5;
-  const atSet = seDesktopArbeitstage || getUserArbeitstage({ sollTageWoche: seDesktopSollTageWoche });
 
   let html = `<html style="color-scheme:light"><head><meta charset="UTF-8"><title>Arbeitszeiten ${currentUser} - ${year}</title>
   <style>
@@ -16220,15 +16271,15 @@ function exportSeDesktopPDF() {
   months.forEach(m => {
     const mk = year + '-' + String(m+1).padStart(2,'0');
     const me = zeitEntriesDesktop.filter(e => e.datum && e.datum.startsWith(mk));
-    const ist = me.filter(e => e.typ === 'arbeit').reduce((s,e) => s + (e.stunden||0), 0)
-      + getVirtuelleFeiertagEintraege(zeitEntriesDesktop, sollTag, atSet, year, m).reduce((s,e) => s + (e.stunden||0), 0);
-    const soll = calcSollMonat(sollTag, year, m, atSet);
+    const ist = sumIstStunden(me, seDesktopUser)
+      + sumIstStunden(getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopUser, year, m), seDesktopUser);
+    const soll = calcSollMonat(seDesktopUser, year, m);
     const diff = ist - soll;
     const urlaub = me.filter(e => e.typ === 'urlaub').length;
     const gleitzeit = me.filter(e => e.typ === 'gleitzeit').length;
     const krank = me.filter(e => e.typ === 'krank').length;
     const sonstig = me.filter(e => e.typ === 'sonstig').length;
-    const wd = getWorkingDaysInMonth(year, m, atSet);
+    const wd = getWorkingDaysInMonth(year, m, seDesktopUser);
     totalIst += ist; totalSoll += soll; totalUrlaub += urlaub; totalGleitzeit += gleitzeit; totalKrank += krank;
     const cls = diff >= 0 ? 'positive' : 'negative';
     const sign = diff >= 0 ? '+' : '';
@@ -16260,7 +16311,7 @@ function exportSeDesktopPDF() {
     const d = new Date(e.datum);
     const wd = wdNames[d.getDay()];
     const typLabel = _seTypLabel(e.typ);
-    html += `<tr><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(e.baustelleName||'')}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${countsTowardIst(e.typ)?(e.stunden||0).toFixed(2):'—'}</td></tr>`;
+    html += `<tr><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(e.baustelleName||'')}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${bkIstStundenEintrag(seDesktopUser, e, appSettings?.ze_custom_typen || []).toFixed(2)}</td></tr>`;
   });
   html += `</tbody></table>`;
 
@@ -16466,7 +16517,7 @@ function renderWochenpruefung() {
   let html = '';
   visibleUsers.forEach(user => {
     const allEntries = saAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const arbeitstage = getUserArbeitstage(user);
     const byKw = {};
     allEntries.forEach(e => {
@@ -16497,13 +16548,13 @@ function renderWochenpruefung() {
       const mondayKey = monday.toISOString().split('T')[0];
       const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
       const sundayKey = sunday.toISOString().split('T')[0];
-      const ftInKw = getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, parseInt(kw.split('-W')[0]))
+      const ftInKw = getVirtuelleFeiertagEintraege(allEntries, user, parseInt(kw.split('-W')[0]))
         .filter(e => e.datum >= mondayKey && e.datum <= sundayKey);
       const ftH = ftInKw.reduce((s,e) => s+(e.stunden||0), 0);
-      const istH = entries.filter(e => countsTowardIst(e.typ)).reduce((s,e) => s+(e.stunden||0), 0) + ftH;
+      const istH = sumIstStunden(entries, user) + ftH;
 
       // Soll berechnen (Arbeitstage dieser KW)
-      const sollH = calcSollWoche(monday, sollTag, arbeitstage);
+      const sollH = calcSollWoche(monday, user);
 
       const diffH = istH - sollH;
       const diffColor = diffH >= 0 ? '#28A745' : '#DC3545';
@@ -16534,7 +16585,7 @@ function renderWochenpruefung() {
       </div>`;
 
       if (expanded) {
-        userHtml += zpRenderTageBlock(user.username, kw, entries, dayDates, geprueft, tagUser, borderColor, 'toggleTagespruefung');
+        userHtml += zpRenderTageBlock(user.username, kw, entries, dayDates, geprueft, tagUser, borderColor, 'toggleTagespruefung', user);
       }
     });
 
@@ -16557,12 +16608,12 @@ function renderWochenpruefung() {
  * Ein Tag gilt als geprüft, wenn die Woche geprüft ist ODER der Tag einzeln
  * geprüft wurde. Bei geprüfter Woche sind die Tages-Checkboxen gesperrt.
  */
-function zpRenderTageBlock(username, kw, entries, dayDates, weekGeprueft, tagUser, borderColor, toggleFn) {
+function zpRenderTageBlock(username, kw, entries, dayDates, weekGeprueft, tagUser, borderColor, toggleFn, user) {
   const wd = ['So','Mo','Di','Mi','Do','Fr','Sa'];
   let rows = '';
   dayDates.forEach(datum => {
     const dayEntries = entries.filter(e => e.datum === datum);
-    const arbeitH = dayEntries.filter(e => countsTowardIst(e.typ)).reduce((s,e) => s+(e.stunden||0), 0);
+    const arbeitH = sumIstStunden(dayEntries, user);
     const typen = [...new Set(dayEntries.map(e => _seTypLabel(e.typ)))].join(', ');
     const d = new Date(datum + 'T00:00:00');
     const dLabel = `${wd[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
@@ -16605,10 +16656,11 @@ function toggleSaMonth(uid, mk) {
 // Auffällige Buchungen / Vollständigkeit ermitteln (B.1 + B.2).
 // Liefert eine nach Datum sortierte Liste {datum, level:'error'|'warn', text}.
 // Grundlage: die datumsgefilterten Einträge eines Users (ohne Textsuche).
-function _computeZeitAnomalien(entries, sollTag, atSet, filterFrom, filterTo) {
+function _computeZeitAnomalien(entries, user, filterFrom, filterTo) {
   const list = [];
   const today = new Date(); today.setHours(0,0,0,0);
   const todayKey = dateToKey(today);
+  const atSet = getUserArbeitstage(user);
   let fromKey = filterFrom || dateToKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30));
   let toKey = filterTo || todayKey;
   if (toKey > todayKey) toKey = todayKey; // fehlende Zukunftstage nicht bemängeln
@@ -16626,7 +16678,8 @@ function _computeZeitAnomalien(entries, sollTag, atSet, filterFrom, filterTo) {
   // 1. Fehlende Arbeitstage (Vollständigkeit) im Scan-Bereich
   if (fromKey && toKey && fromKey <= toKey) {
     for (let d = new Date(fromKey + 'T00:00:00'); dateToKey(d) <= toKey; d.setDate(d.getDate() + 1)) {
-      if (!atSet.has(d.getDay())) continue;
+      const weekday = d.getDay() === 0 ? 7 : d.getDay();
+      if (!atSet.has(weekday)) continue;
       if (isHoliday(d)) continue;
       const key = dateToKey(d);
       if (!byDate[key]) list.push({ datum: key, level: 'error', text: 'Fehlender Eintrag (Arbeitstag)' });
@@ -16637,8 +16690,9 @@ function _computeZeitAnomalien(entries, sollTag, atSet, filterFrom, filterTo) {
   Object.keys(byDate).forEach(key => {
     const dayEntries = byDate[key];
     const d = new Date(key + 'T00:00:00');
-    const isWorkday = atSet.has(d.getDay()) && !isHoliday(d);
-    const istSum = dayEntries.filter(e => countsTowardIst(e.typ)).reduce((s, e) => s + (e.stunden || 0), 0);
+    const weekday = d.getDay() === 0 ? 7 : d.getDay();
+    const isWorkday = atSet.has(weekday) && bkTagesSoll(user, key) > 0 && !isHoliday(d);
+    const istSum = sumIstStunden(dayEntries, user);
 
     if (dayEntries.some(e => e.typ === 'arbeit' && (e.stunden || 0) <= 0)) {
       list.push({ datum: key, level: 'warn', text: 'Arbeitseintrag mit 0 h' });
@@ -16646,6 +16700,7 @@ function _computeZeitAnomalien(entries, sollTag, atSet, filterFrom, filterTo) {
     if (istSum > 10) {
       list.push({ datum: key, level: 'warn', text: `Über 10 h am Tag (${istSum.toFixed(1)} h)` });
     }
+    const sollTag = bkTagesSoll(user, key);
     if (isWorkday && key <= todayKey && istSum > 0 && istSum + 0.001 < sollTag) {
       list.push({ datum: key, level: 'warn', text: `Unter Soll (${istSum.toFixed(1)}/${sollTag} h)` });
     }
@@ -16915,13 +16970,13 @@ function renderStundenauswertung() {
     if (filterFrom) entries = entries.filter(e => e.datum >= filterFrom);
     if (filterTo) entries = entries.filter(e => e.datum <= filterTo);
 
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const tageWoche = user.sollTageWoche || 5;
     const arbeitstage = getUserArbeitstage(user);
 
     // Auffällige Buchungen / Vollständigkeit (B.1/B.2) – Basis: datumsgefilterte
     // Einträge (vor der Textsuche), damit fehlende Tage nicht durch Suche verdeckt werden.
-    const anomalien = _computeZeitAnomalien(entries, sollTag, arbeitstage, filterFrom, filterTo);
+    const anomalien = _computeZeitAnomalien(entries, user, filterFrom, filterTo);
     // Fehlbuchungen (fehlende Projektbuchung) – auf datumsgefilterter Basis, vor Textsuche.
     const fehlbuchungen = _computeFehlbuchungen(entries, user);
     if (showAnomalies) {
@@ -16942,12 +16997,12 @@ function renderStundenauswertung() {
     // Gleitzeitkonto berechnen (nur wenn aktiviert)
     const buchungen = saGleitzeitAll[user.username] || [];
     const gleitzeitAktivSa = appSettings.gleitzeit_enabled !== false;
-    const gleitzeitSaldo = gleitzeitAktivSa ? calcGleitzeitSaldo(allEntries, sollTag, year, buchungen, arbeitstage) : 0;
+    const gleitzeitSaldo = gleitzeitAktivSa ? calcGleitzeitSaldo(allEntries, user, year, buchungen) : 0;
     const gzSign = gleitzeitSaldo >= 0 ? '+' : '';
     const gzColor = gleitzeitSaldo >= 0 ? '#28A745' : '#FF3B30';
 
     const uid = 'sa_' + user.username.replace(/\W/g, '_');
-    const istTotal = entries.filter(e => countsTowardIst(e.typ)).reduce((s,e) => s + (e.stunden||0), 0);
+    const istTotal = sumIstStunden(entries, user);
     const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
     const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
 
@@ -16988,7 +17043,7 @@ function renderStundenauswertung() {
       const mEntries = saMonthMap[mk];
       const d0 = mk !== '?' ? new Date(mk + '-01') : null;
       const mLabel = d0 ? `${monthNamesSa[d0.getMonth()]} ${d0.getFullYear()}` : 'Ohne Datum';
-      const mSum = mEntries.filter(e => countsTowardIst(e.typ)).reduce((s,e)=>s+(e.stunden||0),0);
+      const mSum = sumIstStunden(mEntries, user);
       // Bei aktiver Suche/Filter immer offen; sonst aktueller Monat offen, übrige
       // eingeklappt – gespeicherte Wahl hat Vorrang.
       const stored = saCollapsedMonths[uid + '|' + mk];
@@ -17337,18 +17392,18 @@ function exportStundenauswertungPDF() {
     if (filterTo) entries = entries.filter(e => e.datum <= filterTo);
     entries.sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
 
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const arbeitstage = getUserArbeitstage(user);
-    const allVtFeiertage = getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, year);
+    const allVtFeiertage = getVirtuelleFeiertagEintraege(allEntries, user, year);
     const vtInRange = allVtFeiertage.filter(e => (!filterFrom || e.datum >= filterFrom) && (!filterTo || e.datum <= filterTo));
     const allEntriesWithFt = [...entries, ...vtInRange].sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
-    const istTotal = allEntriesWithFt.filter(e => countsTowardIst(e.typ)).reduce((s,e) => s + (e.stunden||0), 0);
+    const istTotal = sumIstStunden(allEntriesWithFt, user);
     const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
     const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
 
     const buchungen = saGleitzeitAll[user.username] || [];
     const gleitzeitAktivPrint = appSettings.gleitzeit_enabled !== false;
-    const gleitzeitSaldo = gleitzeitAktivPrint ? calcGleitzeitSaldo(allEntries, sollTag, year, buchungen, arbeitstage) : null;
+    const gleitzeitSaldo = gleitzeitAktivPrint ? calcGleitzeitSaldo(allEntries, user, year, buchungen) : null;
 
     html += `<p class="section-title">${esc(user.username)} (${user.role}) - Soll/Tag: ${sollTag}h - ${gleitzeitAktivPrint ? `Gleitzeit: ${gleitzeitSaldo>=0?'+':''}${gleitzeitSaldo.toFixed(2)}h - ` : ''}Urlaub: ${urlaubGenommen}/${urlaubJahr}</p>`;
     html += `<table><thead><tr><th>Datum</th><th>Tag</th><th>Typ</th>${appSettings.erweiterte_zeiterfassung ? '<th>Von</th><th>Bis</th><th>Pause</th>' : ''}<th>Baustelle</th><th>Bemerkung</th><th>Stunden</th></tr></thead><tbody>`;
@@ -17358,7 +17413,7 @@ function exportStundenauswertungPDF() {
       const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '') : '';
       const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung||'Feiertag')}` : _seTypLabel(e.typ);
       const rowStyle = e._virtual ? 'background:#FFF9C4' : '';
-      html += `<tr style="${rowStyle}"><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(bName)}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${countsTowardIst(e.typ)?(e.stunden||0).toFixed(2):'—'}</td></tr>`;
+      html += `<tr style="${rowStyle}"><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(bName)}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []).toFixed(2)}</td></tr>`;
     });
     // Buchungen (nur wenn Gleitzeit aktiv)
     if (gleitzeitAktivPrint) {
@@ -17605,7 +17660,7 @@ function zuRenderWochenpruefung() {
   let html = '';
   visibleUsers.forEach(user => {
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const arbeitstage = getUserArbeitstage(user);
     const byKw = {};
     allEntries.forEach(e => {
@@ -17634,12 +17689,12 @@ function zuRenderWochenpruefung() {
       const mondayKey = monday.toISOString().split('T')[0];
       const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
       const sundayKey = sunday.toISOString().split('T')[0];
-      const ftInKw = getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, parseInt(kw.split('-W')[0]))
+      const ftInKw = getVirtuelleFeiertagEintraege(allEntries, user, parseInt(kw.split('-W')[0]))
         .filter(e => e.datum >= mondayKey && e.datum <= sundayKey);
       const ftH = ftInKw.reduce((s,e) => s+(e.stunden||0), 0);
-      const istH = entries.filter(e => countsTowardIst(e.typ)).reduce((s,e) => s+(e.stunden||0), 0) + ftH;
+      const istH = sumIstStunden(entries, user) + ftH;
 
-      const sollH = calcSollWoche(monday, sollTag, arbeitstage);
+      const sollH = calcSollWoche(monday, user);
 
       const diffH = istH - sollH;
       const diffColor = diffH >= 0 ? '#28A745' : '#DC3545';
@@ -17668,7 +17723,7 @@ function zuRenderWochenpruefung() {
       </div>`;
 
       if (expanded) {
-        userHtml += zpRenderTageBlock(user.username, kw, entries, dayDates, geprueft, tagUser, borderColor, 'zuToggleTagespruefung');
+        userHtml += zpRenderTageBlock(user.username, kw, entries, dayDates, geprueft, tagUser, borderColor, 'zuToggleTagespruefung', user);
       }
     });
 
@@ -17720,14 +17775,14 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
   visibleUsers.forEach(user => {
     const entries = (zuAllZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(monthKey));
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const arbeitstage = getUserArbeitstage(user);
-    const feiertagH = getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, y, m).reduce((s,e) => s+(e.stunden||0), 0);
-    const istStunden = entries.filter(e => countsTowardIst(e.typ) && e.typ !== 'feiertag').reduce((s,e) => s + (e.stunden||0), 0) + feiertagH;
+    const feiertagH = sumIstStunden(getVirtuelleFeiertagEintraege(allEntries, user, y, m), user);
+    const istStunden = sumIstStunden(entries, user) + feiertagH;
     const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const sonstigTage = entries.filter(e => e.typ === 'sonstig').length;
-    const sollStunden = calcSollMonat(sollTag, y, m, arbeitstage);
+    const sollStunden = calcSollMonat(user, y, m);
     const diff = istStunden - sollStunden;
     const diffCls = diff >= 0 ? 'color:#28A745;font-weight:700' : 'color:#FF3B30;font-weight:700';
     const diffSign = diff >= 0 ? '+' : '';
@@ -17763,12 +17818,12 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
     const allEntries = zuAllZeit[user.username]?.entries || [];
     const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
     const krankTage = entries.filter(e => e.typ === 'krank').length;
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const arbeitstage = getUserArbeitstage(user);
-    const feiertagEntries = getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, y, m);
+    const feiertagEntries = getVirtuelleFeiertagEintraege(allEntries, user, y, m);
     const feiertagH = feiertagEntries.reduce((s,e) => s+(e.stunden||0), 0);
-    const istStunden = entries.filter(e => countsTowardIst(e.typ) && e.typ !== 'feiertag').reduce((s,e) => s + (e.stunden||0), 0) + feiertagH;
-    const sollStunden = calcSollMonat(sollTag, y, m, arbeitstage);
+    const istStunden = sumIstStunden(entries, user) + feiertagH;
+    const sollStunden = calcSollMonat(user, y, m);
     const diff = istStunden - sollStunden;
     const diffColor = diff >= 0 ? '#28A745' : '#FF3B30';
     const diffSign = diff >= 0 ? '+' : '';
@@ -17839,6 +17894,7 @@ function zuRenderTagView(content, visibleUsers, monthKey, y, m) {
   visibleUsers.forEach(user => {
     const entries = (zuAllZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(monthKey));
     entries.forEach(e => allEntries.push({ ...e, username: user.username }));
+    getVirtuelleFeiertagEintraege(entries, user, y, m).forEach(e => allEntries.push({ ...e, username: user.username }));
   });
 
   // Group by date
@@ -17860,7 +17916,10 @@ function zuRenderTagView(content, visibleUsers, monthKey, y, m) {
     const d = new Date(datum);
     const wd = wdNames[d.getDay()];
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const dayTotal = dayEntries.filter(e => e.typ === 'arbeit').reduce((s,e) => s + (e.stunden||0), 0);
+    const dayTotal = dayEntries.reduce((sum, entry) => {
+      const user = visibleUsers.find(item => item.username === entry.username);
+      return sum + bkIstStundenEintrag(user, entry, appSettings?.ze_custom_typen || []);
+    }, 0);
     const dateLabel = datum.split('-').reverse().join('.');
     const tid = 'zuTag_' + datum;
 
@@ -17886,7 +17945,7 @@ function zuRenderTagView(content, visibleUsers, monthKey, y, m) {
         <td>${typLabel}</td>
         <td>${esc(bName)}</td>
         <td>${esc(e.bemerkung || '')}</td>
-        <td class="text-right">${(e.stunden||0).toFixed(2)}</td>
+        <td class="text-right">${bkIstStundenEintrag(visibleUsers.find(user => user.username === e.username), e, appSettings?.ze_custom_typen || []).toFixed(2)}</td>
       </tr>`;
     });
 
@@ -17913,14 +17972,16 @@ async function setSollstundenDesktop(username, value) {
 }
 
 async function setSollstundenTagDesktop(username, value) {
+  const parsedValue = Number(value);
+  const sollstundenTag = value === '' || !Number.isFinite(parsedValue) ? 8 : parsedValue;
   try {
     await fetch('api.php?action=set_sollstunden_tag', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, sollstundenTag: parseFloat(value) || 8 })
+      body: JSON.stringify({ username, sollstundenTag })
     });
     const u = zuAllUsers.find(u => u.username === username);
-    if (u) u.sollstundenTag = parseFloat(value) || 8;
+    if (u) u.sollstundenTag = sollstundenTag;
     renderZeituebersicht();
     showNotification('Soll/Tag gespeichert.');
   } catch(e) {
@@ -17929,14 +17990,16 @@ async function setSollstundenTagDesktop(username, value) {
 }
 
 async function setSollTageWocheDesktop(username, value) {
+  const parsedValue = Number(value);
+  const sollTageWoche = value === '' || !Number.isFinite(parsedValue) ? 5 : parsedValue;
   try {
     await fetch('api.php?action=set_soll_tage_woche', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, sollTageWoche: parseFloat(value) || 5 })
+      body: JSON.stringify({ username, sollTageWoche })
     });
     const u = zuAllUsers.find(u => u.username === username);
-    if (u) u.sollTageWoche = parseFloat(value) || 5;
+    if (u) u.sollTageWoche = sollTageWoche;
     renderZeituebersicht();
     showNotification('Tage/Woche gespeichert.');
   } catch(e) {
@@ -18972,12 +19035,14 @@ function renderWochenplanungJahr() {
   //    IST-Stunden/Differenz je Tag und Urlaubszählung je Monat.
   if (visUsers.length === 1) {
     const u = visUsers[0];
-    const sollTag = u.sollstundenTag || 8;
+    const sollTag = u.sollstundenTag ?? 8;
     const atSet = getUserArbeitstage(u);
-    const uEntries = (wpAllZeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
+    const allUserEntries = wpAllZeit[u.username]?.entries || [];
+    const uEntries = allUserEntries.filter(e => e.datum && e.datum.startsWith(String(year)));
+    uEntries.push(...getVirtuelleFeiertagEintraege(allUserEntries, u, year));
     const istByDate = {}, absByDate = {};
     uEntries.forEach(e => {
-      if (countsTowardIst(e.typ)) istByDate[e.datum] = (istByDate[e.datum] || 0) + (e.stunden || 0);
+      istByDate[e.datum] = (istByDate[e.datum] || 0) + bkIstStundenEintrag(u, e, appSettings?.ze_custom_typen || []);
       if (e.typ && e.typ !== 'arbeit') absByDate[e.datum] = e.typ;
     });
     const urlaubPlanDates = new Set();
@@ -19000,10 +19065,12 @@ function renderWochenplanungJahr() {
       for (let d = 1; d <= dim; d++) {
         const dt = new Date(year, mo, d);
         const key = dateToKey(dt);
-        const isWorkday = atSet.has(dt.getDay()) && !holidaySet.has(key);
+        const weekday = dt.getDay() === 0 ? 7 : dt.getDay();
+        const isWorkday = atSet.has(weekday) && !holidaySet.has(key);
         const ist = istByDate[key] || 0;
         const abs = absByDate[key];
-        if (isWorkday) moSoll += sollTag;
+        const dailySoll = bkTagesSoll(u, dt);
+        if (dailySoll > 0) moSoll += dailySoll;
         moIst += ist;
         if (urlaubPlanDates.has(key)) moPlan++;
         if (urlaubTakenDates.has(key)) moTaken++;
@@ -19013,7 +19080,7 @@ function renderWochenplanungJahr() {
         let istHtml = '';
         const istPastWorkday = isWorkday && key <= todayKey2;
         if (ist > 0 || istPastWorkday) {
-          const diff = ist - sollTag;
+          const diff = ist - dailySoll;
           const dc = diff >= 0 ? '#2E7D32' : '#C62828';
           const ds = (diff >= 0 ? '+' : '') + diff.toFixed(1).replace(/\.0$/, '');
           istHtml = `<div style="font-size:.7rem;font-weight:600">${ist > 0 ? ist.toFixed(1).replace(/\.0$/, '') + 'h' : '0h'}</div><div style="font-size:.62rem;color:${dc}">${istPastWorkday ? ds : ''}</div>`;
@@ -19774,7 +19841,7 @@ function exportZeituebersichtPDF() {
 
   zuAllUsers.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false).forEach(user => {
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const tageWoche = user.sollTageWoche || 5;
     const arbeitstage = getUserArbeitstage(user);
     const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
@@ -19788,13 +19855,13 @@ function exportZeituebersichtPDF() {
     months.forEach(m => {
       const mk = year + '-' + String(m+1).padStart(2,'0');
       const me = allEntries.filter(e => e.datum && e.datum.startsWith(mk));
-      const ist = me.filter(e => e.typ === 'arbeit').reduce((s,e) => s + (e.stunden||0), 0)
-        + getVirtuelleFeiertagEintraege(allEntries, sollTag, arbeitstage, year, m).reduce((s,e) => s + (e.stunden||0), 0);
-      const soll = calcSollMonat(sollTag, year, m, arbeitstage);
+      const ist = sumIstStunden(me, user)
+        + sumIstStunden(getVirtuelleFeiertagEintraege(allEntries, user, year, m), user);
+      const soll = calcSollMonat(user, year, m);
       const urlaub = me.filter(e => e.typ === 'urlaub').length;
       const krank = me.filter(e => e.typ === 'krank').length;
       const diff = ist - soll;
-      const wd = getWorkingDaysInMonth(year, m, arbeitstage);
+      const wd = getWorkingDaysInMonth(year, m, user);
       totalIst += ist;
       totalSoll += soll;
       const cls = diff >= 0 ? 'positive' : 'negative';
@@ -23748,19 +23815,19 @@ function renderMitarbeiterContent(users, year) {
 
   users.forEach(user => {
     const entries = (awData.zeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = user.sollstundenTag || 8;
+    const sollTag = user.sollstundenTag ?? 8;
     const tageWoche = user.sollTageWoche || 5;
     const arbeitstage = getUserArbeitstage(user);
     const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
     let totalSoll = 0, totalIst = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(sollTag, year, m, arbeitstage);
-    totalIst = entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0)
-      + getVirtuelleFeiertagEintraege(awData.zeit[user.username]?.entries || [], sollTag, arbeitstage, year).reduce((s, e) => s + (e.stunden || 0), 0);
+    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(user, year, m);
+    totalIst = sumIstStunden(entries, user)
+      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[user.username]?.entries || [], user, year), user);
     const urlaubGenommen = entries.filter(e => e.typ === 'urlaub').length;
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
     const buchungen = awData.gleitzeit[user.username] || [];
-    const gleitSaldo = appSettings.gleitzeit_enabled !== false ? calcGleitzeitSaldo(awData.zeit[user.username]?.entries || [], sollTag, year, buchungen, arbeitstage) : null;
+    const gleitSaldo = appSettings.gleitzeit_enabled !== false ? calcGleitzeitSaldo(awData.zeit[user.username]?.entries || [], user, year, buchungen) : null;
     const diffCls = diff >= 0 ? 'color:var(--success,#198754)' : 'color:var(--danger,#dc3545)';
     const gleitCls = gleitSaldo !== null && gleitSaldo >= 0 ? 'color:var(--success,#198754)' : 'color:var(--danger,#dc3545)';
     html += `<tr>
@@ -23810,19 +23877,19 @@ function exportAuswertungMitarbeiterCSV() {
   const header = ['Mitarbeiter', 'Soll (h)', 'Ist (h)', '+/- (h)', 'Urlaub genommen', 'Urlaub Rest', 'Krank (Tage)', 'Gleitzeitkonto (h)'];
   const rows = users.map(u => {
     const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = u.sollstundenTag || 8;
+    const sollTag = u.sollstundenTag ?? 8;
     const tageWoche = u.sollTageWoche || 5;
     const arbeitstage = getUserArbeitstage(u);
     const urlaubJahr = (u.urlaubstageProJahr && u.urlaubstageProJahr[year]) || 30;
     let totalSoll = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(sollTag, year, m, arbeitstage);
-    const totalIst = entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0)
-      + getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], sollTag, arbeitstage, year).reduce((s, e) => s + (e.stunden || 0), 0);
+    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(u, year, m);
+    const totalIst = sumIstStunden(entries, u)
+      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
     const urlaubG = entries.filter(e => e.typ === 'urlaub').length;
     const krank = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
     const buchungen = awData.gleitzeit[u.username] || [];
-    const gleit = calcGleitzeitSaldo(awData.zeit[u.username]?.entries || [], sollTag, year, buchungen, arbeitstage);
+    const gleit = calcGleitzeitSaldo(awData.zeit[u.username]?.entries || [], u, year, buchungen);
     return [u.username, totalSoll.toFixed(2), totalIst.toFixed(2), diff.toFixed(2), urlaubG, urlaubJahr - urlaubG, krank, gleit.toFixed(2)];
   });
   awCsvDownload('Auswertung_Mitarbeiter_' + year + '.csv', header, rows);
@@ -23899,20 +23966,20 @@ function printAuswertungMitarbeiter() {
   let sumSoll = 0, sumIst = 0, sumUrl = 0, sumUrlR = 0, sumKr = 0;
   users.forEach(u => {
     const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = u.sollstundenTag || 8;
+    const sollTag = u.sollstundenTag ?? 8;
     const tageWoche = u.sollTageWoche || 5;
     const arbeitstage = getUserArbeitstage(u);
     const urlaubJahr = (u.urlaubstageProJahr && u.urlaubstageProJahr[year]) || 30;
     let totalSoll = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(sollTag, year, m, arbeitstage);
-    const totalIst = entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0)
-      + getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], sollTag, arbeitstage, year).reduce((s, e) => s + (e.stunden || 0), 0);
+    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(u, year, m);
+    const totalIst = sumIstStunden(entries, u)
+      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
     const urlG = entries.filter(e => e.typ === 'urlaub').length;
     const urlR = urlaubJahr - urlG;
     const kr = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
     const buchungen = awData.gleitzeit[u.username] || [];
-    const gleit = calcGleitzeitSaldo(awData.zeit[u.username]?.entries || [], sollTag, year, buchungen, arbeitstage);
+    const gleit = calcGleitzeitSaldo(awData.zeit[u.username]?.entries || [], u, year, buchungen);
     sumSoll += totalSoll; sumIst += totalIst; sumUrl += urlG; sumUrlR += urlR; sumKr += kr;
     const dc = diff >= 0 ? 'pos' : 'neg';
     const gc = gleit >= 0 ? 'pos' : 'neg';
@@ -23997,8 +24064,8 @@ function drawMitarbeiterCharts(year) {
     const sollArr = [], istArr = [];
     users.forEach(u => {
       const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u.sollstundenTag || 8, year, m, u.sollTageWoche || 5);
-      const ti = entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0);
+      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u, year, m);
+      const ti = sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
       sollArr.push(ts); istArr.push(ti);
     });
     awCharts.ma_stunden = new Chart(cStd, {
@@ -24014,8 +24081,8 @@ function drawMitarbeiterCharts(year) {
     const diffArr = [];
     users.forEach(u => {
       const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u.sollstundenTag || 8, year, m, u.sollTageWoche || 5);
-      const ti = entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0);
+      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u, year, m);
+      const ti = sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
       diffArr.push(ti - ts);
     });
     awCharts.ma_ueber = new Chart(cUe, {
@@ -24055,9 +24122,9 @@ function drawMitarbeiterCharts(year) {
       const mk = year + '-' + String(m + 1).padStart(2, '0');
       let mSoll = 0, mIst = 0;
       users.forEach(u => {
-        mSoll += calcSollMonat(u.sollstundenTag || 8, year, m, u.sollTageWoche || 5);
+        mSoll += calcSollMonat(u, year, m);
         const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(mk));
-        mIst += entries.filter(e => e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0);
+        mIst += sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year, m), u);
       });
       moSoll.push(mSoll); moIst.push(mIst);
     }

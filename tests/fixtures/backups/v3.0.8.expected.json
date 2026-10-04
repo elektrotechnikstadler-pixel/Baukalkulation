@@ -1,0 +1,23 @@
+{
+    "appVersion": "3.0.8",
+    "adminUser": "admin",
+    "adminPass": "Admin-Test-123",
+    "baustellen": [
+        "Neubau Musterstraße",
+        "Garage Huber"
+    ],
+    "kunden": [
+        "Muster GmbH",
+        ""
+    ],
+    "zeiterfassung": [
+        "fx-1",
+        "fx-2"
+    ],
+    "rechnungen": [
+        "RE-2026-0001"
+    ],
+    "dienstleister": [
+        "Gerüstbau Schmid"
+    ]
+}

@@ -292,7 +292,7 @@ class UserActions
         Auth::requireRole('admin');
         $target = trim($_GET['username'] ?? '');
         if (!$target) jsonOut(['error' => 'Username fehlt.'], 400);
-        $stmt = $this->db->prepare("SELECT username, kuerzel, personalnummer, anschrift, email, telefon, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr, stundenKategorie, mobileLightOnly FROM users WHERE username = ?");
+        $stmt = $this->db->prepare("SELECT username, kuerzel, personalnummer, anschrift, email, telefon, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr, stundenKategorie, mobileLightOnly FROM users WHERE username = ?");
         $stmt->execute([$target]);
         $row = $stmt->fetch();
         if (!$row) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
@@ -306,6 +306,14 @@ class UserActions
             'sollstundenTag'     => (float)($row['sollstundenTag'] ?? 8),
             'sollTageWoche'      => (float)($row['sollTageWoche'] ?? 5),
             'arbeitstage'        => $row['arbeitstage'] ?? '1,2,3,4,5',
+            'sollzeitJeWochentag' => (bool)($row['sollzeitJeWochentag'] ?? 0),
+            'sollstundenMo'      => (float)($row['sollstundenMo'] ?? 0),
+            'sollstundenDi'      => (float)($row['sollstundenDi'] ?? 0),
+            'sollstundenMi'      => (float)($row['sollstundenMi'] ?? 0),
+            'sollstundenDo'      => (float)($row['sollstundenDo'] ?? 0),
+            'sollstundenFr'      => (float)($row['sollstundenFr'] ?? 0),
+            'sollstundenSa'      => (float)($row['sollstundenSa'] ?? 0),
+            'sollstundenSo'      => (float)($row['sollstundenSo'] ?? 0),
             'urlaubstageProJahr' => json_decode($row['urlaubstageProJahr'] ?: '{}', true) ?: [],
             'stundenKategorie'   => $row['stundenKategorie'] ?? '',
             'mobileLightOnly'    => (bool)($row['mobileLightOnly'] ?? 0),
@@ -332,15 +340,37 @@ class UserActions
             $fields[] = 'telefon = ?'; $params[] = trim($this->body['telefon']);
         }
         if (array_key_exists('sollstundenTag', $this->body)) {
-            $fields[] = 'sollstundenTag = ?'; $params[] = max(0, min(24, (float)$this->body['sollstundenTag']));
+            $value = $this->body['sollstundenTag'];
+            if (!is_numeric($value) || (float)$value < 0 || (float)$value > 24) {
+                jsonOut(['error' => 'Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
+            }
+            $fields[] = 'sollstundenTag = ?'; $params[] = (float)$value;
         }
         if (array_key_exists('sollTageWoche', $this->body)) {
             $fields[] = 'sollTageWoche = ?'; $params[] = max(1, min(7, (float)$this->body['sollTageWoche']));
         }
         if (array_key_exists('arbeitstage', $this->body)) {
             $raw = trim((string)($this->body['arbeitstage'] ?? ''));
-            $valid = implode(',', array_values(array_filter(array_map('trim', explode(',', $raw)), fn($v) => in_array((int)$v, [1,2,3,4,5,6], true))));
+            $valid = implode(',', array_values(array_unique(array_filter(array_map('trim', explode(',', $raw)), fn($v) => ctype_digit($v) && (int)$v >= 1 && (int)$v <= 7))));
             $fields[] = 'arbeitstage = ?'; $params[] = $valid ?: '1,2,3,4,5';
+        }
+        if (array_key_exists('sollzeitJeWochentag', $this->body)) {
+            $enabled = $this->body['sollzeitJeWochentag'];
+            if (!in_array($enabled, [true, false, 0, 1, '0', '1'], true)) {
+                jsonOut(['error' => 'Ungültiger Wert für Sollzeit je Wochentag.'], 400);
+            }
+            $fields[] = 'sollzeitJeWochentag = ?'; $params[] = $enabled ? 1 : 0;
+        }
+        foreach ([
+            'sollstundenMo', 'sollstundenDi', 'sollstundenMi', 'sollstundenDo',
+            'sollstundenFr', 'sollstundenSa', 'sollstundenSo',
+        ] as $field) {
+            if (!array_key_exists($field, $this->body)) continue;
+            $value = $this->body[$field];
+            if (!is_numeric($value) || (float)$value < 0 || (float)$value > 24) {
+                jsonOut(['error' => 'Wochentags-Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
+            }
+            $fields[] = $field . ' = ?'; $params[] = (float)$value;
         }
         if (array_key_exists('urlaubstageProJahr', $this->body)) {
             $fields[] = 'urlaubstageProJahr = ?'; $params[] = json_encode($this->body['urlaubstageProJahr']);

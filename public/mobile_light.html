@@ -370,6 +370,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="sollzeit.js?v=230"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
 let currentUser = '';
@@ -388,14 +389,8 @@ let baustellenList = [];
 let kundenData       = [];
 let appSettings = {};
 let currentPerms = {};
-let lightSollTag = 8;
+let lightSollUser = { sollstundenTag: 8, sollTageWoche: 5 };
 let lightUrlaubProJahr = {};
-
-// Urlaub/Krank werden mit Soll/Tag (Mo–Fr) gutgeschrieben (Gleitzeit-neutral)
-function lightCreditStunden(datum) {
-  const dow = new Date(datum + 'T00:00:00').getDay();
-  return (dow >= 1 && dow <= 5) ? lightSollTag : 0;
-}
 
 // ── Datums-/Feiertags-Helfer ──────────────────────────────
 // Lokaler Datums-Key (vermeidet UTC-Verschiebung von toISOString)
@@ -502,7 +497,7 @@ async function loadData() {
   try {
     const sr = await fetch('api.php?action=get_user_sollstunden');
     const sj = await sr.json();
-    if (sj.ok || sj.sollstundenTag) lightSollTag = sj.sollstundenTag || 8;
+    if (sj.ok) lightSollUser = sj;
     lightUrlaubProJahr = (sj && sj.urlaubstageProJahr) || {};
   } catch (e) { /* ignorieren */ }
 
@@ -868,7 +863,6 @@ async function saveEntry() {
   const _isArbeit = isLightArbeitTyp(typ);
   const _istSoll = lightTypIstGleichSoll(typ);
   const _isAbwesend = (typ === 'abwesend');
-  const _credited = (typ === 'urlaub' || typ === 'krank');
   const erweitert = appSettings.erweiterte_zeiterfassung;
   const sonstigZeitspanne = (typ === 'sonstig' && (document.querySelector('input[name="fSonstigModus"]:checked')?.value === 'zeitspanne'));
   let von = '', bis = '', pause = 0;
@@ -889,10 +883,7 @@ async function saveEntry() {
   const stunden = parseFloat(document.getElementById('fStunden').value) || 0;
   const baustelleId = parseInt(document.getElementById('fBsId').value) || null;
   const bemerkung = document.getElementById('fBemerkung').value.trim();
-  // Effektiv gespeicherte Stunden: "Ist = Soll" bucht automatisch Soll/Tag.
-  const effStunden = _istSoll
-    ? lightCreditStunden(datum)
-    : ((_isArbeit || _isAbwesend) ? stunden : (sonstigZeitspanne ? stunden : ((_credited || typ === 'sonstig') ? lightCreditStunden(datum) : 0)));
+  const effStunden = bkIstStundenEintrag(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen);
 
   // Validation
   if (!datum) { toast('Bitte Datum eingeben.', 'error'); return; }
@@ -962,9 +953,8 @@ async function saveEntry() {
       let holidayYear = cur.getFullYear();
       while (cur <= end) {
         if (cur.getFullYear() !== holidayYear) { holidayYear = cur.getFullYear(); holidayKeys = lGetHolidayKeys(holidayYear); }
-        const dow = cur.getDay();
         const key = lDateKey(cur);
-        if (dow >= 1 && dow <= 5 && !holidayKeys.has(key)) dates.push(key);
+        if (bkTagesSoll(lightSollUser, key) > 0 && !holidayKeys.has(key)) dates.push(key);
         cur.setDate(cur.getDate() + 1);
       }
     } else {
@@ -983,7 +973,7 @@ async function saveEntry() {
       }
     }
     neueDates.forEach(d => {
-      const _st = sonstigZeitspanne ? stunden : ((_credited || typ === 'sonstig') ? lightCreditStunden(d) : 0);
+      const _st = sonstigZeitspanne ? stunden : bkIstStundenEintrag(lightSollUser, { datum: d, typ, stunden }, appSettings.ze_custom_typen);
       zeitEntries.push({ id: nextEntryId++, clientUuid: newZeitUuid(), datum: d, typ, stunden: _st, baustelleId: null, bemerkung, von: sonstigZeitspanne ? von : '', bis: sonstigZeitspanne ? bis : '', pause: 0 });
     });
   } else {
@@ -1163,10 +1153,9 @@ function renderLightTagesInfo() {
   const istEl = document.getElementById('lightTagesIst');
   const sollEl = document.getElementById('lightTagesSoll');
   if (!strip || !istEl || !sollEl) return;
-  const today = new Date().toISOString().split('T')[0];
-  const heuteIst = zeitEntries.filter(e => e.datum === today && (e.typ === 'arbeit' || e.typ === 'urlaub' || e.typ === 'krank')).reduce((s, e) => s + (e.stunden || 0), 0);
-  const dow = new Date().getDay(); // 0=So, 6=Sa
-  const heuteSoll = (dow >= 1 && dow <= 5) ? lightSollTag : 0;
+  const today = lDateKey(new Date());
+  const heuteIst = zeitEntries.filter(e => e.datum === today).reduce((s, e) => s + bkIstStundenEintrag(lightSollUser, e, appSettings.ze_custom_typen), 0);
+  const heuteSoll = bkTagesSoll(lightSollUser, today);
   istEl.textContent = heuteIst.toFixed(2) + ' h';
   sollEl.textContent = heuteSoll.toFixed(2) + ' h';
   sollEl.style.color = (heuteIst >= heuteSoll && heuteSoll > 0) ? '#28A745' : (heuteSoll === 0 ? '' : '#FF3B30');

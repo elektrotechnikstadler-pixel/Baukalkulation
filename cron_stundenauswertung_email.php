@@ -15,6 +15,7 @@
 require_once __DIR__ . '/vendor/autoload.php';
 
 use App\Services\MailService;
+use App\Services\Sollzeit;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -86,7 +87,7 @@ $feiertage = bayerischeFeiertage($jahr);
 $feiertagSet = array_flip($feiertage);
 
 // -- Nutzer laden --
-$users = $db->query("SELECT username, kuerzel, role, sollstundenTag, sollTageWoche, arbeitstage, showInZeitverwaltung FROM users ORDER BY LOWER(username)")->fetchAll();
+$users = $db->query("SELECT username, kuerzel, role, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, showInZeitverwaltung FROM users ORDER BY LOWER(username)")->fetchAll();
 $users = array_filter($users, fn($u) => ($u['role'] ?? '') !== 'admin' && (int)($u['showInZeitverwaltung'] ?? 1) !== 0);
 
 // -- Zeiterfassung des Monats --
@@ -100,32 +101,41 @@ $rows = [];
 $sumSoll = 0; $sumIst = 0;
 foreach ($users as $u) {
     $uname   = $u['username'];
-    $sollTag = (float)($u['sollstundenTag'] ?? 8) ?: 8;
-    $at      = arbeitstageSet($u['arbeitstage'] ?? '', (int)($u['sollTageWoche'] ?? 5));
+    $customTypen = $settings['ze_custom_typen'] ?? [];
+    if (!is_array($customTypen)) $customTypen = [];
 
     // Soll-Arbeitstage im Monat (Arbeitstag & kein Feiertag)
-    $sollTage = 0;
+    $soll = 0.0;
     for ($t = strtotime($monatStart); $t <= strtotime($monatEnde); $t = strtotime('+1 day', $t)) {
-        $dow = (int)date('N', $t); // 1=Mo .. 7=So
         $key = date('Y-m-d', $t);
-        if (in_array($dow, $at, true) && !isset($feiertagSet[$key])) $sollTage++;
+        if (!isset($feiertagSet[$key])) $soll += Sollzeit::tagesSoll($u, $key);
     }
-    $soll = $sollTage * $sollTag;
 
     $list = $byUser[$uname] ?? [];
     $arbeitStd  = 0.0;
+    $ist = 0.0;
     $urlaubTage = [];
     $krankTage  = [];
     foreach ($list as $e) {
         $typ = $e['typ'] ?? '';
-        if ($typ === 'arbeit')      $arbeitStd += (float)($e['stunden'] ?? 0);
-        elseif ($typ === 'urlaub')  $urlaubTage[$e['datum']] = true;
-        elseif ($typ === 'krank')   $krankTage[$e['datum']]  = true;
+        if ($typ === 'arbeit') $arbeitStd += (float)($e['stunden'] ?? 0);
+        if ($typ === 'urlaub') $urlaubTage[$e['datum']] = true;
+        if ($typ === 'krank') $krankTage[$e['datum']] = true;
+        $istGleichSoll = in_array($typ, ['feiertag', 'urlaub', 'krank'], true);
+        if (!$istGleichSoll) {
+            foreach ($customTypen as $customTyp) {
+                if (is_array($customTyp) && ($customTyp['value'] ?? null) === $typ) {
+                    $istGleichSoll = ($customTyp['istGleichSoll'] ?? false) === true;
+                    break;
+                }
+            }
+        }
+        // Feiertage fehlen im Monatssoll; Tages-Soll-Gutschriften dürfen das Ist dort nicht erhöhen.
+        if (isset($feiertagSet[$e['datum']]) && $istGleichSoll) continue;
+        $ist += Sollzeit::istStundenEintrag($u, $e, $customTypen);
     }
     $uCount = count($urlaubTage);
     $kCount = count($krankTage);
-    // Ist gutgeschrieben: Arbeit + (Urlaub+Krank) × Soll/Tag
-    $ist  = $arbeitStd + ($uCount + $kCount) * $sollTag;
     $diff = $ist - $soll;
 
     $sumSoll += $soll; $sumIst += $ist;
@@ -176,7 +186,7 @@ $html = '<html><head><meta charset="utf-8"><style>'
     . '<td class="num" style="color:' . ($sumDiff >= 0 ? '#2E7D32' : '#C62828') . '">' . ($sumDiff >= 0 ? '+' : '') . $fmt($sumDiff) . '</td>'
     . '<td class="num"></td><td class="num"></td><td class="num"></td></tr></tfoot>'
     . '</table>'
-    . '<p class="foot">Ist gutgeschrieben = Arbeitsstunden + (Urlaub + Krank) × Soll/Tag. Soll = Arbeitstage (ohne Feiertage) × Soll/Tag. '
+    . '<p class="foot">Ist wird je Erfassungstyp nach Tages-Soll und erfassten Stunden berechnet. Feiertage mindern das Monatssoll. '
     . 'Automatisch erzeugte Monatsübersicht.</p>'
     . '</body></html>';
 
@@ -210,13 +220,6 @@ try {
 saLog('=== Stundenauswertung-E-Mail fertig ===');
 
 // ── Hilfsfunktionen ──────────────────────────────────────────
-function arbeitstageSet(string $raw, int $sollTageWoche): array {
-    $days = array_values(array_filter(array_map('intval', explode(',', $raw)), fn($n) => $n >= 1 && $n <= 6));
-    if ($days) return $days;
-    $n = max(1, min(6, $sollTageWoche ?: 5));
-    return range(1, $n);
-}
-
 function bayerischeFeiertage(int $year): array {
     // Ostersonntag per Gauß-Algorithmus (ohne ext-calendar).
     $a = $year % 19; $b = intdiv($year, 100); $c = $year % 100;

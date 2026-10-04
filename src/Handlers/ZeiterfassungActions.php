@@ -4,6 +4,7 @@ namespace App\Handlers;
 use App\Auth;
 use App\Database;
 use App\Services\BuchungValidator;
+use App\Services\Sollzeit;
 
 class ZeiterfassungActions
 {
@@ -14,38 +15,20 @@ class ZeiterfassungActions
 
     /**
      * Lädt die Arbeitszeit-Konfiguration eines Users.
-     * @return array{sollTag: float, arbeitstage: array<int,bool>, urlaubProJahr: array<string,int>}
+     * @return array<string, mixed>
      */
     private function loadUserZeitConfig(string $username): array
     {
-        $u = Database::fetchOne($this->db, "SELECT sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users WHERE username = ?", [$username]);
-        $sollTag = (float)($u['sollstundenTag'] ?? 8);
-        if ($sollTag <= 0) $sollTag = 8.0;
-        // Arbeitstage: "1,2,3,4,5" (1=Mo … 6=Sa, 7=So). Fallback über sollTageWoche.
-        $raw  = trim((string)($u['arbeitstage'] ?? ''));
-        $days = [];
-        if ($raw !== '') {
-            foreach (explode(',', $raw) as $d) {
-                $n = (int)trim($d);
-                if ($n >= 1 && $n <= 7) $days[$n] = true;
-            }
-        }
-        if (!$days) {
-            $n = (int)min((float)($u['sollTageWoche'] ?? 5), 6);
-            for ($i = 1; $i <= $n; $i++) $days[$i] = true;
-        }
+        $u = Database::fetchOne($this->db, "SELECT sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr FROM users WHERE username = ?", [$username]);
         $upj = json_decode((string)($u['urlaubstageProJahr'] ?? '{}'), true);
         if (!is_array($upj)) $upj = [];
-        return ['sollTag' => $sollTag, 'arbeitstage' => $days, 'urlaubProJahr' => $upj];
+        return $u + ['urlaubProJahr' => $upj];
     }
 
-    /** Gutschrift-Stunden für einen Abwesenheitstag: Soll/Tag an Arbeitstagen, sonst 0. */
-    private function absenceStundenForDate(string $datum, float $sollTag, array $arbeitstage): float
+    /** Gutschrift-Stunden für einen Abwesenheitstag nach dem aktuellen Tages-Soll. */
+    private function absenceStundenForDate(string $datum, array $zeitCfg): float
     {
-        $ts = strtotime($datum);
-        if ($ts === false) return $sollTag;
-        $n = (int)date('N', $ts); // 1=Mo … 7=So
-        return isset($arbeitstage[$n]) ? $sollTag : 0.0;
+        return Sollzeit::tagesSoll($zeitCfg, $datum);
     }
 
     /** Ermittelt das Urlaubs-Jahreslimit (Default 30, falls für das Jahr nichts hinterlegt). */
@@ -187,7 +170,7 @@ class ZeiterfassungActions
                 $stundenVal = (float)($e['stunden'] ?? 0);
                 // Urlaub/Krank werden serverseitig immer mit Soll/Tag gutgeschrieben (Gleitzeit-neutral)
                 if (in_array($typ, self::CREDITED_ABSENCE_TYPEN, true)) {
-                    $stundenVal = $this->absenceStundenForDate($e['datum'] ?? '', $zeitCfg['sollTag'], $zeitCfg['arbeitstage']);
+                    $stundenVal = $this->absenceStundenForDate((string)($e['datum'] ?? ''), $zeitCfg);
                 }
                 $eid  = isset($e['id']) && $e['id'] !== null ? (int)$e['id'] : 0;
                 $prev = $eid > 0 ? ($prevMeta[$eid] ?? null) : null;
@@ -1179,10 +1162,42 @@ class ZeiterfassungActions
     {
         Auth::requireRole('admin', 'master');
         $target = trim($this->body['username'] ?? '');
-        $val    = (float)($this->body['sollstundenTag'] ?? 8);
+        $fields = [];
+        $params = [];
+        $weekdayFields = [
+            'sollstundenMo', 'sollstundenDi', 'sollstundenMi', 'sollstundenDo',
+            'sollstundenFr', 'sollstundenSa', 'sollstundenSo',
+        ];
+        $hasWeekdayInput = array_key_exists('sollzeitJeWochentag', $this->body);
+        foreach ($weekdayFields as $field) {
+            if (array_key_exists($field, $this->body)) $hasWeekdayInput = true;
+        }
+        if (array_key_exists('sollstundenTag', $this->body) || !$hasWeekdayInput) {
+            $raw = $this->body['sollstundenTag'] ?? 8;
+            if (!is_numeric($raw) || (float)$raw < 0 || (float)$raw > 24) {
+                jsonOut(['error' => 'Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
+            }
+            $fields[] = 'sollstundenTag = ?'; $params[] = (float)$raw;
+        }
+        if (array_key_exists('sollzeitJeWochentag', $this->body)) {
+            $enabled = $this->body['sollzeitJeWochentag'];
+            if (!in_array($enabled, [true, false, 0, 1, '0', '1'], true)) {
+                jsonOut(['error' => 'Ungültiger Wert für Sollzeit je Wochentag.'], 400);
+            }
+            $fields[] = 'sollzeitJeWochentag = ?'; $params[] = $enabled ? 1 : 0;
+        }
+        foreach ($weekdayFields as $field) {
+            if (!array_key_exists($field, $this->body)) continue;
+            $raw = $this->body[$field];
+            if (!is_numeric($raw) || (float)$raw < 0 || (float)$raw > 24) {
+                jsonOut(['error' => 'Wochentags-Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
+            }
+            $fields[] = $field . ' = ?'; $params[] = (float)$raw;
+        }
         if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
-        $cnt = $this->db->prepare("UPDATE users SET sollstundenTag = ? WHERE username = ?");
-        $cnt->execute([$val, $target]);
+        $params[] = $target;
+        $cnt = $this->db->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE username = ?');
+        $cnt->execute($params);
         if ($cnt->rowCount() === 0) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
         jsonOut(['ok' => true]);
     }
@@ -1224,13 +1239,21 @@ class ZeiterfassungActions
     public function getSollstundenExtended(): void
     {
         Auth::requireRole('admin', 'master');
-        $rows = $this->db->query("SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollstunden, urlaubstageProJahr, showInZeitverwaltung, showInWochenplanung FROM users ORDER BY LOWER(username)")->fetchAll();
+        $rows = $this->db->query("SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, sollstunden, urlaubstageProJahr, showInZeitverwaltung, showInWochenplanung FROM users ORDER BY LOWER(username)")->fetchAll();
         $result = array_map(fn($r) => [
             'username'             => $r['username'],
             'role'                 => $r['role'],
             'sollstundenTag'       => (float)($r['sollstundenTag'] ?? 8),
             'sollTageWoche'        => (float)($r['sollTageWoche'] ?? 5),
             'arbeitstage'          => $r['arbeitstage'] ?? '1,2,3,4,5',
+            'sollzeitJeWochentag'  => (bool)($r['sollzeitJeWochentag'] ?? 0),
+            'sollstundenMo'        => (float)($r['sollstundenMo'] ?? 0),
+            'sollstundenDi'        => (float)($r['sollstundenDi'] ?? 0),
+            'sollstundenMi'        => (float)($r['sollstundenMi'] ?? 0),
+            'sollstundenDo'        => (float)($r['sollstundenDo'] ?? 0),
+            'sollstundenFr'        => (float)($r['sollstundenFr'] ?? 0),
+            'sollstundenSa'        => (float)($r['sollstundenSa'] ?? 0),
+            'sollstundenSo'        => (float)($r['sollstundenSo'] ?? 0),
             'sollstunden'          => (float)($r['sollstunden'] ?? 0),
             'urlaubstageProJahr'   => json_decode($r['urlaubstageProJahr'] ?? '{}', true) ?? [],
             'showInZeitverwaltung' => (bool)$r['showInZeitverwaltung'],
@@ -1299,9 +1322,9 @@ class ZeiterfassungActions
     {
         Auth::requireAuth();
         $username = $_SESSION['username'];
-        $row = Database::fetchOne($this->db, "SELECT sollstundenTag, sollTageWoche, arbeitstage, sollstunden, urlaubstageProJahr FROM users WHERE username = ?", [$username]);
+        $row = Database::fetchOne($this->db, "SELECT sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, sollstunden, urlaubstageProJahr FROM users WHERE username = ?", [$username]);
         if (!$row) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
-        jsonOut(['ok' => true, 'sollstundenTag' => (float)($row['sollstundenTag'] ?? 8), 'sollTageWoche' => (float)($row['sollTageWoche'] ?? 5), 'arbeitstage' => $row['arbeitstage'] ?? '1,2,3,4,5', 'sollstunden' => (float)($row['sollstunden'] ?? 0), 'urlaubstageProJahr' => json_decode($row['urlaubstageProJahr'] ?? '{}', true) ?? []]);
+        jsonOut(['ok' => true, 'sollstundenTag' => (float)($row['sollstundenTag'] ?? 8), 'sollTageWoche' => (float)($row['sollTageWoche'] ?? 5), 'arbeitstage' => $row['arbeitstage'] ?? '1,2,3,4,5', 'sollzeitJeWochentag' => (bool)($row['sollzeitJeWochentag'] ?? 0), 'sollstundenMo' => (float)($row['sollstundenMo'] ?? 0), 'sollstundenDi' => (float)($row['sollstundenDi'] ?? 0), 'sollstundenMi' => (float)($row['sollstundenMi'] ?? 0), 'sollstundenDo' => (float)($row['sollstundenDo'] ?? 0), 'sollstundenFr' => (float)($row['sollstundenFr'] ?? 0), 'sollstundenSa' => (float)($row['sollstundenSa'] ?? 0), 'sollstundenSo' => (float)($row['sollstundenSo'] ?? 0), 'sollstunden' => (float)($row['sollstunden'] ?? 0), 'urlaubstageProJahr' => json_decode($row['urlaubstageProJahr'] ?? '{}', true) ?? []]);
     }
 
     /** get_gleitzeitkonto_buchungen – Buchungen für einen User */
@@ -1361,7 +1384,7 @@ class ZeiterfassungActions
         // Urlaub/Krank serverseitig immer mit Soll/Tag gutschreiben (Gleitzeit-neutral)
         $zeitCfg = $this->loadUserZeitConfig($target);
         if (in_array($typ, self::CREDITED_ABSENCE_TYPEN, true)) {
-            $stunden = $this->absenceStundenForDate($datum, $zeitCfg['sollTag'], $zeitCfg['arbeitstage']);
+            $stunden = $this->absenceStundenForDate($datum, $zeitCfg);
         }
         // Urlaubslimit prüfen (dieser Eintrag ausgenommen)
         if ($typ === 'urlaub') {
@@ -1498,7 +1521,7 @@ class ZeiterfassungActions
         foreach ($dates as $d) {
             // Urlaub/Krank + "Ist = Soll"-Typen pro Tag mit Soll/Tag gutschreiben (Gleitzeit-neutral)
             $stundenForDate = in_array($typ, $creditedTypen, true)
-                ? $this->absenceStundenForDate($d, $zeitCfg['sollTag'], $zeitCfg['arbeitstage'])
+                ? $this->absenceStundenForDate($d, $zeitCfg)
                 : $stunden;
             $stmt->execute([
                 $target, $nextId, $d, $typ, $baustelleId, $bName, $stundenForDate, $bemerkung, $von, $bis, $pause,
@@ -1578,7 +1601,7 @@ class ZeiterfassungActions
         $holidays = $this->computeBavarianHolidays($year);
 
         $rows = $this->db->query(
-            "SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr
+            "SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr
                FROM users
               WHERE LOWER(username) != 'systemadmin'
               ORDER BY LOWER(username)"
@@ -1587,14 +1610,11 @@ class ZeiterfassungActions
         $users = [];
         foreach ($rows as $r) {
             $uProJahr  = json_decode($r['urlaubstageProJahr'] ?? '{}', true) ?? [];
-            $sollTag   = (float)($r['sollstundenTag'] ?? 8);
-            $arbeitstage = $r['arbeitstage'] ?? '1,2,3,4,5';
-
             $gleitzeitSaldo = null;
             if ($gleitzeitAktiv) {
                 $gleitzeitSaldo = $this->computeGleitzeitSaldo(
-                    $r['username'], $year, $sollTag, $arbeitstage,
-                    $startdatum, $holidays, $customFeiertage
+                    $r['username'], $year, $r, $startdatum, $holidays, $customFeiertage,
+                    $settings['ze_custom_typen'] ?? []
                 );
             }
 
@@ -1642,41 +1662,11 @@ class ZeiterfassungActions
         return array_unique(array_merge($fixed, $movable));
     }
 
-    /** Arbeitstage in einem Monat – Feiertage werden MITGEZAEHLT (Spiegelung von
-     *  getWorkingDaysInMonth() aus script.js; Feiertage werden auf der Ist-Seite gutgeschrieben).
-     *  $arbeitstage: Set der DoW-Nummern (1=Mo … 6=Sa). Standard Mo–Fr. */
-    private function getWorkingDaysInMonth(int $year, int $month, array $arbeitstage): int
-    {
-        $atSet = !empty($arbeitstage) ? $arbeitstage : [1, 2, 3, 4, 5];
-        $count = 0;
-        $days  = (int)date('t', mktime(0, 0, 0, $month, 1, $year));
-        for ($d = 1; $d <= $days; $d++) {
-            $dow = (int)date('N', mktime(0, 0, 0, $month, $d, $year)); // 1=Mo,7=So
-            if (in_array($dow, $atSet, true)) {
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    /** Parst einen arbeitstage-String ("1,2,3,4,5") in ein Array von DoW-Nummern (1=Mo … 6=Sa). */
-    private function parseArbeitstage(string $arbeitstage): array
-    {
-        $days = [];
-        foreach (explode(',', $arbeitstage) as $part) {
-            $n = (int)trim($part);
-            if ($n >= 1 && $n <= 6) $days[] = $n;
-        }
-        return !empty($days) ? array_values(array_unique($days)) : [1, 2, 3, 4, 5];
-    }
-
-    /** Gleitzeitkonto-Saldo für einen User und ein Jahr (spiegelt calcGleitzeitSaldo() aus script.js) */
+    /** Gleitzeitkonto-Saldo für einen User und ein Jahr. */
     private function computeGleitzeitSaldo(
-        string $username, int $year,
-        float $sollTag, string $arbeitstage,
-        string $startdatum, array $holidays, array $customFeiertage
+        string $username, int $year, array $zeitCfg,
+        string $startdatum, array $holidays, array $customFeiertage, array $customTypen
     ): float {
-        $atSet = $this->parseArbeitstage($arbeitstage);
         // Custom-Feiertage des abgefragten Jahres in Holidays aufnehmen
         $allHolidays = $holidays;
         foreach ($customFeiertage as $cf) {
@@ -1703,10 +1693,13 @@ class ZeiterfassungActions
 
         $saldo = 0.0;
         for ($mo = $startMo; $mo <= $endMo; $mo++) {
-            $workDays  = $this->getWorkingDaysInMonth($year, $mo + 1, $atSet);
-            $sollMonat = $sollTag * $workDays;
-
             $mk   = sprintf('%d-%02d', $year, $mo + 1);
+            $monthStart = new \DateTimeImmutable($mk . '-01');
+            $monthEnd = $monthStart->modify('last day of this month');
+            $sollMonat = 0.0;
+            for ($date = $monthStart; $date <= $monthEnd; $date = $date->modify('+1 day')) {
+                $sollMonat += Sollzeit::tagesSoll($zeitCfg, $date->format('Y-m-d'));
+            }
             $rows = Database::fetchAll(
                 $this->db,
                 "SELECT typ, stunden, datum FROM zeiterfassung WHERE username = ? AND datum LIKE ?",
@@ -1716,15 +1709,14 @@ class ZeiterfassungActions
             $ist = 0.0;
             foreach ($rows as $r) {
                 if (!empty($r['datum'])) $entryDates[$r['datum']] = true;
-                if (($r['typ'] ?? '') === 'arbeit') $ist += (float)($r['stunden'] ?? 0);
+                $ist += Sollzeit::istStundenEintrag($zeitCfg, $r, $customTypen);
             }
-            // Feiertagsgutschrift: Feiertage an Arbeitstagen ohne realen Eintrag zählen als Ist
+            // Feiertage ohne Eintrag zählen nur an Tagen mit positivem Tages-Soll als Ist.
             foreach ($allHolidays as $hKey) {
                 if (strncmp((string)$hKey, $mk, 7) !== 0) continue;        // gleicher Monat
-                $hDow = (int)date('N', strtotime($hKey));
-                if (!in_array($hDow, $atSet, true)) continue;             // nur Arbeitstage
                 if (isset($entryDates[$hKey])) continue;                  // schon Eintrag vorhanden
-                $ist += $sollTag;
+                $feiertagSoll = Sollzeit::tagesSoll($zeitCfg, (string)$hKey);
+                if ($feiertagSoll > 0) $ist += $feiertagSoll;
             }
             $saldo += $ist - $sollMonat;
         }
