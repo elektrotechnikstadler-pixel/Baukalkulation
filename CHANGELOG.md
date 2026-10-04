@@ -37,6 +37,26 @@
 
 ---
 
+## v3.0.9 – Sollarbeitszeit je Wochentag
+
+### Neu
+- Mitarbeiterdaten: Checkbox „Sollzeit je Wochentag“. Statt eines Werts für alle Arbeitstage lassen
+  sich Sollstunden für Montag bis Sonntag einzeln eintragen (0 = kein Arbeitstag). Beim ersten
+  Einschalten werden die bisherigen Werte vorbelegt. Ausgeschaltet gilt weiter „Soll/Tag“ mit den
+  Arbeitstagen. Änderungen wirken auch auf vergangene Monate und das Gleitzeitkonto.
+
+### Fehlerbehebungen
+- Einheitliche Anrechnung in Desktop, Mobil, Mobil-Light, PDF, Gleitzeitkonto und Monats-Mail:
+  Urlaub, Krank und Feiertag zählen mit dem Soll des jeweiligen Tages; Abwesend, Gleitzeit und
+  Sonstiger Fehlgrund zählen 0 h; eigene Erfassungstypen gemäß Einstellung (Arbeitszeit, Ist = Soll).
+- Gleitzeitsaldo zum Jahreswechsel berücksichtigt jetzt Urlaub, Krank und eigene Arbeitstypen.
+- Monats-Mail: Urlaub/Krank an arbeitsfreien Tagen und Feiertagen werden nicht mehr gutgeschrieben.
+- Mobil-Light beachtet die eingestellten Arbeitstage statt fest Montag bis Freitag.
+- Ein Soll von 0 Stunden wird nicht mehr in 8 Stunden umgewandelt; Werte über 24 oder negative
+  Werte lehnt der Server ab.
+
+---
+
 ## v3.0.8 – Installationsskript für mehrere Instanzen
 
 ### Fehlerbehebungen
