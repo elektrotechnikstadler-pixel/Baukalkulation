@@ -216,6 +216,13 @@ sudo chown www-data:www-data data/audit_pepper.txt
   docker exec -it baukalkulation-KÜRZEL-app php bin/console user:reset-password Systemadmin
   ```
 
+  **Notzugang:** `Systemadmin` kann über die App nicht gelöscht, angelegt oder verändert werden
+  und wird bei jedem Start/API-Aufruf automatisch neu angelegt, falls er fehlt (z. B. nach einem
+  Backup-Import ohne dieses Konto). Er kann nur durch 3 Fehlanmeldungen gesperrt werden – das
+  `user:reset-password`-Kommando entsperrt ihn und setzt das Passwort neu. Damit besteht immer ein
+  Zugang, solange Zugriff auf den Container besteht. Vorbehalt: Wer direkt auf die Datenbank
+  zugreift, kann das Konto trotzdem entfernen.
+
 ---
 
 ## 4. Überprüfung
