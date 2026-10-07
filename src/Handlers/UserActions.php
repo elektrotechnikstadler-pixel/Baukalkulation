@@ -83,7 +83,7 @@ class UserActions
     {
         Auth::requireRole('admin');
         $this->ensurePersonalnummerAutofill();
-        $rows = $this->db->query("SELECT username, role, kuerzel, personalnummer, visibleBaustellen, showInZeitverwaltung, showInWochenplanung, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, isLocked, failedLoginAttempts, lastLoginAt, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
+        $rows = $this->db->query("SELECT username, role, kuerzel, personalnummer, visibleBaustellen, showInZeitverwaltung, showInWochenplanung, mustChangePassword, isSubunternehmer, dienstleisterId, stundenKategorie, isLocked, failedLoginAttempts, lastLoginAt, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
         $list = array_map(fn($r) => [
             'username'             => $r['username'],
             'role'                 => $r['role'],
@@ -102,6 +102,14 @@ class UserActions
             'sollstundenTag'       => (float)($r['sollstundenTag'] ?? 8),
             'sollTageWoche'        => (float)($r['sollTageWoche'] ?? 5),
             'arbeitstage'          => $r['arbeitstage'] ?? '1,2,3,4,5',
+            'sollzeitJeWochentag'  => (bool)($r['sollzeitJeWochentag'] ?? 0),
+            'sollstundenMo' => (float)($r['sollstundenMo'] ?? 0),
+            'sollstundenDi' => (float)($r['sollstundenDi'] ?? 0),
+            'sollstundenMi' => (float)($r['sollstundenMi'] ?? 0),
+            'sollstundenDo' => (float)($r['sollstundenDo'] ?? 0),
+            'sollstundenFr' => (float)($r['sollstundenFr'] ?? 0),
+            'sollstundenSa' => (float)($r['sollstundenSa'] ?? 0),
+            'sollstundenSo' => (float)($r['sollstundenSo'] ?? 0),
             'urlaubstageProJahr'   => json_decode($r['urlaubstageProJahr'] ?? '{}', true) ?? [],
         ], $rows);
         jsonOut(['ok' => true, 'users' => $list]);
@@ -123,7 +131,7 @@ class UserActions
     {
         Auth::requireAuth();
         $this->ensurePersonalnummerAutofill();
-        $rows = $this->db->query("SELECT username, kuerzel, showInWochenplanung, isSubunternehmer, dienstleisterId, stundenKategorie, sollstundenTag, sollTageWoche, arbeitstage, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
+        $rows = $this->db->query("SELECT username, kuerzel, showInWochenplanung, isSubunternehmer, dienstleisterId, stundenKategorie, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr FROM users ORDER BY LOWER(username)")->fetchAll();
         $list = array_map(fn($r) => [
             'username'            => $r['username'],
             'kuerzel'             => $r['kuerzel'] ?? '',
@@ -134,6 +142,14 @@ class UserActions
             'sollstundenTag'      => (float)($r['sollstundenTag'] ?? 8),
             'sollTageWoche'       => (float)($r['sollTageWoche'] ?? 5),
             'arbeitstage'         => $r['arbeitstage'] ?? '1,2,3,4,5',
+            'sollzeitJeWochentag'  => (bool)($r['sollzeitJeWochentag'] ?? 0),
+            'sollstundenMo' => (float)($r['sollstundenMo'] ?? 0),
+            'sollstundenDi' => (float)($r['sollstundenDi'] ?? 0),
+            'sollstundenMi' => (float)($r['sollstundenMi'] ?? 0),
+            'sollstundenDo' => (float)($r['sollstundenDo'] ?? 0),
+            'sollstundenFr' => (float)($r['sollstundenFr'] ?? 0),
+            'sollstundenSa' => (float)($r['sollstundenSa'] ?? 0),
+            'sollstundenSo' => (float)($r['sollstundenSo'] ?? 0),
             'urlaubstageProJahr'  => json_decode($r['urlaubstageProJahr'] ?? '{}', true) ?? [],
         ], $rows);
         jsonOut(['ok' => true, 'users' => $list]);

@@ -187,7 +187,7 @@
 
       <h3 id="ze-sollzeit">Sollarbeitszeit je Mitarbeiter</h3>
       <p>Öffnen Sie <strong>Verwaltung → Benutzerverwaltung</strong>, wählen Sie bei einem Mitarbeiter <strong>Daten</strong> und speichern Sie die Sollzeit im Mitarbeiterprofil. Mit „Sollzeit je Wochentag“ tragen Sie eigene Werte für Montag bis Sonntag ein. <strong>0 Stunden bedeutet: an diesem Wochentag ist kein Soll vorgesehen.</strong> Bei ausgeschalteter Option gelten stattdessen „Soll/Tag“ und die ausgewählten Arbeitstage.</p>
-      <p>Beim ersten Einschalten werden die bisherigen Sollstunden für die bisherigen Arbeitstage vorbelegt; nicht konfigurierte Tage erhalten 0. Die Sollzeit im Mitarbeiterprofil kann ein Administrator ändern. Administratoren und Master können zusätzlich in der mobilen Zeitübersicht über <strong>Zeiten</strong> (Ansicht <strong>Zeitübersicht</strong>) im Tab <strong>Übersicht</strong> die Felder <strong>Soll/Tag</strong> und <strong>Tage/Wo</strong> anpassen. Dort gibt es keine Eingabe einzelner Wochentags-Sollstunden. <strong>Änderungen an der Sollzeit wirken rückwirkend auf alle Auswertungen und das Gleitzeitkonto.</strong> Eine Sollzeit-Historie pro Gültigkeitszeitraum gibt es nicht.</p>
+      <p>Beim ersten Einschalten werden die bisherigen Sollstunden für die bisherigen Arbeitstage vorbelegt; nicht konfigurierte Tage erhalten 0. Die Sollzeit im Mitarbeiterprofil kann ein Administrator ändern. Administratoren und Master können zusätzlich in der mobilen Zeitübersicht über <strong>Zeiten</strong> (Ansicht <strong>Zeitübersicht</strong>) im Tab <strong>Übersicht</strong> die Felder <strong>Soll/Tag</strong> und <strong>Tage/Wo</strong> anpassen. Dort gibt es keine Eingabe einzelner Wochentags-Sollstunden. <strong>Änderungen an der Sollzeit wirken rückwirkend auf alle Auswertungen, die Jahresansicht der Wochenplanung und das Gleitzeitkonto.</strong> Eine Sollzeit-Historie pro Gültigkeitszeitraum gibt es nicht.</p>
 
       <h3 id="ze-feiertage">Feiertage</h3>
       <p>Die Anwendung berücksichtigt ihren hinterlegten bayerischen Feiertagskalender (feste und bewegliche Feiertage) sowie zusätzliche betriebliche Feiertage. Eigene Feiertage verwalten Sie unter <strong>Verwaltung → Allgemein → Feiertage &amp; arbeitsfreie Tage</strong>.</p>
@@ -306,7 +306,7 @@
       <ul>
         <li><strong>Automatische Sicherung:</strong> Status und Zeitpunkt sehen Sie in der Fußzeile.</li>
         <li><strong>Manuelle Sicherung:</strong> über „Datensicherung" einen Wiederherstellungspunkt anlegen.</li>
-        <li><strong>Wiederherstellen / Upload:</strong> Vor jedem Zurückspielen wird automatisch der aktuelle Stand gesichert – jede Wiederherstellung ist damit umkehrbar.</li>
+        <li><strong>Wiederherstellen / Upload:</strong> Vor jedem Zurückspielen wird automatisch der aktuelle Stand gesichert – jede Wiederherstellung ist damit umkehrbar. Ein von Hand gezippter Sicherungsordner (Dateien in genau einem Unterordner des ZIP) wird ebenfalls erkannt.</li>
       </ul>
       <div class="warn">Ein Backup-ZIP enthält Daten (JSON) und Datenbank, aber <strong>nicht</strong> das Archiv-Verzeichnis. Für vollständige Umzüge zusätzlich das Archiv sichern (Abschnitt 11).</div>
     </section>
