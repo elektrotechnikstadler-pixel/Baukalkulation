@@ -37,6 +37,21 @@
 
 ---
 
+## v3.0.11 – Sollzeit je Wochentag in der Wochenplanung, Backup aus Unterordner
+
+### Behoben
+- Wochenplanung → Jahr: „Sollzeit je Wochentag“ wurde nicht berücksichtigt, weil die
+  Benutzerlisten (`list_users`, `list_users_basic`) die Wochentags-Sollstunden nicht mitlieferten.
+  Soll, Differenz und Arbeitstage folgen jetzt dem Mitarbeiterprofil (rückwirkend, wie überall).
+- Backup-Upload: ZIP-Archive, in denen die Sicherungsdateien in genau einem Unterordner liegen
+  (von Hand gezippter Sicherungsordner), werden jetzt eingespielt.
+
+### Dokumentation
+- Installation: Notzugang über `Systemadmin` beschrieben (nicht löschbar, wird bei Fehlen neu
+  angelegt, per `bin/console user:reset-password` entsperren).
+
+---
+
 ## v3.0.10 – Bedienungsanleitung Zeiterfassung
 
 ### Dokumentation
