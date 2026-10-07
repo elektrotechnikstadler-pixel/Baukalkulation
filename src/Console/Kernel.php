@@ -9,6 +9,7 @@ use App\Console\Command\DbMigrateCommand;
 use App\Console\Command\DbStatusCommand;
 use App\Console\Command\DbTransferCommand;
 use App\Console\Command\UserResetPasswordCommand;
+use App\Console\Command\ZeitErinnerungCommand;
 use Symfony\Component\Console\Application;
 
 final class Kernel extends Application
@@ -25,6 +26,7 @@ final class Kernel extends Application
             new UserResetPasswordCommand(),
             new AppInfoCommand(),
             new AppCheckUpdateCommand(),
+            new ZeitErinnerungCommand(),
         ]);
     }
 

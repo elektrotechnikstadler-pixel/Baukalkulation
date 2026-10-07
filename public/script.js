@@ -10453,7 +10453,7 @@ async function loadUserList() {
             <option value="master" ${u.role === 'master' ? 'selected' : ''}>Master</option>
             <option value="normal" ${u.role === 'normal' ? 'selected' : ''}>Normal</option>
           </select>
-          <span style="font-size:0.75rem;min-width:70px">${roleLabels[u.role] || u.role}</span>
+          <span style="font-size:0.75rem;min-width:70px">${esc(roleLabels[u.role] || u.role)}</span>
           <label style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:#555;cursor:pointer" title="In der Zeitverwaltung anzeigen">
             <input type="checkbox" ${u.showInZeitverwaltung !== false ? 'checked' : ''} onchange="toggleUserVisibility('${u.username}','zeitverwaltung',this.checked)">
             Zeit
@@ -10657,7 +10657,7 @@ async function openUserProfileModal(username) {
   } catch(e) {}
 
   const currentYear = new Date().getFullYear();
-  const urlaubJ = (profile.urlaubstageProJahr && profile.urlaubstageProJahr[currentYear]) || 30;
+  const urlaubJ = bkUrlaubsanspruch(profile, currentYear);
   const stdKatOpts = (appData.stundenKatalog||[]).map(k =>
     `<option value="${esc(k.kategorie)}" ${profile.stundenKategorie === k.kategorie ? 'selected' : ''}>${esc(k.kategorie)}</option>`
   ).join('');
@@ -10772,7 +10772,7 @@ async function saveUserProfile(username) {
     sollTageWoche: arbeitsTage.split(',').length,
     sollzeitJeWochentag: useWeekdaySoll,
     ...weekdaySoll,
-    urlaubstageProJahr: { [currentYear]: parseInt(document.getElementById('upUrlaub').value) || 30 },
+    urlaubstageProJahr: { [currentYear]: parseUrlaubstageInput(document.getElementById('upUrlaub').value) },
     stundenKategorie: document.getElementById('upStdKat').value,
     mobileLightOnly: document.getElementById('upMobileLightOnly').checked,
   };
@@ -11814,7 +11814,7 @@ async function executeJahreswechsel() {
     if (!chk.checked) continue;
     const username = chk.dataset.jwUrlaubCheck;
     const inp      = document.querySelector(`[data-jw-urlaub-user="${username}"]`);
-    const val      = parseInt(inp?.value) || 30;
+    const val      = parseUrlaubstageInput(inp?.value);
     try {
       const r = await fetch('api.php?action=set_urlaubstage', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -14547,7 +14547,7 @@ async function loadVisibilityEditor() {
       const uid = 'vis_' + u.username.replace(/[^a-zA-Z0-9]/g, '_');
       html += `<div class="vis-user-block">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <strong style="font-size:0.85rem">${esc(u.username)} (${u.role})</strong>
+          <strong style="font-size:0.85rem">${esc(u.username)} (${esc(u.role)})</strong>
         </div>
         ${bsMdHtml(uid, { selected: isAll ? 'all' : (vis || []), onchange: (val) => saveVisibility(u.username, val), allLabel: 'Alle Baustellen' })}
       </div>`;
@@ -14854,81 +14854,13 @@ async function deleteBaustelleFile(fileName, category) {
 // BAYERISCHE FEIERTAGE + WERKTAGE-BERECHNUNG
 // ============================================================
 function getBavarianHolidays(year) {
-  // Feste Feiertage Bayern
-  const fixed = [
-    [0,1],[0,6],[4,1],[9,3],[10,1],[11,25],[11,26], // Jan1,Jan6,Mai1,Oct3,Nov1,Dec25,Dec26
-    [7,15] // Mari— Himmelfahrt (15. August - in Bayern überwiegend)
-  ];
-  const holidays = fixed.map(([m,d]) => new Date(year, m, d));
-
-  // Bewegliche Feiertage (Ostern-basiert)
-  // Gauss'sche Osterformel
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  const easter = new Date(year, month, day);
-
-  function addDays(dt, n) { const r = new Date(dt); r.setDate(r.getDate() + n); return r; }
-  holidays.push(addDays(easter, -2));  // Karfreitag
-  holidays.push(addDays(easter, 1));   // Ostermontag
-  holidays.push(addDays(easter, 39));  // Christi Himmelfahrt
-  holidays.push(addDays(easter, 50));  // Pfingstmontag
-  holidays.push(addDays(easter, 60));  // Fronleichnam
-
-  // Betriebliche/zusätzliche Feiertage aus Einstellungen
-  try {
-    const extra = (typeof appSettings !== 'undefined' && appSettings.custom_feiertage)
-      ? JSON.parse(appSettings.custom_feiertage) : [];
-    extra.forEach(f => {
-      const dt = new Date(f.datum + 'T00:00:00');
-      if (!isNaN(dt) && dt.getFullYear() === year) holidays.push(dt);
-    });
-  } catch(e) {}
-
-  return holidays;
+  return Array.from(bkFeiertage(year, appSettings?.custom_feiertage).keys())
+    .map(key => new Date(key + 'T00:00:00'));
 }
 
 // Returns a Map<dateKey, holidayName> for all Bavarian + custom holidays of the given year
 function buildHolidayNameMap(year) {
-  const easter = _computeEaster(year);
-  function aD(n) { const r = new Date(easter); r.setDate(r.getDate() + n); return r; }
-  const named = [
-    [new Date(year, 0, 1),   'Neujahr'],
-    [new Date(year, 0, 6),   'Heilige Drei Könige'],
-    [aD(-2),                  'Karfreitag'],
-    [aD(1),                   'Ostermontag'],
-    [new Date(year, 4, 1),   'Tag der Arbeit'],
-    [aD(39),                  'Christi Himmelfahrt'],
-    [aD(50),                  'Pfingstmontag'],
-    [aD(60),                  'Fronleichnam'],
-    [new Date(year, 7, 15),  'Mariä Himmelfahrt'],
-    [new Date(year, 9, 3),   'Tag der Deutschen Einheit'],
-    [new Date(year, 10, 1),  'Allerheiligen'],
-    [new Date(year, 11, 25), '1. Weihnachtstag'],
-    [new Date(year, 11, 26), '2. Weihnachtstag'],
-  ];
-  const map = new Map();
-  named.forEach(([dt, name]) => map.set(dateToKey(dt), name));
-  try {
-    const extra = (typeof appSettings !== 'undefined' && appSettings.custom_feiertage)
-      ? JSON.parse(appSettings.custom_feiertage) : [];
-    extra.forEach(f => {
-      const dt = new Date(f.datum + 'T00:00:00');
-      if (!isNaN(dt) && dt.getFullYear() === year) map.set(dateToKey(dt), f.name || 'Feiertag');
-    });
-  } catch(e) {}
-  return map;
+  return new Map(bkFeiertage(year, appSettings?.custom_feiertage));
 }
 
 function dateToKey(d) {
@@ -14985,28 +14917,14 @@ function getUserArbeitstage(user) {
  * Gibt virtuelle Feiertag-Einträge zurück für Feiertage, die
  * auf Arbeitstage fallen und keinen realen Eintrag haben.
  * @param {Array}  realEntries - echte Zeiterfassungseinträge
- * @param {number} sollTag     - Soll-Stunden/Tag
- * @param {Set}    arbeitstage - DoW-Nummern (1=Mo…6=Sa)
+ * @param {object} user        - User-Objekt mit Sollzeit-Konfiguration
  * @param {number} year        - Jahr
  * @param {number|null} month  - Monat (0-basiert) oder null für ganzes Jahr
  * @returns {Array} virtuelle Einträge mit { datum, typ:'feiertag', stunden, bemerkung, _virtual:true }
  */
 function getVirtuelleFeiertagEintraege(realEntries, user, year, month) {
-  const entryDates = new Set((realEntries || []).map(e => e.datum).filter(Boolean));
-  const result = [];
-  const holidays = getBavarianHolidays(year);
-  const holidayNameMap = buildHolidayNameMap(year);
-  holidays.forEach(h => {
-    if (h.getFullYear() !== year) return;
-    if (month !== null && month !== undefined && h.getMonth() !== month) return;
-    const soll = bkTagesSoll(user, h);
-    if (soll <= 0) return;
-    const key = dateToKey(h);
-    if (entryDates.has(key)) return;
-    const name = holidayNameMap.get(key) || 'Feiertag';
-    result.push({ datum: key, typ: 'feiertag', stunden: soll, bemerkung: name, _virtual: true });
-  });
-  return result;
+  const monat = month === null || month === undefined ? null : `${year}-${String(month + 1).padStart(2, '0')}`;
+  return bkVirtuelleFeiertage(realEntries, user, year, monat, appSettings?.custom_feiertage);
 }
 
 /**
@@ -15754,36 +15672,59 @@ function getMonthName(m) {
   return ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][m] || '';
 }
 
-// Gleitzeitkonto-Berechnung: Startmonat aus Einstellung bestimmen
-function getGleitzeitStartMonth(year) {
-  const sd = appSettings.gleitzeit_startdatum || '';
-  if (!sd) return 0; // Kein Startdatum ? ab Januar
-  const startYear = parseInt(sd.substring(0, 4));
-  const startMonth = parseInt(sd.substring(5, 7)) - 1; // 0-basiert
-  if (startYear > year) return 12; // Startjahr liegt nach dem Berechnungsjahr ? nichts z—hlen
-  if (startYear < year) return 0; // Startjahr vor dem Berechnungsjahr ? ab Januar
-  return startMonth; // Gleiches Jahr ? ab Startmonat
+function calcGleitzeitSaldo(entries, user, year, buchungen) {
+  return bkGleitzeitSaldo(entries, user, year, buchungen, {
+    startdatum: appSettings.gleitzeit_startdatum,
+    customTypen: appSettings.ze_custom_typen || [],
+    customFeiertage: appSettings.custom_feiertage,
+    heute: dateToKey(new Date()),
+  });
 }
 
-function calcGleitzeitSaldo(entries, user, year, buchungen) {
-  const now = new Date();
-  const startMo = getGleitzeitStartMonth(year);
-  let saldo = 0;
-  for (let mo = startMo; mo <= (year < now.getFullYear() ? 11 : now.getMonth()); mo++) {
-    const mk = year + '-' + String(mo + 1).padStart(2, '0');
-    const moEntries = entries.filter(e => e.datum && e.datum.startsWith(mk));
-    const moIst = sumIstStunden(moEntries, user);
-    const moFeiertag = getVirtuelleFeiertagEintraege(entries, user, year, mo).reduce((s, e) => s + bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []), 0);
-    saldo += (moIst + moFeiertag) - calcSollMonat(user, year, mo);
+function parseUrlaubstageInput(value) {
+  const text = String(value ?? '').trim();
+  if (text === '') return 30;
+  const number = parseInt(text, 10);
+  return Number.isFinite(number) ? number : 30;
+}
+
+function calcJahresStichtag(year) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  if (year < currentYear) return `${year}-12-31`;
+  if (year > currentYear) return null;
+  return dateToKey(today);
+}
+
+function isCurrentAwYear(year) {
+  return year === new Date().getFullYear();
+}
+
+function calcSollIstZeitraum(user, entries, year, startKey, endKey) {
+  if (!endKey || endKey < startKey) return { soll: 0, ist: 0 };
+  let soll = 0;
+  const start = new Date(startKey + 'T00:00:00');
+  for (let dt = start; dateToKey(dt) <= endKey; dt.setDate(dt.getDate() + 1)) {
+    soll += bkTagesSoll(user, dt);
   }
-  const sd = appSettings.gleitzeit_startdatum || '';
-  (buchungen || []).forEach(b => {
-    if (!b.datum || !b.datum.startsWith(String(year))) return;
-    // Nur Buchungen ab Startdatum berücksichtigen
-    if (sd && b.datum < sd) return;
-    saldo += (parseFloat(b.betrag) || 0);
-  });
-  return saldo;
+  const realEntries = (entries || []).filter(e => e.datum && e.datum >= startKey && e.datum <= endKey);
+  const virtuelle = getVirtuelleFeiertagEintraege(entries, user, year)
+    .filter(e => e.datum >= startKey && e.datum <= endKey);
+  return { soll, ist: sumIstStunden(realEntries, user) + sumIstStunden(virtuelle, user) };
+}
+
+function calcJahresSollIst(user, entries, year) {
+  const stichtag = calcJahresStichtag(year);
+  if (!stichtag) return { soll: 0, ist: 0, stichtag: null };
+  const result = calcSollIstZeitraum(user, entries, year, `${year}-01-01`, stichtag);
+  return { ...result, stichtag };
+}
+
+function calcMonatsSollIstBisStichtag(user, entries, year, month, stichtag) {
+  if (!stichtag) return { soll: 0, ist: 0 };
+  const startKey = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const endKey = dateToKey(new Date(year, month + 1, 0));
+  return calcSollIstZeitraum(user, entries, year, startKey, stichtag && stichtag < endKey ? stichtag : endKey);
 }
 
 async function saveGleitzeitStartdatum(val) {
@@ -15822,7 +15763,7 @@ function renderSeDesktop() {
   const gzColor = gleitzeitSaldo >= 0 ? '#28A745' : '#FF3B30';
 
   // Urlaubskonto
-  const urlaubJahr = (seDesktopUrlaubProJahr && seDesktopUrlaubProJahr[year]) || 30;
+  const urlaubJahr = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, year);
   const urlaubGenommen = zeitEntriesDesktop.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
 
   document.getElementById('seMonthKpi').innerHTML = `
@@ -16048,7 +15989,7 @@ function addStundenerfassungDesktop() {
     const byYear = {};
     dates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; });
     for (const y in byYear) {
-      const limit = (seDesktopUrlaubProJahr && seDesktopUrlaubProJahr[y]) || 30;
+      const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, y);
       const existing = zeitEntriesDesktop.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && !dates.includes(e.datum)).length;
       if (existing + byYear[y] > limit) {
         showNotification(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error');
@@ -16244,8 +16185,7 @@ function delSeDesktop(id) {
 function exportSeDesktopPDF() {
   const year = new Date().getFullYear();
   const months = Array.from({length:12}, (_,i) => i);
-  const sollTag = seDesktopSollTag ?? 8;
-  const tageWoche = seDesktopSollTageWoche || 5;
+  const sollBeschreibung = bkSollBeschreibung(seDesktopUser);
 
   let html = `<html style="color-scheme:light"><head><meta charset="UTF-8"><title>Arbeitszeiten ${currentUser} - ${year}</title>
   <style>
@@ -16263,7 +16203,7 @@ function exportSeDesktopPDF() {
     @media print { body { margin: 10mm; } }
   </style></head><body>
   <h1>Arbeitszeiten ${esc(currentUser)} - ${year}</h1>
-  <h2>Erstellt am ${new Date().toLocaleDateString('de-DE')} - Soll/Tag: ${sollTag} h</h2>`;
+  <h2>Erstellt am ${new Date().toLocaleDateString('de-DE')} - Soll: ${esc(sollBeschreibung)}</h2>`;
 
   // Monatsübersicht
   html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub</th><th>Gleitzeit</th><th>Krank</th><th>Sonstig</th></tr></thead><tbody>`;
@@ -16517,8 +16457,6 @@ function renderWochenpruefung() {
   let html = '';
   visibleUsers.forEach(user => {
     const allEntries = saAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag ?? 8;
-    const arbeitstage = getUserArbeitstage(user);
     const byKw = {};
     allEntries.forEach(e => {
       if (!e.datum) return;
@@ -16970,10 +16908,6 @@ function renderStundenauswertung() {
     if (filterFrom) entries = entries.filter(e => e.datum >= filterFrom);
     if (filterTo) entries = entries.filter(e => e.datum <= filterTo);
 
-    const sollTag = user.sollstundenTag ?? 8;
-    const tageWoche = user.sollTageWoche || 5;
-    const arbeitstage = getUserArbeitstage(user);
-
     // Auffällige Buchungen / Vollständigkeit (B.1/B.2) – Basis: datumsgefilterte
     // Einträge (vor der Textsuche), damit fehlende Tage nicht durch Suche verdeckt werden.
     const anomalien = _computeZeitAnomalien(entries, user, filterFrom, filterTo);
@@ -17003,12 +16937,12 @@ function renderStundenauswertung() {
 
     const uid = 'sa_' + user.username.replace(/\W/g, '_');
     const istTotal = sumIstStunden(entries, user);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
     const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
 
     html += `<div class="summary-box" style="margin-bottom:8px;cursor:pointer" onclick="document.getElementById('${uid}').classList.toggle('hidden')">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div><strong style="font-size:1rem">${esc(user.username)}</strong> <small style="color:var(--grey-400)">${user.role}</small>${anomalien.length ? ` <span title="Auffälligkeiten" style="background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A;border-radius:10px;padding:1px 8px;font-size:.72rem;font-weight:700">⚠️ ${anomalien.length}</span>` : ''}${fehlbuchungen.length ? ` <span title="Fehlbuchungen – fehlende Projektbuchung" style="background:#C62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:.72rem;font-weight:700">⛔ ${fehlbuchungen.length}</span>` : ''}</div>
+        <div><strong style="font-size:1rem">${esc(user.username)}</strong> <small style="color:var(--grey-400)">${esc(user.role)}</small>${anomalien.length ? ` <span title="Auffälligkeiten" style="background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A;border-radius:10px;padding:1px 8px;font-size:.72rem;font-weight:700">⚠️ ${anomalien.length}</span>` : ''}${fehlbuchungen.length ? ` <span title="Fehlbuchungen – fehlende Projektbuchung" style="background:#C62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:.72rem;font-weight:700">⛔ ${fehlbuchungen.length}</span>` : ''}</div>
         <div style="display:flex;gap:14px;font-size:0.85rem;align-items:center">
           <span>${entries.length} Einträge</span>
           <span><strong>${istTotal.toFixed(2)}</strong> h</span>
@@ -17359,13 +17293,15 @@ async function _saefSave(username, mode, entryId) {
 function exportStundenauswertungPDF() {
   const filterFrom = document.getElementById('saFilterFrom').value;
   const filterTo = document.getElementById('saFilterTo').value;
-  const year = new Date().getFullYear();
+  const referenceYear = filterTo ? parseInt(filterTo.substring(0, 4), 10) : (filterFrom ? parseInt(filterFrom.substring(0, 4), 10) : new Date().getFullYear());
+  const rangeStartYear = filterFrom ? parseInt(filterFrom.substring(0, 4), 10) : referenceYear;
+  const rangeEndYear = filterTo ? parseInt(filterTo.substring(0, 4), 10) : referenceYear;
   const selectedUser = document.getElementById('saUserSelect')?.value || '';
 
   let visibleUsers = saAllUsers.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false);
   if (selectedUser) visibleUsers = visibleUsers.filter(u => u.username === selectedUser);
 
-  let html = `<html style="color-scheme:light"><head><meta charset="UTF-8"><title>Stundenauswertung ${filterFrom||year}</title>
+  let html = `<html style="color-scheme:light"><head><meta charset="UTF-8"><title>Stundenauswertung ${filterFrom||referenceYear}</title>
   <style>
     body { font-family: -apple-system, Arial, sans-serif; font-size: 11px; color: #1D1D1F; margin: 20px; }
     h1 { font-size: 18px; margin-bottom: 4px; color: #00B4D8; }
@@ -17381,7 +17317,7 @@ function exportStundenauswertungPDF() {
     @media print { body { margin: 10mm; } .pagebreak { page-break-before: always; } }
   </style></head><body>
   <h1>Stundenauswertung</h1>
-  <h2>Zeitraum: ${filterFrom || '01.01.'+year} - ${filterTo || new Date().toLocaleDateString('de-DE')} - Erstellt am ${new Date().toLocaleDateString('de-DE')}</h2>`;
+  <h2>Zeitraum: ${filterFrom || '01.01.'+referenceYear} - ${filterTo || new Date().toLocaleDateString('de-DE')} - Erstellt am ${new Date().toLocaleDateString('de-DE')}</h2>`;
 
   const wdNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
   visibleUsers.forEach((user, idx) => {
@@ -17392,20 +17328,22 @@ function exportStundenauswertungPDF() {
     if (filterTo) entries = entries.filter(e => e.datum <= filterTo);
     entries.sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
 
-    const sollTag = user.sollstundenTag ?? 8;
-    const arbeitstage = getUserArbeitstage(user);
-    const allVtFeiertage = getVirtuelleFeiertagEintraege(allEntries, user, year);
+    const allVtFeiertage = [];
+    for (let y = rangeStartYear; y <= rangeEndYear; y++) {
+      allVtFeiertage.push(...getVirtuelleFeiertagEintraege(allEntries, user, y));
+    }
     const vtInRange = allVtFeiertage.filter(e => (!filterFrom || e.datum >= filterFrom) && (!filterTo || e.datum <= filterTo));
     const allEntriesWithFt = [...entries, ...vtInRange].sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
     const istTotal = sumIstStunden(allEntriesWithFt, user);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
-    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+    const urlaubJahr = bkUrlaubsanspruch(user, referenceYear);
+    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(referenceYear))).length;
 
     const buchungen = saGleitzeitAll[user.username] || [];
     const gleitzeitAktivPrint = appSettings.gleitzeit_enabled !== false;
-    const gleitzeitSaldo = gleitzeitAktivPrint ? calcGleitzeitSaldo(allEntries, user, year, buchungen) : null;
+    const gleitzeitSaldo = gleitzeitAktivPrint ? calcGleitzeitSaldo(allEntries, user, referenceYear, buchungen) : null;
+    const sollBeschreibung = bkSollBeschreibung(user);
 
-    html += `<p class="section-title">${esc(user.username)} (${user.role}) - Soll/Tag: ${sollTag}h - ${gleitzeitAktivPrint ? `Gleitzeit: ${gleitzeitSaldo>=0?'+':''}${gleitzeitSaldo.toFixed(2)}h - ` : ''}Urlaub: ${urlaubGenommen}/${urlaubJahr}</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - ${gleitzeitAktivPrint ? `Gleitzeit: ${gleitzeitSaldo>=0?'+':''}${gleitzeitSaldo.toFixed(2)}h - ` : ''}Urlaub: ${urlaubGenommen}/${urlaubJahr}</p>`;
     html += `<table><thead><tr><th>Datum</th><th>Tag</th><th>Typ</th>${appSettings.erweiterte_zeiterfassung ? '<th>Von</th><th>Bis</th><th>Pause</th>' : ''}<th>Baustelle</th><th>Bemerkung</th><th>Stunden</th></tr></thead><tbody>`;
     allEntriesWithFt.forEach(e => {
       const d = e.datum ? new Date(e.datum) : null;
@@ -17660,8 +17598,6 @@ function zuRenderWochenpruefung() {
   let html = '';
   visibleUsers.forEach(user => {
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag ?? 8;
-    const arbeitstage = getUserArbeitstage(user);
     const byKw = {};
     allEntries.forEach(e => {
       if (!e.datum) return;
@@ -17762,7 +17698,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
       <tr>
         <th>Mitarbeiter</th>
         <th>Rolle</th>
-        <th class="text-right" style="width:80px">Soll/Tag</th>
+        <th class="text-right" style="width:160px">Soll</th>
         <th class="text-right" style="width:100px">Ist (h)</th>
         <th class="text-right" style="width:100px">Soll (h)</th>
         <th class="text-right" style="width:100px">+/- (h)</th>
@@ -17775,8 +17711,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
   visibleUsers.forEach(user => {
     const entries = (zuAllZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(monthKey));
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag ?? 8;
-    const arbeitstage = getUserArbeitstage(user);
+    const sollBeschreibung = bkSollBeschreibung(user);
     const feiertagH = sumIstStunden(getVirtuelleFeiertagEintraege(allEntries, user, y, m), user);
     const istStunden = sumIstStunden(entries, user) + feiertagH;
     const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
@@ -17787,7 +17722,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
     const diffCls = diff >= 0 ? 'color:#28A745;font-weight:700' : 'color:#FF3B30;font-weight:700';
     const diffSign = diff >= 0 ? '+' : '';
     const roleLabel = user.role === 'admin' ? 'Admin' : (user.role === 'master' ? 'Master' : 'Normal');
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[currentYear]) || 30;
+    const urlaubJahr = bkUrlaubsanspruch(user, currentYear);
 
     // Urlaubsverbrauch im laufenden Jahr berechnen
     const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(currentYear))).length;
@@ -17795,7 +17730,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
     html += `<tr>
       <td><strong>${esc(user.username)}</strong></td>
       <td>${roleLabel}</td>
-      <td class="text-right">${sollTag} h</td>
+      <td class="text-right">${esc(sollBeschreibung)}</td>
       <td class="text-right">${istStunden.toFixed(2)}</td>
       <td class="text-right">${sollStunden.toFixed(2)}</td>
       <td class="text-right" style="${diffCls}">${diffSign}${diff.toFixed(2)}</td>
@@ -17818,8 +17753,6 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
     const allEntries = zuAllZeit[user.username]?.entries || [];
     const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
     const krankTage = entries.filter(e => e.typ === 'krank').length;
-    const sollTag = user.sollstundenTag ?? 8;
-    const arbeitstage = getUserArbeitstage(user);
     const feiertagEntries = getVirtuelleFeiertagEintraege(allEntries, user, y, m);
     const feiertagH = feiertagEntries.reduce((s,e) => s+(e.stunden||0), 0);
     const istStunden = sumIstStunden(entries, user) + feiertagH;
@@ -17843,7 +17776,7 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
 
     html += `<div class="summary-box" style="margin-bottom:12px;cursor:pointer" onclick="document.getElementById('${uid}').classList.toggle('hidden')">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div><strong style="font-size:1rem">${esc(user.username)}</strong> <small style="color:var(--grey-400)">${user.role}</small></div>
+        <div><strong style="font-size:1rem">${esc(user.username)}</strong> <small style="color:var(--grey-400)">${esc(user.role)}</small></div>
         <div style="display:flex;gap:16px;font-size:0.88rem">
           <span><strong>${istStunden.toFixed(2)}</strong> h Ist</span>
           <span><strong>${sollStunden.toFixed(2)}</strong> h Soll</span>
@@ -18012,12 +17945,12 @@ async function setUrlaubstageDesktop(username, year, value) {
     await fetch('api.php?action=set_urlaubstage', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, year, urlaubstage: parseInt(value) || 30 })
+      body: JSON.stringify({ username, year, urlaubstage: parseUrlaubstageInput(value) })
     });
     const u = zuAllUsers.find(u => u.username === username);
     if (u) {
       if (!u.urlaubstageProJahr) u.urlaubstageProJahr = {};
-      u.urlaubstageProJahr[year] = parseInt(value) || 30;
+      u.urlaubstageProJahr[year] = parseUrlaubstageInput(value);
     }
     renderZeituebersicht();
     showNotification('Urlaubstage gespeichert.');
@@ -18970,8 +18903,7 @@ function renderWochenplanungJahr() {
 
   // Feiertage für das Jahr
   const holidays = getBavarianHolidays(year);
-  const betrieb = (appSettings.betriebliche_feiertage || []).filter(f => f && f.startsWith && f.startsWith(String(year)));
-  const holidaySet = new Set([...holidays.map(h => dateToKey(h)), ...betrieb]);
+  const holidaySet = new Set(holidays.map(h => dateToKey(h)));
 
   // Zeiterfassungs-Daten + Wochenplanungs-Daten
   const showWp = document.getElementById('wpYearShowWp')?.checked ?? true;
@@ -19035,8 +18967,8 @@ function renderWochenplanungJahr() {
   //    IST-Stunden/Differenz je Tag und Urlaubszählung je Monat.
   if (visUsers.length === 1) {
     const u = visUsers[0];
-    const sollTag = u.sollstundenTag ?? 8;
     const atSet = getUserArbeitstage(u);
+    const sollBeschreibung = bkSollBeschreibung(u);
     const allUserEntries = wpAllZeit[u.username]?.entries || [];
     const uEntries = allUserEntries.filter(e => e.datum && e.datum.startsWith(String(year)));
     uEntries.push(...getVirtuelleFeiertagEintraege(allUserEntries, u, year));
@@ -19055,7 +18987,7 @@ function renderWochenplanungJahr() {
     const todayKey2 = dateToKey(new Date());
 
     let totalPlan = 0, totalTaken = 0, totalSoll = 0, totalIst = 0;
-    let body = `<div style="font-size:.8rem;color:#666;margin-bottom:8px">Einzelansicht <strong>${esc(u.username)}</strong> · Soll/Tag ${sollTag} h · je Tag IST-Stunden mit Differenz (+/-) zu Soll.</div>`;
+    let body = `<div style="font-size:.8rem;color:#666;margin-bottom:8px">Einzelansicht <strong>${esc(u.username)}</strong> · Soll ${esc(sollBeschreibung)} · je Tag IST-Stunden mit Differenz (+/-) zu Soll.</div>`;
     body += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">';
     for (let mo = 0; mo < 12; mo++) {
       const dim = new Date(year, mo + 1, 0).getDate();
@@ -19105,7 +19037,7 @@ function renderWochenplanungJahr() {
       </div>`;
     }
     body += '</div>';
-    const urlaubAnspruch = (u.urlaubstageProJahr && u.urlaubstageProJahr[String(year)]) || 30;
+    const urlaubAnspruch = bkUrlaubsanspruch(u, year);
     const urlaubRest = urlaubAnspruch - totalTaken;
     const jahrDiff = totalIst - totalSoll;
     body += `<div style="margin-top:12px;padding:10px 14px;background:var(--bg-light,#f5f7fa);border-radius:8px;font-size:.9rem;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
@@ -19841,14 +19773,12 @@ function exportZeituebersichtPDF() {
 
   zuAllUsers.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false).forEach(user => {
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const sollTag = user.sollstundenTag ?? 8;
-    const tageWoche = user.sollTageWoche || 5;
-    const arbeitstage = getUserArbeitstage(user);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
+    const sollBeschreibung = bkSollBeschreibung(user);
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
     const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
     const krankGesamt = allEntries.filter(e => e.typ === 'krank' && e.datum && e.datum.startsWith(String(year))).length;
 
-    html += `<p class="section-title">${esc(user.username)} (${user.role}) - Soll/Tag: ${sollTag} h${tageWoche < 5 ? ' - ' + tageWoche + ' Tage/Wo' : ''} - Urlaub: ${urlaubGenommen}/${urlaubJahr} Tage - Krank: ${krankGesamt} Tage</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - Urlaub: ${urlaubGenommen}/${urlaubJahr} Tage - Krank: ${krankGesamt} Tage</p>`;
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub</th><th>Krank</th></tr></thead><tbody>`;
 
     let totalIst = 0, totalSoll = 0;
@@ -23799,6 +23729,7 @@ function onAwYearChange(yearStr) {
 }
 
 function renderMitarbeiterContent(users, year) {
+  const bisHeuteLabel = isCurrentAwYear(year) ? ' (bis heute)' : '';
   let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">';
   html += '<div class="aw-card"><h3 class="aw-card-title">Arbeitsstunden (Soll vs. Ist)</h3><div style="height:220px"><canvas id="awChartStunden"></canvas></div></div>';
   html += '<div class="aw-card"><h3 class="aw-card-title">Überstunden / Minusstunden</h3><div style="height:220px"><canvas id="awChartUeberstunden"></canvas></div></div>';
@@ -23809,20 +23740,16 @@ function renderMitarbeiterContent(users, year) {
   html += '</div>';
 
   // Tabelle je Mitarbeiter
-  html += '<div class="aw-card"><h3 class="aw-card-title">Mitarbeiter-Übersicht ' + year + '</h3><div class="aw-table-scroll"><table class="aw-table"><thead><tr>';
-  html += '<th style="text-align:left">Mitarbeiter</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub (genommen)</th><th>Urlaub (Rest)</th><th>Krank (Tage)</th>' + (appSettings.gleitzeit_enabled !== false ? '<th>Gleitzeitkonto</th>' : '');
+  html += '<div class="aw-card"><h3 class="aw-card-title">Mitarbeiter-Übersicht ' + year + bisHeuteLabel + '</h3><div class="aw-table-scroll"><table class="aw-table"><thead><tr>';
+  html += '<th style="text-align:left">Mitarbeiter</th><th>Soll (h)' + bisHeuteLabel + '</th><th>Ist (h)' + bisHeuteLabel + '</th><th>+/- (h)' + bisHeuteLabel + '</th><th>Urlaub (genommen)</th><th>Urlaub (Rest)</th><th>Krank (Tage)</th>' + (appSettings.gleitzeit_enabled !== false ? '<th>Gleitzeitkonto</th>' : '');
   html += '</tr></thead><tbody>';
 
   users.forEach(user => {
     const entries = (awData.zeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = user.sollstundenTag ?? 8;
-    const tageWoche = user.sollTageWoche || 5;
-    const arbeitstage = getUserArbeitstage(user);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
-    let totalSoll = 0, totalIst = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(user, year, m);
-    totalIst = sumIstStunden(entries, user)
-      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[user.username]?.entries || [], user, year), user);
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
+    const jahreswerte = calcJahresSollIst(user, awData.zeit[user.username]?.entries || [], year);
+    const totalSoll = jahreswerte.soll;
+    const totalIst = jahreswerte.ist;
     const urlaubGenommen = entries.filter(e => e.typ === 'urlaub').length;
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
@@ -23874,17 +23801,14 @@ function exportAuswertungKaufmaennischCSV() {
 function exportAuswertungMitarbeiterCSV() {
   const year = parseInt(document.getElementById('awMaYear')?.value) || new Date().getFullYear();
   const users = awData.users.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false);
-  const header = ['Mitarbeiter', 'Soll (h)', 'Ist (h)', '+/- (h)', 'Urlaub genommen', 'Urlaub Rest', 'Krank (Tage)', 'Gleitzeitkonto (h)'];
+  const bisHeuteLabel = isCurrentAwYear(year) ? ' (bis heute)' : '';
+  const header = ['Mitarbeiter', 'Soll (h)' + bisHeuteLabel, 'Ist (h)' + bisHeuteLabel, '+/- (h)' + bisHeuteLabel, 'Urlaub genommen', 'Urlaub Rest', 'Krank (Tage)', 'Gleitzeitkonto (h)'];
   const rows = users.map(u => {
     const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = u.sollstundenTag ?? 8;
-    const tageWoche = u.sollTageWoche || 5;
-    const arbeitstage = getUserArbeitstage(u);
-    const urlaubJahr = (u.urlaubstageProJahr && u.urlaubstageProJahr[year]) || 30;
-    let totalSoll = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(u, year, m);
-    const totalIst = sumIstStunden(entries, u)
-      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
+    const urlaubJahr = bkUrlaubsanspruch(u, year);
+    const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
+    const totalSoll = jahreswerte.soll;
+    const totalIst = jahreswerte.ist;
     const urlaubG = entries.filter(e => e.typ === 'urlaub').length;
     const krank = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
@@ -23962,18 +23886,15 @@ function printAuswertungMitarbeiter() {
   const year = parseInt(document.getElementById('awMaYear')?.value) || new Date().getFullYear();
   const users = awData.users.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false);
   const now = new Date().toLocaleDateString('de-DE');
+  const bisHeuteLabel = isCurrentAwYear(year) ? ' (bis heute)' : '';
   let rows = '';
   let sumSoll = 0, sumIst = 0, sumUrl = 0, sumUrlR = 0, sumKr = 0;
   users.forEach(u => {
     const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-    const sollTag = u.sollstundenTag ?? 8;
-    const tageWoche = u.sollTageWoche || 5;
-    const arbeitstage = getUserArbeitstage(u);
-    const urlaubJahr = (u.urlaubstageProJahr && u.urlaubstageProJahr[year]) || 30;
-    let totalSoll = 0;
-    for (let m = 0; m < 12; m++) totalSoll += calcSollMonat(u, year, m);
-    const totalIst = sumIstStunden(entries, u)
-      + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
+    const urlaubJahr = bkUrlaubsanspruch(u, year);
+    const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
+    const totalSoll = jahreswerte.soll;
+    const totalIst = jahreswerte.ist;
     const urlG = entries.filter(e => e.typ === 'urlaub').length;
     const urlR = urlaubJahr - urlG;
     const kr = entries.filter(e => e.typ === 'krank').length;
@@ -23999,8 +23920,8 @@ function printAuswertungMitarbeiter() {
   .pos{color:#198754} .neg{color:#dc3545}
   @media print{body{margin:10mm}}
 </style></head><body>
-<h1>Mitarbeiter-Auswertung ${year}</h1><div class="sub">Stand: ${now} - ${users.length} Mitarbeiter</div>
-<table><thead><tr><th style="text-align:left">Mitarbeiter</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub</th><th>Urlaub Rest</th><th>Krank</th><th>Gleitzeitkonto</th></tr></thead><tbody>
+<h1>Mitarbeiter-Auswertung ${year}${bisHeuteLabel}</h1><div class="sub">Stand: ${now} - ${users.length} Mitarbeiter</div>
+<table><thead><tr><th style="text-align:left">Mitarbeiter</th><th>Soll (h)${bisHeuteLabel}</th><th>Ist (h)${bisHeuteLabel}</th><th>+/- (h)${bisHeuteLabel}</th><th>Urlaub</th><th>Urlaub Rest</th><th>Krank</th><th>Gleitzeitkonto</th></tr></thead><tbody>
 ${rows}
 <tr style="font-weight:700;border-top:2px solid #333"><td>Summe</td><td>${sumSoll.toFixed(2)}</td><td>${sumIst.toFixed(2)}</td><td class="${sumDiff>=0?'pos':'neg'}">${sumDiff>=0?'+':''}${sumDiff.toFixed(2)}</td><td>${sumUrl}</td><td>${sumUrlR}</td><td>${sumKr}</td><td></td></tr>
 </tbody></table></body></html>`);
@@ -24057,20 +23978,20 @@ function drawMitarbeiterCharts(year) {
   const users = awData.users.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false);
   const names = users.map(u => u.username);
   const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  const stichtag = calcJahresStichtag(year);
+  const bisHeuteLabel = isCurrentAwYear(year) ? ' (bis heute)' : '';
 
   // 1) Soll vs. Ist (grouped bar)
   const cStd = document.getElementById('awChartStunden');
   if (cStd) {
     const sollArr = [], istArr = [];
     users.forEach(u => {
-      const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u, year, m);
-      const ti = sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
-      sollArr.push(ts); istArr.push(ti);
+      const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
+      sollArr.push(jahreswerte.soll); istArr.push(jahreswerte.ist);
     });
     awCharts.ma_stunden = new Chart(cStd, {
       type: 'bar',
-      data: { labels: names, datasets: [{ label: 'Soll (h)', data: sollArr, backgroundColor: '#cbd5e1', borderRadius: 4 }, { label: 'Ist (h)', data: istArr, backgroundColor: primary, borderRadius: 4 }] },
+      data: { labels: names, datasets: [{ label: 'Soll (h)' + bisHeuteLabel, data: sollArr, backgroundColor: '#cbd5e1', borderRadius: 4 }, { label: 'Ist (h)' + bisHeuteLabel, data: istArr, backgroundColor: primary, borderRadius: 4 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } } }
     });
   }
@@ -24080,10 +24001,8 @@ function drawMitarbeiterCharts(year) {
   if (cUe) {
     const diffArr = [];
     users.forEach(u => {
-      const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-      let ts = 0; for (let m = 0; m < 12; m++) ts += calcSollMonat(u, year, m);
-      const ti = sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year), u);
-      diffArr.push(ti - ts);
+      const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
+      diffArr.push(jahreswerte.ist - jahreswerte.soll);
     });
     awCharts.ma_ueber = new Chart(cUe, {
       type: 'bar',
@@ -24098,7 +24017,7 @@ function drawMitarbeiterCharts(year) {
     const urlArr = [], urlRestArr = [], krArr = [];
     users.forEach(u => {
       const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
-      const urlJ = (u.urlaubstageProJahr && u.urlaubstageProJahr[year]) || 30;
+      const urlJ = bkUrlaubsanspruch(u, year);
       const urlG = entries.filter(e => e.typ === 'urlaub').length;
       const krG = entries.filter(e => e.typ === 'krank').length;
       urlArr.push(urlG); urlRestArr.push(Math.max(0, urlJ - urlG)); krArr.push(krG);
@@ -24119,12 +24038,11 @@ function drawMitarbeiterCharts(year) {
   if (cMo) {
     const moSoll = [], moIst = [];
     for (let m = 0; m < 12; m++) {
-      const mk = year + '-' + String(m + 1).padStart(2, '0');
       let mSoll = 0, mIst = 0;
       users.forEach(u => {
-        mSoll += calcSollMonat(u, year, m);
-        const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(mk));
-        mIst += sumIstStunden(entries, u) + sumIstStunden(getVirtuelleFeiertagEintraege(awData.zeit[u.username]?.entries || [], u, year, m), u);
+        const monatswerte = calcMonatsSollIstBisStichtag(u, awData.zeit[u.username]?.entries || [], year, m, stichtag);
+        mSoll += monatswerte.soll;
+        mIst += monatswerte.ist;
       });
       moSoll.push(mSoll); moIst.push(mIst);
     }
@@ -24156,5 +24074,3 @@ function drawMitarbeiterCharts(year) {
     console.error('initBackupStatus() fehlgeschlagen:', e);
   }
 })();
-
-

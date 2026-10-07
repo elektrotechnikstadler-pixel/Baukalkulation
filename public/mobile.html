@@ -1893,7 +1893,7 @@
 <!-- ============ Toast ============ -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=230"></script>
+<script src="sollzeit.js?v=231"></script>
 <script>
 // ============================================================
 // API-BASED PERSISTENCE  (Synology NAS)
@@ -4795,7 +4795,7 @@ function renderStundenerfassung() {
   const gzColor = gleitzeitSaldo >= 0 ? '#28A745' : '#FF3B30';
 
   // Urlaubskonto
-  const urlaubJahr = (seMobileUrlaubProJahr && seMobileUrlaubProJahr[year]) || 30;
+  const urlaubJahr = bkUrlaubsanspruch({ urlaubstageProJahr: seMobileUrlaubProJahr }, year);
   const urlaubGenommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
 
   let html = `
@@ -5148,7 +5148,7 @@ function saveStundenerfassung() {
   // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30)
   if (typ === 'urlaub') {
     const y = datum.slice(0, 4);
-    const limit = (seMobileUrlaubProJahr && seMobileUrlaubProJahr[y]) || 30;
+    const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seMobileUrlaubProJahr }, y);
     const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && e.id !== editingSeId).length;
     if (genommen + 1 > limit) {
       showToast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`);
@@ -5410,8 +5410,9 @@ function delStundenerfassung(id) {
 function exportSeMobilePDF() {
   const year = new Date().getFullYear();
   const months = Array.from({length:12}, (_,i) => i);
-  const sollTag = Number(seMobileUser.sollstundenTag ?? 8);
-  const tageWoche = Number(seMobileUser.sollTageWoche ?? 5);
+  const sollBeschreibung = bkSollBeschreibung(seMobileUser);
+  const jahreswerte = calcJahresSollIstMobile(seMobileUser, zeitEntries, year);
+  const jahresLabel = isCurrentYearMobile(year) ? ' (bis heute)' : '';
 
   let html = `<html style="color-scheme:light"><head><meta charset="UTF-8"><title>Arbeitszeiten ${currentUser} – ${year}</title>
   <style>
@@ -5429,7 +5430,7 @@ function exportSeMobilePDF() {
     @media print { body { margin: 10mm; } }
   </style></head><body>
   <h1>Arbeitszeiten ${esc(currentUser)} – ${year}</h1>
-  <h2>Erstellt am ${new Date().toLocaleDateString('de-DE')} · Soll/Tag: ${sollTag} h</h2>`;
+  <h2>Erstellt am ${new Date().toLocaleDateString('de-DE')} · Soll: ${esc(sollBeschreibung)}</h2>`;
 
   // Monatsübersicht
   html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub</th><th>Gleitzeit</th><th>Krank</th><th>Sonstig</th></tr></thead><tbody>`;
@@ -5451,8 +5452,9 @@ function exportSeMobilePDF() {
     const sign = diff >= 0 ? '+' : '';
     html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${urlaub}</td><td>${gleitzeit}</td><td>${krank}</td><td>${sonstig}</td></tr>`;
   });
+  totalIst = jahreswerte.ist; totalSoll = jahreswerte.soll;
   const totalDiff = totalIst - totalSoll;
-  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${totalUrlaub}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
+  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${totalUrlaub}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
   html += `</tbody></table>`;
 
   // Gleitzeitkonto Buchungen
@@ -6276,26 +6278,8 @@ async function deleteFileMobile(fileName, category) {
 
 // ── Bayerische Feiertage + Werktage (Mobile) ─────────────────
 function getBavarianHolidays(year) {
-  const fixed = [[0,1],[0,6],[4,1],[9,3],[10,1],[11,25],[11,26],[7,15]];
-  const holidays = fixed.map(([m,d]) => new Date(year, m, d));
-  const a=year%19, b=Math.floor(year/100), c=year%100, d=Math.floor(b/4), e=b%4;
-  const f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3);
-  const h=(19*a+b-d-g+15)%30, i=Math.floor(c/4), k=c%4;
-  const l=(32+2*e+2*i-h-k)%7, m2=Math.floor((a+11*h+22*l)/451);
-  const month=Math.floor((h+l-7*m2+114)/31)-1, day=((h+l-7*m2+114)%31)+1;
-  const easter = new Date(year, month, day);
-  function addD(dt,n) { const r=new Date(dt); r.setDate(r.getDate()+n); return r; }
-  holidays.push(addD(easter,-2), addD(easter,1), addD(easter,39), addD(easter,50), addD(easter,60));
-  // Betriebliche/zusätzliche Feiertage aus Einstellungen
-  try {
-    const extra = (typeof appSettings !== 'undefined' && appSettings.custom_feiertage)
-      ? JSON.parse(appSettings.custom_feiertage) : [];
-    extra.forEach(f => {
-      const dt = new Date(f.datum + 'T00:00:00');
-      if (!isNaN(dt) && dt.getFullYear() === year) holidays.push(dt);
-    });
-  } catch(e) {}
-  return holidays;
+  return Array.from(bkFeiertage(year, appSettings?.custom_feiertage).keys())
+    .map(key => new Date(key + 'T00:00:00'));
 }
 function dateToKey(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function getWorkingDaysInMonth(year, month, user) {
@@ -6309,17 +6293,6 @@ function calcSollMonat(user, year, month) {
   let total = 0;
   for (let day=1; day<=dim; day++) total += bkTagesSoll(user, new Date(year,month,day));
   return total;
-}
-
-function getGleitzeitStartMonthMobile(year) {
-  const sd = (appSettings && appSettings.gleitzeit_startdatum) || '';
-  if (!sd) return 0;
-  const parts = sd.split('-');
-  const sYear = parseInt(parts[0],10);
-  const sMonth = parseInt(parts[1],10) - 1;
-  if (sYear < year) return 0;
-  if (sYear > year) return 12;
-  return sMonth;
 }
 
 // Urlaub/Krank werden (wie Arbeit) mit Soll/Tag auf die Ist-/Gleitzeit angerechnet
@@ -6354,65 +6327,64 @@ function _fillMobileSeTyp() {
 }
 
 function calcGleitzeitSaldoMobile(entries, user, year, buchungen) {
-  const now = new Date();
-  const maxMonth = (year < now.getFullYear()) ? 11 : now.getMonth();
-  const startMo = getGleitzeitStartMonthMobile(year);
-  let saldo = 0;
-  for (let mo = startMo; mo <= maxMonth; mo++) {
-    const mk = year + '-' + String(mo+1).padStart(2,'0');
-    const moEntries = entries.filter(e => e.datum && e.datum.startsWith(mk));
-    const moFeiertag = getVirtuelleFeiertagEintraegeM(entries, user, year, mo).reduce((s,e) => s+(e.stunden||0), 0);
-    const moArbeit = moEntries.reduce((s,e) => s + bkIstStundenEintrag(user, e, appSettings.ze_custom_typen), 0) + moFeiertag;
-    const moSoll = calcSollMonat(user, year, mo);
-    saldo += moArbeit - moSoll;
-  }
-  const startDate = (appSettings && appSettings.gleitzeit_startdatum) || '';
-  (buchungen || []).forEach(b => {
-    if (b.datum && b.datum.startsWith(String(year))) {
-      if (!startDate || b.datum >= startDate) saldo += (parseFloat(b.betrag) || 0);
-    }
+  return bkGleitzeitSaldo(entries, user, year, buchungen, {
+    startdatum: appSettings.gleitzeit_startdatum,
+    customTypen: appSettings.ze_custom_typen || [],
+    customFeiertage: appSettings.custom_feiertage,
+    heute: dateToKey(new Date()),
   });
-  return saldo;
 }
 
 function buildHolidayNameMapM(year) {
-  const map = new Map();
-  const names = ['Neujahr','Heilige Drei K\u00f6nige','Tag der Arbeit','Christi Himmelfahrt','Pfingstmontag','Fronleichnam','Mari\u00e4 Himmelfahrt','Tag der Deutschen Einheit','Allerheiligen','1. Weihnachtstag','2. Weihnachtstag','Karfreitag','Ostermontag'];
-  const fixed = [[0,1,'Neujahr'],[0,6,'Heilige Drei K\u00f6nige'],[4,1,'Tag der Arbeit'],[9,3,'Tag der Deutschen Einheit'],[10,1,'Allerheiligen'],[11,25,'1. Weihnachtstag'],[11,26,'2. Weihnachtstag'],[7,15,'Mari\u00e4 Himmelfahrt']];
-  fixed.forEach(([m,d,name]) => { const dt = new Date(year,m,d); map.set(dateToKey(dt), name); });
-  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4;
-  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3);
-  const h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4;
-  const l=(32+2*e+2*i-h-k)%7,m2=Math.floor((a+11*h+22*l)/451);
-  const mo=Math.floor((h+l-7*m2+114)/31)-1,dy=((h+l-7*m2+114)%31)+1;
-  const easter = new Date(year,mo,dy);
-  function addD(dt,n){const r=new Date(dt);r.setDate(r.getDate()+n);return r;}
-  map.set(dateToKey(addD(easter,-2)),'Karfreitag');
-  map.set(dateToKey(addD(easter,1)),'Ostermontag');
-  map.set(dateToKey(addD(easter,39)),'Christi Himmelfahrt');
-  map.set(dateToKey(addD(easter,50)),'Pfingstmontag');
-  map.set(dateToKey(addD(easter,60)),'Fronleichnam');
-  try {
-    const extra = (typeof appSettings !== 'undefined' && appSettings.custom_feiertage) ? JSON.parse(appSettings.custom_feiertage) : [];
-    extra.forEach(f => { const dt = new Date(f.datum+'T00:00:00'); if(!isNaN(dt)&&dt.getFullYear()===year) map.set(dateToKey(dt), f.name||'Feiertag'); });
-  } catch(e) {}
-  return map;
+  return new Map(bkFeiertage(year, appSettings?.custom_feiertage));
 }
 
 function getVirtuelleFeiertagEintraegeM(realEntries, user, year, month) {
-  const result = [];
-  const nameMap = buildHolidayNameMapM(year);
-  const existingDates = new Set(realEntries.map(e => e.datum||''));
-  for (const [dateKey, name] of nameMap) {
-    const d = new Date(dateKey + 'T00:00:00');
-    if (d.getFullYear() !== year) continue;
-    if (month !== null && month !== undefined && d.getMonth() !== month) continue;
-    const soll = bkTagesSoll(user, dateKey);
-    if (soll <= 0) continue;
-    if (existingDates.has(dateKey)) continue;
-    result.push({ datum: dateKey, typ: 'feiertag', stunden: soll, bemerkung: name, _virtual: true });
+  const monat = month === null || month === undefined ? null : `${year}-${String(month + 1).padStart(2, '0')}`;
+  return bkVirtuelleFeiertage(realEntries, user, year, monat, appSettings?.custom_feiertage);
+}
+
+function sumIstStundenMobile(entries, user) {
+  return (entries || []).reduce((sum, entry) => sum + bkIstStundenEintrag(user, entry, appSettings?.ze_custom_typen || []), 0);
+}
+
+function parseUrlaubstageInputMobile(value) {
+  const text = String(value ?? '').trim();
+  if (text === '') return 30;
+  const number = parseInt(text, 10);
+  return Number.isFinite(number) ? number : 30;
+}
+
+function calcJahresStichtagMobile(year) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  if (year < currentYear) return `${year}-12-31`;
+  if (year > currentYear) return null;
+  return dateToKey(today);
+}
+
+function isCurrentYearMobile(year) {
+  return year === new Date().getFullYear();
+}
+
+function calcSollIstZeitraumMobile(user, entries, year, startKey, endKey) {
+  if (!endKey || endKey < startKey) return { soll: 0, ist: 0 };
+  let soll = 0;
+  const start = new Date(startKey + 'T00:00:00');
+  for (let dt = start; dateToKey(dt) <= endKey; dt.setDate(dt.getDate() + 1)) {
+    soll += bkTagesSoll(user, dt);
   }
-  return result;
+  const realEntries = (entries || []).filter(e => e.datum && e.datum >= startKey && e.datum <= endKey);
+  const virtuelle = getVirtuelleFeiertagEintraegeM(entries, user, year)
+    .filter(e => e.datum >= startKey && e.datum <= endKey);
+  return { soll, ist: sumIstStundenMobile(realEntries, user) + sumIstStundenMobile(virtuelle, user) };
+}
+
+function calcJahresSollIstMobile(user, entries, year) {
+  const stichtag = calcJahresStichtagMobile(year);
+  if (!stichtag) return { soll: 0, ist: 0, stichtag: null };
+  const result = calcSollIstZeitraumMobile(user, entries, year, `${year}-01-01`, stichtag);
+  return { ...result, stichtag };
 }
 
 function saveGleitzeitStartdatumMobile(val) {
@@ -6501,9 +6473,7 @@ function zuMobileRender() {
 
 /* ── Übersicht (original card per user) ── */
 function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthName, y, m) {
-  const workDays = getWorkingDaysInMonth(y, m, { sollstundenTag: 8, sollTageWoche: 5 });
   let html = `<div class="section-label">${monthName} – Übersicht</div>`;
-  html += `<div class="card" style="margin-bottom:10px;text-align:center;padding:10px"><strong>${workDays}</strong> Werktage im ${monthName}</div>`;
 
   visibleUsers.forEach(user => {
     const entries = (allZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(currentMonth));
@@ -6513,11 +6483,12 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const sollTag = Number(user.sollstundenTag ?? 8);
     const tageWoche = Number(user.sollTageWoche ?? 5);
+    const sollBeschreibung = bkSollBeschreibung(user);
     const sollStunden = calcSollMonat(user, y, m);
     const diff = istStunden - sollStunden;
     const diffColor = diff >= 0 ? 'var(--success)' : 'var(--danger)';
     const diffSign = diff >= 0 ? '+' : '';
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[y]) || 30;
+    const urlaubJahr = bkUrlaubsanspruch(user, y);
     const allUserEntries = allZeit[user.username]?.entries || [];
     const urlaubGenommen = allUserEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(y))).length;
 
@@ -6525,7 +6496,7 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
       <div class="detail-row" style="flex-wrap:wrap">
         <div class="detail-row-label">
           <strong>${esc(user.username)}</strong>
-          <small>${user.role}</small>
+          <small>${esc(user.role)}</small>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem">
           <span><strong>${istStunden.toFixed(2)}</strong> h Ist</span>
@@ -6538,8 +6509,10 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
         ${(currentRole === 'admin' || currentRole === 'master') ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div>
             <label style="font-size:0.72rem;color:var(--grey-400)">Soll/Tag:</label>
-            <input type="number" value="${sollTag}" min="0" max="24" step="0.5" style="width:60px;padding:4px 8px;border:1.5px solid var(--grey-100);border-radius:8px;font-size:0.85rem;font-family:inherit"
-              onchange="setSollstundenTagMobile('${esc(user.username)}', this.value)">
+            ${user.sollzeitJeWochentag === true || Number(user.sollzeitJeWochentag) === 1
+              ? `<span style="font-size:0.85rem">${esc(sollBeschreibung)}</span>`
+              : `<input type="number" value="${sollTag}" min="0" max="24" step="0.5" style="width:60px;padding:4px 8px;border:1.5px solid var(--grey-100);border-radius:8px;font-size:0.85rem;font-family:inherit"
+              onchange="setSollstundenTagMobile('${esc(user.username)}', this.value)">`}
           </div>
           <div>
             <label style="font-size:0.72rem;color:var(--grey-400)">Tage/Wo:</label>
@@ -6742,7 +6715,7 @@ async function setUrlaubstageMobile(username, year, value) {
     await fetch('api.php?action=set_urlaubstage', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, year, urlaubstage: parseInt(value) || 30 })
+      body: JSON.stringify({ username, year, urlaubstage: parseUrlaubstageInputMobile(value) })
     });
     showToast('✓ Urlaubstage gespeichert');
   } catch(e) { showToast('Fehler beim Speichern'); }
@@ -6758,17 +6731,19 @@ function exportZeituebersichtPDFMobile() {
   <h1>Zeitübersicht ${year}</h1><h2>Erstellt am ${new Date().toLocaleDateString('de-DE')} · Baukalkulation</h2>`;
   allUsers.filter(u => u.role !== 'admin' && u.showInZeitverwaltung !== false).forEach(user => {
     const en = allZeit[user.username]?.entries||[];
-    const sollTag = Number(user.sollstundenTag ?? 8);
-    const tageWoche = Number(user.sollTageWoche ?? 5);
-    const urlaubJahr = (user.urlaubstageProJahr&&user.urlaubstageProJahr[year])||30;
+    const sollBeschreibung = bkSollBeschreibung(user);
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
     const urlaubGen = en.filter(e=>e.typ==='urlaub'&&e.datum&&e.datum.startsWith(String(year))).length;
     const krankGes = en.filter(e=>e.typ==='krank'&&e.datum&&e.datum.startsWith(String(year))).length;
-    html += `<p class="section-title">${esc(user.username)} (${user.role}) · Soll/Tag: ${sollTag} h${tageWoche < 5 ? ' · ' + tageWoche + ' Tage/Wo' : ''} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}</p>`;
+    const jahreswerte = calcJahresSollIstMobile(user, en, year);
+    const jahresLabel = isCurrentYearMobile(year) ? ' (bis heute)' : '';
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}</p>`;
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll</th><th>Ist</th><th>+/-</th><th>Urlaub</th><th>Krank</th></tr></thead><tbody>`;
     let tI=0,tS=0;
     months.forEach(m=>{const mk=year+'-'+String(m+1).padStart(2,'0');const me=en.filter(e=>e.datum&&e.datum.startsWith(mk));const ist=me.reduce((s,e)=>s+bkIstStundenEintrag(user,e,appSettings.ze_custom_typen),0)+getVirtuelleFeiertagEintraegeM(me,user,year,m).reduce((s,e)=>s+(e.stunden||0),0);const soll=calcSollMonat(user,year,m);const u2=me.filter(e=>e.typ==='urlaub').length;const k2=me.filter(e=>e.typ==='krank').length;const diff=ist-soll;const wd=getWorkingDaysInMonth(year,m,user);tI+=ist;tS+=soll;html+=`<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${u2}</td><td>${k2}</td></tr>`;});
+    tI = jahreswerte.ist; tS = jahreswerte.soll;
     const td2=tI-tS;
-    html+=`<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td>${urlaubGen}</td><td>${krankGes}</td></tr></tbody></table>`;
+    html+=`<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td>${urlaubGen}</td><td>${krankGes}</td></tr></tbody></table>`;
   });
   html += '</body></html>';
   mobilePrintHtml(html, 'Stundenuebersicht_' + year);
@@ -6841,9 +6816,7 @@ function renderStundenauswertungMobile() {
   visibleUsers.forEach(user => {
     const allEntries = saMobileAllZeit[user.username]?.entries || [];
     let entries = [...allEntries];
-    const sollTag = Number(user.sollstundenTag ?? 8);
-    const tageWoche = Number(user.sollTageWoche ?? 5);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
 
     // Suchfilter
     if (searchQ) {
@@ -7073,19 +7046,20 @@ function exportSaAuswertungPDFMobile() {
 
   visibleUsers.forEach((user, idx) => {
     const allEntries = saMobileAllZeit[user.username]?.entries || [];
-    const sollTag = Number(user.sollstundenTag ?? 8);
-    const tageWoche = Number(user.sollTageWoche ?? 5);
-    const urlaubJahr = (user.urlaubstageProJahr && user.urlaubstageProJahr[year]) || 30;
+    const sollBeschreibung = bkSollBeschreibung(user);
+    const urlaubJahr = bkUrlaubsanspruch(user, year);
     const urlaubGen = allEntries.filter(e => e.typ==='urlaub' && e.datum && e.datum.startsWith(String(year))).length;
     const krankGes = allEntries.filter(e => e.typ==='krank' && e.datum && e.datum.startsWith(String(year))).length;
     const buchungen = saMobileGleitzeitAll[user.username] || [];
+    const jahreswerte = calcJahresSollIstMobile(user, allEntries, year);
+    const jahresLabel = isCurrentYearMobile(year) ? ' (bis heute)' : '';
 
     // Gleitzeitkonto
     const gleitzeitAktiv = appSettings.gleitzeit_enabled !== false;
     let gzSaldo = calcGleitzeitSaldoMobile(allEntries, user, year, buchungen);
 
     if (idx > 0) html += '<div class="page-break"></div>';
-    html += `<p class="section-title">${esc(user.username)} (${user.role}) · Soll/Tag: ${sollTag} h${tageWoche < 5 ? ' · ' + tageWoche + ' Tage/Wo' : ''} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}${gleitzeitAktiv ? ` · Gleitzeitkonto: <span class="${gzSaldo>=0?'positive':'negative'}">${gzSaldo>=0?'+':''}${gzSaldo.toFixed(2)} h</span>` : ''}</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}${gleitzeitAktiv ? ` · Gleitzeitkonto: <span class="${gzSaldo>=0?'positive':'negative'}">${gzSaldo>=0?'+':''}${gzSaldo.toFixed(2)} h</span>` : ''}</p>`;
 
     // Monatsübersicht
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll</th><th>Ist</th><th>+/-</th><th>Urlaub</th><th>Gleitzeit</th><th>Krank</th></tr></thead><tbody>`;
@@ -7103,8 +7077,9 @@ function exportSaAuswertungPDFMobile() {
       tI += ist; tS += soll;
       html += `<tr><td>${getMonthName(m)}</td><td>${getWorkingDaysInMonth(year,m,user)}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${u2}</td><td>${gz}</td><td>${k2}</td></tr>`;
     });
+    tI = jahreswerte.ist; tS = jahreswerte.soll;
     const td2 = tI - tS;
-    html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td></td><td></td><td></td></tr></tbody></table>`;
+    html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td></td><td></td><td></td></tr></tbody></table>`;
 
     // Buchungen
     const yearBuch = buchungen.filter(b => b.datum && b.datum.startsWith(String(year)));

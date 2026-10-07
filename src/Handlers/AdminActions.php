@@ -278,8 +278,20 @@ class AdminActions
     public function triggerErinnerung(): void
     {
         Auth::requireRole('admin');
+        if (!function_exists('exec')) {
+            jsonOut(['ok' => false, 'hint' => 'exec() ist auf diesem Server nicht verfügbar.']);
+        }
+        $consolePath = realpath(__DIR__ . '/../../bin/console');
+        if ($consolePath === false || !file_exists($consolePath)) {
+            jsonOut(['ok' => false, 'hint' => 'bin/console nicht gefunden.']);
+        }
+        $phpBin = PHP_BINARY;
+        if (empty(trim($phpBin))) {
+            $which = trim((string)shell_exec('which php 2>/dev/null'));
+            $phpBin = $which ?: '/usr/local/bin/php';
+        }
         $output = []; $code = 0;
-        exec('php ' . escapeshellarg(__DIR__ . '/../../cron_stunden_erinnerung.php') . ' 2>&1', $output, $code);
+        exec(escapeshellarg($phpBin) . ' ' . escapeshellarg($consolePath) . ' zeit:erinnerung --force 2>&1', $output, $code);
         jsonOut(['ok' => $code === 0, 'output' => implode("\n", $output)]);
     }
 

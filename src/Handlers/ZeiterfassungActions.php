@@ -4,6 +4,8 @@ namespace App\Handlers;
 use App\Auth;
 use App\Database;
 use App\Services\BuchungValidator;
+use App\Services\Feiertage;
+use App\Services\Gleitzeit;
 use App\Services\Sollzeit;
 
 class ZeiterfassungActions
@@ -34,7 +36,7 @@ class ZeiterfassungActions
     /** Ermittelt das Urlaubs-Jahreslimit (Default 30, falls für das Jahr nichts hinterlegt). */
     private function urlaubLimitForYear(array $urlaubProJahr, string $year): int
     {
-        return isset($urlaubProJahr[$year]) ? (int)$urlaubProJahr[$year] : 30;
+        return (int)Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => $urlaubProJahr], (int)$year);
     }
 
     /** save_zeiterfassung */
@@ -1457,17 +1459,28 @@ class ZeiterfassungActions
 
         if (!$target || !$datum) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
-        // Datumsbereich aufbauen (Wochenenden überspringen)
+        // Arbeitszeit-Konfiguration laden (Soll/Tag, Arbeitstage, Urlaubslimit)
+        $zeitCfg = $this->loadUserZeitConfig($target);
+        $settings = Auth::loadSettings($this->db);
+
+        // Datumsbereich aufbauen: bei Zeitraum nur echte Soll-Tage ohne Feiertag.
         $dates = [];
         if ($datumBis && $datumBis > $datum) {
-            $start    = new \DateTime($datum);
-            $end      = new \DateTime($datumBis);
-            $end->modify('+1 day');
+            $start    = new \DateTimeImmutable($datum);
+            $end      = new \DateTimeImmutable($datumBis);
+            $end      = $end->modify('+1 day');
             $interval = new \DateInterval('P1D');
             $period   = new \DatePeriod($start, $interval, $end);
+            $customFeiertage = Feiertage::customAusEinstellungen($settings);
+            $feiertageByYear = [];
             foreach ($period as $d) {
-                if ((int)$d->format('N') <= 5) {   // 1=Mo … 5=Fr, 6=Sa, 7=So
-                    $dates[] = $d->format('Y-m-d');
+                $key = $d->format('Y-m-d');
+                $year = (int)$d->format('Y');
+                if (!isset($feiertageByYear[$year])) {
+                    $feiertageByYear[$year] = Feiertage::fuerJahr($year, $customFeiertage);
+                }
+                if (Sollzeit::tagesSoll($zeitCfg, $key) > 0.0 && !isset($feiertageByYear[$year][$key])) {
+                    $dates[] = $key;
                 }
             }
         } else {
@@ -1475,9 +1488,6 @@ class ZeiterfassungActions
         }
 
         if (empty($dates)) jsonOut(['error' => 'Keine Arbeitstage im gewählten Zeitraum.'], 400);
-
-        // Arbeitszeit-Konfiguration laden (Soll/Tag, Arbeitstage, Urlaubslimit)
-        $zeitCfg = $this->loadUserZeitConfig($target);
 
         // Urlaubslimit prüfen (bestehende + neue Tage pro Jahr)
         if ($typ === 'urlaub') {
@@ -1497,7 +1507,6 @@ class ZeiterfassungActions
         $nextId = (int)($row['m'] ?? 0) + 1;
 
         $stmt         = $this->db->prepare("INSERT INTO zeiterfassung (username, entryId, datum, typ, baustelleId, baustelleName, stunden, bemerkung, von, bis, pause, clientUuid, status, createdAt, updatedAt, quelle) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'admin')");
-        $settings     = Auth::loadSettings($this->db);
         $auditEnabled = !empty($settings['erweiterte_zeiterfassung']);
         $auditStmt    = $auditEnabled
             ? $this->db->prepare("INSERT INTO zeiterfassung_log (username, entryId, aktion, alteWerte, neueWerte, geaendertVon, geaendertAm) VALUES (?,?,?,?,?,?,?)")
@@ -1594,11 +1603,8 @@ class ZeiterfassungActions
         $year = (int)($_GET['year'] ?? (int)date('Y'));
 
         $settings      = Auth::loadSettings($this->db);
-        $startdatum    = $settings['gleitzeit_startdatum'] ?? '';
         $gleitzeitAktiv = ($settings['gleitzeit_enabled'] ?? null) !== false;
-        $customFeiertage = json_decode($settings['custom_feiertage'] ?? '[]', true) ?: [];
-
-        $holidays = $this->computeBavarianHolidays($year);
+        $customFeiertage = Feiertage::customAusEinstellungen($settings);
 
         $rows = $this->db->query(
             "SELECT username, role, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, urlaubstageProJahr
@@ -1612,10 +1618,7 @@ class ZeiterfassungActions
             $uProJahr  = json_decode($r['urlaubstageProJahr'] ?? '{}', true) ?? [];
             $gleitzeitSaldo = null;
             if ($gleitzeitAktiv) {
-                $gleitzeitSaldo = $this->computeGleitzeitSaldo(
-                    $r['username'], $year, $r, $startdatum, $holidays, $customFeiertage,
-                    $settings['ze_custom_typen'] ?? []
-                );
+                $gleitzeitSaldo = Gleitzeit::saldo($this->db, (string)$r['username'], $r, $year, $settings);
             }
 
             $users[] = [
@@ -1632,108 +1635,6 @@ class ZeiterfassungActions
             'customFeiertage' => $customFeiertage,
             'gleitzeitAktiv'  => $gleitzeitAktiv,
         ]);
-    }
-
-    /** Bayerische Feiertage als Array von 'Y-m-d' Strings */
-    private function computeBavarianHolidays(int $year): array
-    {
-        $fixed = [
-            sprintf('%d-01-01', $year), sprintf('%d-01-06', $year),
-            sprintf('%d-05-01', $year), sprintf('%d-08-15', $year),
-            sprintf('%d-10-03', $year), sprintf('%d-11-01', $year),
-            sprintf('%d-12-25', $year), sprintf('%d-12-26', $year),
-        ];
-
-        // Osterberechnung (Gauß)
-        $a = $year % 19; $b = intdiv($year, 100); $c = $year % 100;
-        $d = intdiv($b, 4); $e = $b % 4; $f = intdiv($b + 8, 25);
-        $g = intdiv($b - $f + 1, 3); $h = (19 * $a + $b - $d - $g + 15) % 30;
-        $i = intdiv($c, 4); $k = $c % 4; $l = (32 + 2 * $e + 2 * $i - $h - $k) % 7;
-        $m = intdiv($a + 11 * $h + 22 * $l, 451);
-        $month = intdiv($h + $l - 7 * $m + 114, 31);
-        $day   = (($h + $l - 7 * $m + 114) % 31) + 1;
-        $easter = mktime(0, 0, 0, $month, $day, $year);
-
-        $movable = [];
-        foreach ([-2, 1, 39, 50, 60] as $offset) {
-            $movable[] = date('Y-m-d', strtotime("{$offset} days", $easter));
-        }
-
-        return array_unique(array_merge($fixed, $movable));
-    }
-
-    /** Gleitzeitkonto-Saldo für einen User und ein Jahr. */
-    private function computeGleitzeitSaldo(
-        string $username, int $year, array $zeitCfg,
-        string $startdatum, array $holidays, array $customFeiertage, array $customTypen
-    ): float {
-        // Custom-Feiertage des abgefragten Jahres in Holidays aufnehmen
-        $allHolidays = $holidays;
-        foreach ($customFeiertage as $cf) {
-            $datum = $cf['datum'] ?? '';
-            if ($datum && str_starts_with($datum, (string)$year)) {
-                $allHolidays[] = $datum;
-            }
-        }
-        $allHolidays = array_unique($allHolidays);
-
-        // Startmonat (0-basiert)
-        $startMo = 0;
-        if ($startdatum) {
-            $sy = (int)substr($startdatum, 0, 4);
-            $sm = (int)substr($startdatum, 5, 2) - 1;
-            if ($sy > $year) return 0.0;
-            if ($sy === $year) $startMo = $sm;
-        }
-
-        $now        = new \DateTime();
-        $curYear    = (int)$now->format('Y');
-        $curMonth   = (int)$now->format('m') - 1; // 0-basiert
-        $endMo      = ($year < $curYear) ? 11 : $curMonth;
-
-        $saldo = 0.0;
-        for ($mo = $startMo; $mo <= $endMo; $mo++) {
-            $mk   = sprintf('%d-%02d', $year, $mo + 1);
-            $monthStart = new \DateTimeImmutable($mk . '-01');
-            $monthEnd = $monthStart->modify('last day of this month');
-            $sollMonat = 0.0;
-            for ($date = $monthStart; $date <= $monthEnd; $date = $date->modify('+1 day')) {
-                $sollMonat += Sollzeit::tagesSoll($zeitCfg, $date->format('Y-m-d'));
-            }
-            $rows = Database::fetchAll(
-                $this->db,
-                "SELECT typ, stunden, datum FROM zeiterfassung WHERE username = ? AND datum LIKE ?",
-                [$username, $mk . '%']
-            );
-            $entryDates = [];
-            $ist = 0.0;
-            foreach ($rows as $r) {
-                if (!empty($r['datum'])) $entryDates[$r['datum']] = true;
-                $ist += Sollzeit::istStundenEintrag($zeitCfg, $r, $customTypen);
-            }
-            // Feiertage ohne Eintrag zählen nur an Tagen mit positivem Tages-Soll als Ist.
-            foreach ($allHolidays as $hKey) {
-                if (strncmp((string)$hKey, $mk, 7) !== 0) continue;        // gleicher Monat
-                if (isset($entryDates[$hKey])) continue;                  // schon Eintrag vorhanden
-                $feiertagSoll = Sollzeit::tagesSoll($zeitCfg, (string)$hKey);
-                if ($feiertagSoll > 0) $ist += $feiertagSoll;
-            }
-            $saldo += $ist - $sollMonat;
-        }
-
-        // Manuell gebuchte Gleitzeit-Buchungen
-        $buchungen = Database::fetchAll(
-            $this->db,
-            "SELECT betrag, datum FROM gleitzeitkonto_buchungen WHERE username = ? AND datum LIKE ?",
-            [$username, $year . '%']
-        );
-        foreach ($buchungen as $b) {
-            $datum = $b['datum'] ?? '';
-            if ($startdatum && $datum < $startdatum) continue;
-            $saldo += (float)($b['betrag'] ?? 0);
-        }
-
-        return round($saldo, 2);
     }
 
     private function writeAuditLog(string $username, array $oldRows, array $newEntries): void

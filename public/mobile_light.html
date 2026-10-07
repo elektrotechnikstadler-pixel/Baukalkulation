@@ -370,7 +370,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=230"></script>
+<script src="sollzeit.js?v=231"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
 let currentUser = '';
@@ -389,7 +389,7 @@ let baustellenList = [];
 let kundenData       = [];
 let appSettings = {};
 let currentPerms = {};
-let lightSollUser = { sollstundenTag: 8, sollTageWoche: 5 };
+let lightSollUser = null;
 let lightUrlaubProJahr = {};
 
 // ── Datums-/Feiertags-Helfer ──────────────────────────────
@@ -399,23 +399,7 @@ function lDateKey(d) {
 }
 // Bayerische Feiertage als Set von 'Y-m-d' (inkl. betrieblicher Feiertage aus den Einstellungen)
 function lGetHolidayKeys(year) {
-  const keys = new Set();
-  const fixed = [[0,1],[0,6],[4,1],[7,15],[9,3],[10,1],[11,25],[11,26]];
-  fixed.forEach(([m,d]) => keys.add(lDateKey(new Date(year, m, d))));
-  const a = year % 19, b = Math.floor(year/100), c = year % 100;
-  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
-  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
-  const i = Math.floor(c/4), k = c % 4, l = (32+2*e+2*i-h-k) % 7;
-  const mm = Math.floor((a+11*h+22*l)/451);
-  const month = Math.floor((h+l-7*mm+114)/31) - 1;
-  const day = ((h+l-7*mm+114) % 31) + 1;
-  const easter = new Date(year, month, day);
-  [-2,1,39,50,60].forEach(off => { const r = new Date(easter); r.setDate(r.getDate()+off); keys.add(lDateKey(r)); });
-  try {
-    const extra = appSettings.custom_feiertage ? JSON.parse(appSettings.custom_feiertage) : [];
-    extra.forEach(ft => { const dt = new Date((ft.datum||'') + 'T00:00:00'); if (!isNaN(dt) && dt.getFullYear() === year) keys.add(lDateKey(dt)); });
-  } catch(_) {}
-  return keys;
+  return new Set(bkFeiertage(year, appSettings?.custom_feiertage).keys());
 }
 
 // ── Auth ───────────────────────────────────────────────────
@@ -494,6 +478,7 @@ async function loadData() {
   } catch (e) { console.warn('Zeiterfassung laden fehlgeschlagen:', e); }
 
   // Load Sollstunden des Users für Tagesinfo
+  renderLightTagesInfo();
   try {
     const sr = await fetch('api.php?action=get_user_sollstunden');
     const sj = await sr.json();
@@ -883,10 +868,11 @@ async function saveEntry() {
   const stunden = parseFloat(document.getElementById('fStunden').value) || 0;
   const baustelleId = parseInt(document.getElementById('fBsId').value) || null;
   const bemerkung = document.getElementById('fBemerkung').value.trim();
-  const effStunden = bkIstStundenEintrag(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen);
 
   // Validation
   if (!datum) { toast('Bitte Datum eingeben.', 'error'); return; }
+  if (!lightSollUser) { toast('Sollzeit wird noch geladen. Bitte gleich erneut versuchen.', 'error'); return; }
+  const effStunden = bkIstStundenEintrag(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen);
   if (_isArbeit && !_istSoll) {
     if (stunden <= 0) { toast('Bitte Stunden eingeben.', 'error'); return; }
   }
@@ -926,7 +912,7 @@ async function saveEntry() {
     // Urlaubslimit prüfen (dieser Eintrag ausgenommen)
     if (typ === 'urlaub') {
       const y = datum.slice(0, 4);
-      const limit = (lightUrlaubProJahr && lightUrlaubProJahr[y]) || 30;
+      const limit = bkUrlaubsanspruch({ urlaubstageProJahr: lightUrlaubProJahr }, y);
       const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && e.id !== editingLightId).length;
       if (genommen + 1 > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
     }
@@ -967,7 +953,7 @@ async function saveEntry() {
       const byYear = {};
       neueDates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; });
       for (const y in byYear) {
-        const limit = (lightUrlaubProJahr && lightUrlaubProJahr[y]) || 30;
+        const limit = bkUrlaubsanspruch({ urlaubstageProJahr: lightUrlaubProJahr }, y);
         const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y)).length;
         if (genommen + byYear[y] > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
       }
@@ -1153,6 +1139,13 @@ function renderLightTagesInfo() {
   const istEl = document.getElementById('lightTagesIst');
   const sollEl = document.getElementById('lightTagesSoll');
   if (!strip || !istEl || !sollEl) return;
+  if (!lightSollUser) {
+    istEl.textContent = 'lädt …';
+    sollEl.textContent = 'lädt …';
+    sollEl.style.color = '';
+    strip.style.display = 'flex';
+    return;
+  }
   const today = lDateKey(new Date());
   const heuteIst = zeitEntries.filter(e => e.datum === today).reduce((s, e) => s + bkIstStundenEintrag(lightSollUser, e, appSettings.ze_custom_typen), 0);
   const heuteSoll = bkTagesSoll(lightSollUser, today);

@@ -59,6 +59,38 @@ final class SollzeitProfilTest extends ApiTestCase
         ]));
     }
 
+    public function testListenLiefernWochentagsSollfelderAus(): void
+    {
+        $this->setupAdmin();
+        $this->createActiveUser('monteur', 'Monteur-Pass-1');
+        $this->assertOk($this->api->post('save_user_profile', [
+            'username' => 'monteur',
+            'sollzeitJeWochentag' => true,
+            'sollstundenMo' => 8,
+            'sollstundenDi' => 7,
+            'sollstundenMi' => 6,
+            'sollstundenDo' => 5,
+            'sollstundenFr' => 4,
+            'sollstundenSa' => 3,
+            'sollstundenSo' => 2,
+        ]));
+
+        foreach (['list_users', 'list_users_basic', 'get_sollstunden_extended'] as $action) {
+            $result = $this->assertOk($this->api->get($action));
+            $users = array_column($result['users'], null, 'username');
+
+            self::assertArrayHasKey('monteur', $users, $action);
+            self::assertTrue($users['monteur']['sollzeitJeWochentag'], $action);
+            self::assertSame(8.0, (float) $users['monteur']['sollstundenMo'], $action);
+            self::assertSame(7.0, (float) $users['monteur']['sollstundenDi'], $action);
+            self::assertSame(6.0, (float) $users['monteur']['sollstundenMi'], $action);
+            self::assertSame(5.0, (float) $users['monteur']['sollstundenDo'], $action);
+            self::assertSame(4.0, (float) $users['monteur']['sollstundenFr'], $action);
+            self::assertSame(3.0, (float) $users['monteur']['sollstundenSa'], $action);
+            self::assertSame(2.0, (float) $users['monteur']['sollstundenSo'], $action);
+        }
+    }
+
     public function testJahreswechselSaldoWertetUrlaubAlsSollUndAbwesendMitNull(): void
     {
         $this->setupAdmin();

@@ -103,9 +103,9 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-av
 
 # ── Cron-Daemon: automatische Wartungsskripte ────────────────
 # Ohne diese Crontab werden cron_backup_email.php, cron_material_erinnerung.php
-# und cron_stunden_erinnerung.php NIE automatisch ausgeführt (der Container
-# startet sonst nur Apache). Die Skripte prüfen selbst Uhrzeit + Lock-File und
-# handeln nur, wenn fällig – ein 15-Minuten-Takt ist daher unkritisch.
+# und der CLI-Befehl zeit:erinnerung NIE automatisch ausgeführt (der Container
+# startet sonst nur Apache). Die Skripte/Befehle prüfen selbst Fälligkeit bzw.
+# Tagessperre – ein 15-Minuten-Takt ist daher unkritisch.
 # Lauf als www-data, damit Schreibzugriff auf data/ (Locks, Logs) passt.
 # cron gibt die Container-Umgebung nicht weiter: der Entrypoint legt die BK_*-Variablen
 # (z. B. Datenbank-Zugang) in /etc/baukalkulation.env ab, jede Zeile lädt sie.
@@ -114,7 +114,7 @@ RUN printf '%s\n' \
     'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_backup_email.php >> /var/www/html/data/cron.log 2>&1' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_material_erinnerung.php >> /var/www/html/data/cron.log 2>&1' \
-    '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_stunden_erinnerung.php >> /var/www/html/data/cron.log 2>&1' \
+    '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console zeit:erinnerung >> /var/www/html/data/cron.log 2>&1' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_stundenauswertung_email.php >> /var/www/html/data/cron.log 2>&1' \
     > /etc/cron.d/baukalkulation-cron \
     && chmod 0644 /etc/cron.d/baukalkulation-cron

@@ -95,6 +95,8 @@ generisch aus der SQLite-Datei (gemeinsame Spalten). Jeder Fehler rollt vollstä
   mit leerem Datenverzeichnis (`BK_DATA_DIR`) und prüfen das Verhalten über HTTP.
   Sie halten das heutige Verhalten fest, damit Umbauten (z. B. PostgreSQL) nichts
   unbemerkt verändern.
+- `tests/js/*.test.mjs` – JS-Helfer mit `npm.cmd run test:js` oder `make test-js`
+  prüfen; Sollzeit-Parität nutzt die gemeinsame Fallliste `tests/fixtures/sollzeit/faelle.json`.
 - `tests/fixtures/legacy-v0/` – alter JSON-Datenstand (vor SQLite), Import über `migrate.php`.
 - `tests/fixtures/backups/v*.zip` – echte Backups früherer Versionen. Jede Datei muss sich in
   eine frische Installation einspielen lassen. Bei jedem Release mit Schemaänderung

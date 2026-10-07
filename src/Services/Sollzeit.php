@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 namespace App\Services;
 
 final class Sollzeit
@@ -59,6 +61,21 @@ final class Sollzeit
         }
 
         return 0.0;
+    }
+
+    public static function urlaubsanspruch(array $mitarbeiter, int $jahr): float
+    {
+        $raw = $mitarbeiter['urlaubstageProJahr'] ?? [];
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($raw)) {
+            return 30.0;
+        }
+
+        $key = (string)$jahr;
+        return array_key_exists($key, $raw) && is_numeric($raw[$key]) ? (float)$raw[$key] : 30.0;
     }
 
     private static function arbeitstage(mixed $raw): array

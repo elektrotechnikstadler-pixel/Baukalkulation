@@ -1,0 +1,255 @@
+{
+  "_hinweis": "Gemeinsame Sollzeit-Fallliste für PHP und public/sollzeit.js. PHP prüft tagesSoll, istStundenEintrag, feiertage, urlaubsanspruch und die Saldo-Fälle über App\\Services\\Gleitzeit mit Testdatenbank; JS prüft dieselben Erwartungswerte.",
+  "tagesSoll": [
+    {
+      "name": "Altmodus Montag",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "datum": "2025-03-17",
+      "expected": 8
+    },
+    {
+      "name": "Altmodus Samstag frei",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "datum": "2025-03-15",
+      "expected": 0
+    },
+    {
+      "name": "Wochentagsmodus Samstag",
+      "mitarbeiter": {
+        "sollzeitJeWochentag": true,
+        "sollstundenMo": 0,
+        "sollstundenDi": 0,
+        "sollstundenMi": 0,
+        "sollstundenDo": 0,
+        "sollstundenFr": 0,
+        "sollstundenSa": 4,
+        "sollstundenSo": 0
+      },
+      "datum": "2025-03-15",
+      "expected": 4
+    }
+  ],
+  "istStundenEintrag": [
+    {
+      "name": "Arbeit zählt Stunden",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "arbeit",
+        "stunden": 6.5
+      },
+      "customTypen": [],
+      "expected": 6.5
+    },
+    {
+      "name": "Urlaub zählt Tages-Soll",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "urlaub",
+        "stunden": 0
+      },
+      "customTypen": [],
+      "expected": 8
+    },
+    {
+      "name": "Custom Ist gleich Soll",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "fortbildung",
+        "stunden": 2
+      },
+      "customTypen": [
+        {
+          "value": "fortbildung",
+          "isArbeit": true,
+          "istGleichSoll": true
+        }
+      ],
+      "expected": 8
+    }
+  ],
+  "feiertage": [
+    {
+      "name": "Bayern 2025 plus Betriebsfeier",
+      "jahr": 2025,
+      "customFeiertage": [
+        {
+          "datum": "2025-03-19",
+          "name": "Betriebsfeier"
+        },
+        {
+          "datum": "2026-01-02",
+          "name": "Folgejahr"
+        }
+      ],
+      "expectedDates": [
+        "2025-01-01",
+        "2025-01-06",
+        "2025-03-19",
+        "2025-04-18",
+        "2025-04-21",
+        "2025-05-01",
+        "2025-05-29",
+        "2025-06-09",
+        "2025-06-19",
+        "2025-08-15",
+        "2025-10-03",
+        "2025-11-01",
+        "2025-12-25",
+        "2025-12-26"
+      ],
+      "expectedNames": {
+        "2025-03-19": "Betriebsfeier"
+      }
+    }
+  ],
+  "saldo": [
+    {
+      "name": "Startdatum und Stichtag taggenau",
+      "username": "monteur",
+      "jahr": 2025,
+      "startdatum": "2025-03-17",
+      "heute": "2025-03-19",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintraege": [],
+      "buchungen": [],
+      "customTypen": [],
+      "customFeiertage": [],
+      "expected": -24
+    },
+    {
+      "name": "Betrieblicher Feiertag neutral",
+      "username": "monteur",
+      "jahr": 2025,
+      "startdatum": "2025-03-17",
+      "heute": "2025-03-19",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintraege": [],
+      "buchungen": [],
+      "customTypen": [],
+      "customFeiertage": [
+        {
+          "datum": "2025-03-19",
+          "name": "Betriebsfeier"
+        }
+      ],
+      "expected": -16
+    },
+    {
+      "name": "Wochentagsmodus und manuelle Buchungen beachten Datumsgrenzen",
+      "username": "monteur",
+      "jahr": 2025,
+      "startdatum": "2025-03-17",
+      "heute": "2025-03-19",
+      "mitarbeiter": {
+        "sollzeitJeWochentag": true,
+        "sollstundenMo": 8,
+        "sollstundenDi": 0,
+        "sollstundenMi": 4,
+        "sollstundenDo": 0,
+        "sollstundenFr": 0,
+        "sollstundenSa": 0,
+        "sollstundenSo": 0
+      },
+      "eintraege": [],
+      "buchungen": [
+        {
+          "username": "monteur",
+          "datum": "2025-03-16",
+          "betrag": 10,
+          "kommentar": "vor Start"
+        },
+        {
+          "username": "monteur",
+          "datum": "2025-03-19",
+          "betrag": 2,
+          "kommentar": "im Zeitraum"
+        },
+        {
+          "username": "monteur",
+          "datum": "2025-03-20",
+          "betrag": 10,
+          "kommentar": "nach Stichtag"
+        }
+      ],
+      "customTypen": [],
+      "customFeiertage": [],
+      "expected": -10
+    },
+    {
+      "name": "Jahreswechsel-Saldo vergangenes Jahr",
+      "username": "monteur",
+      "jahr": 2025,
+      "startdatum": "2025-03-17",
+      "heute": "2026-01-15",
+      "mitarbeiter": {
+        "sollzeitJeWochentag": true,
+        "sollstundenMo": 8,
+        "sollstundenDi": 0,
+        "sollstundenMi": 0,
+        "sollstundenDo": 0,
+        "sollstundenFr": 0,
+        "sollstundenSa": 0,
+        "sollstundenSo": 0
+      },
+      "eintraege": [],
+      "buchungen": [],
+      "customTypen": [],
+      "customFeiertage": [],
+      "expected": -320
+    }
+  ],
+  "urlaubsanspruch": [
+    {
+      "name": "Null bleibt Null",
+      "mitarbeiter": {
+        "urlaubstageProJahr": {
+          "2025": 0
+        }
+      },
+      "jahr": 2025,
+      "expected": 0
+    },
+    {
+      "name": "Fehlendes Jahr fällt auf 30 zurück",
+      "mitarbeiter": {
+        "urlaubstageProJahr": {
+          "2024": 0
+        }
+      },
+      "jahr": 2025,
+      "expected": 30
+    },
+    {
+      "name": "JSON-String mit Null",
+      "mitarbeiter": {
+        "urlaubstageProJahr": "{\"2025\":0}"
+      },
+      "jahr": 2025,
+      "expected": 0
+    }
+  ]
+}

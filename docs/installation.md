@@ -249,10 +249,27 @@ Für automatische Erinnerungen per WhatsApp:
 ```bash
 # Material-Erinnerungen (täglich 7:00)
 0 7 * * * docker exec baukalkulation-KÜRZEL-app php /var/www/html/cron_material_erinnerung.php
-
-# Stunden-Erinnerungen (Mo-Fr 17:00)
-0 17 * * 1-5 docker exec baukalkulation-KÜRZEL-app php /var/www/html/cron_stunden_erinnerung.php
 ```
+
+Die Stunden-Erinnerung läuft bei Docker-Installationen bereits automatisch im App-Container
+(Crontab in `Dockerfile.app`, Takt 15 Minuten; wegen Tagessperre höchstens einmal täglich).
+Ohne `--datum` prüft sie den Vortag; Sonntage, Feiertage und Tage ohne Soll werden übersprungen.
+
+Nur bei Installation ohne Docker sollte die Stunden-Erinnerung täglich eingeplant werden:
+
+```bash
+# Stunden-Erinnerungen ohne Docker (prüft den Vortag)
+0 7 * * * php /pfad/zur/app/bin/console zeit:erinnerung
+```
+
+Der Stunden-Erinnerungsbefehl kann bei Bedarf manuell mit Datum und erzwungener erneuter Prüfung gestartet werden:
+
+```bash
+docker compose exec -u www-data app php bin/console zeit:erinnerung [--datum=JJJJ-MM-TT] [--force]
+```
+
+`cron_stunden_erinnerung.php` bleibt als Weiterleitung vorhanden; neue Cron-Einträge sollten den Console-Befehl
+verwenden.
 
 ---
 

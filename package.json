@@ -1,6 +1,6 @@
 {
     "name": "baukalkulation-es",
-    "version": "3.0.11",
+    "version": "3.0.12",
     "private": true,
     "description": "Baukalkulation ES – Frontend Build System (Vite)",
     "scripts": {
@@ -9,7 +9,8 @@
         "preview": "vite preview",
         "minify":  "terser public/script.js --compress passes=2 --mangle --output public/script.min.js",
         "check-versions": "node scripts/check-versions.mjs",
-        "version:sync": "node scripts/sync-version.mjs"
+        "version:sync": "node scripts/sync-version.mjs",
+        "test:js": "node --test \"tests/js/*.test.mjs\""
     },
     "devDependencies": {
         "terser": "^5.49.0",

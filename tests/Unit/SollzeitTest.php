@@ -85,4 +85,13 @@ final class SollzeitTest extends TestCase
         self::assertSame(3.0, Sollzeit::istStundenEintrag($mitarbeiter, $eintrag('legacy-custom'), ['legacy-custom']));
         self::assertSame(0.0, Sollzeit::istStundenEintrag($mitarbeiter, $eintrag('unknown')));
     }
+
+    public function testUrlaubsanspruchBewahrtNullUndNutztDreissigNurBeiFehlendemJahr(): void
+    {
+        self::assertSame(0.0, Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => ['2025' => 0]], 2025));
+        self::assertSame(24.5, Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => ['2025' => 24.5]], 2025));
+        self::assertSame(30.0, Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => ['2024' => 0]], 2025));
+        self::assertSame(0.0, Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => '{"2025":0}'], 2025));
+        self::assertSame(30.0, Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => 'kaputt'], 2025));
+    }
 }

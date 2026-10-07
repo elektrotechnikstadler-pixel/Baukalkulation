@@ -56,7 +56,7 @@
 </div>
 <header class="doc">
   <h1>📖 Bedienungsanleitung – Baukalkulation ES</h1>
-  <p>Version 3.0.10 · Handbuch für die tägliche Arbeit mit Projekten, Zeiterfassung, Auswertung und Verwaltung</p>
+  <p>Version 3.0.12 · Handbuch für die tägliche Arbeit mit Projekten, Zeiterfassung, Auswertung und Verwaltung</p>
 </header>
 
 <div class="wrap">
@@ -96,7 +96,7 @@
       <h2>1. Anmeldung &amp; Start</h2>
       <p>Melden Sie sich mit Ihrem Benutzernamen und Passwort an. Nach der Anmeldung gelangen Sie – je nach Einstellung – auf die zuletzt geöffnete Ansicht oder das Dashboard.</p>
       <ul>
-        <li>Die installierte <strong>Version</strong> sehen Sie jederzeit unten links in der Fußzeile (z.&nbsp;B. <code>v3.0.10</code>).</li>
+        <li>Die installierte <strong>Version</strong> sehen Sie jederzeit unten links in der Fußzeile (z.&nbsp;B. <code>v3.0.12</code>).</li>
         <li>Die App funktioniert auch als <strong>PWA</strong> (installierbar) und arbeitet bei kurzen Verbindungsabbrüchen offline weiter.</li>
       </ul>
     </section>
@@ -187,21 +187,21 @@
 
       <h3 id="ze-sollzeit">Sollarbeitszeit je Mitarbeiter</h3>
       <p>Öffnen Sie <strong>Verwaltung → Benutzerverwaltung</strong>, wählen Sie bei einem Mitarbeiter <strong>Daten</strong> und speichern Sie die Sollzeit im Mitarbeiterprofil. Mit „Sollzeit je Wochentag“ tragen Sie eigene Werte für Montag bis Sonntag ein. <strong>0 Stunden bedeutet: an diesem Wochentag ist kein Soll vorgesehen.</strong> Bei ausgeschalteter Option gelten stattdessen „Soll/Tag“ und die ausgewählten Arbeitstage.</p>
-      <p>Beim ersten Einschalten werden die bisherigen Sollstunden für die bisherigen Arbeitstage vorbelegt; nicht konfigurierte Tage erhalten 0. Die Sollzeit im Mitarbeiterprofil kann ein Administrator ändern. Administratoren und Master können zusätzlich in der mobilen Zeitübersicht über <strong>Zeiten</strong> (Ansicht <strong>Zeitübersicht</strong>) im Tab <strong>Übersicht</strong> die Felder <strong>Soll/Tag</strong> und <strong>Tage/Wo</strong> anpassen. Dort gibt es keine Eingabe einzelner Wochentags-Sollstunden. <strong>Änderungen an der Sollzeit wirken rückwirkend auf alle Auswertungen, die Jahresansicht der Wochenplanung und das Gleitzeitkonto.</strong> Eine Sollzeit-Historie pro Gültigkeitszeitraum gibt es nicht.</p>
+      <p>Beim ersten Einschalten werden die bisherigen Sollstunden für die bisherigen Arbeitstage vorbelegt; nicht konfigurierte Tage erhalten 0. Die Sollzeit im Mitarbeiterprofil kann ein Administrator ändern. Administratoren und Master können zusätzlich in der mobilen Zeitübersicht über <strong>Zeiten</strong> (Ansicht <strong>Zeitübersicht</strong>) im Tab <strong>Übersicht</strong> die Felder <strong>Soll/Tag</strong> und <strong>Tage/Wo</strong> anpassen. Bei „Sollzeit je Wochentag“ zeigt die mobile Übersicht dort nur die Beschreibung der Wochentage; Änderungen einzelner Tageswerte erfolgen im Mitarbeiterprofil. <strong>Änderungen an der Sollzeit wirken rückwirkend auf alle Auswertungen, die Jahresansicht der Wochenplanung und das Gleitzeitkonto.</strong> Eine Sollzeit-Historie pro Gültigkeitszeitraum gibt es nicht.</p>
 
       <h3 id="ze-feiertage">Feiertage</h3>
       <p>Die Anwendung berücksichtigt ihren hinterlegten bayerischen Feiertagskalender (feste und bewegliche Feiertage) sowie zusätzliche betriebliche Feiertage. Eigene Feiertage verwalten Sie unter <strong>Verwaltung → Allgemein → Feiertage &amp; arbeitsfreie Tage</strong>.</p>
-      <p>Fällt ein Feiertag auf einen Tag mit positivem Soll und gibt es an diesem Datum keinen Zeiteintrag, erscheint eine automatische Feiertagsgutschrift in Höhe des Tages-Solls. An einem Tag ohne Soll gibt es keine Gutschrift. Das Monatssoll bleibt in den normalen Soll/Ist-Auswertungen bestehen; die Feiertagsgutschrift gleicht das Tages-Soll im Ist aus. In der Monats-E-Mail werden Feiertage nicht separat ausgewiesen. Für deren Monatssoll zieht der Cron nur die hinterlegten bayerischen Feiertage ab; zusätzliche betriebliche Feiertage mindern es dort nicht.</p>
+      <p>Fällt ein Feiertag auf einen Tag mit positivem Soll und gibt es an diesem Datum keinen Zeiteintrag, erscheint eine automatische Feiertagsgutschrift in Höhe des Tages-Solls. An einem Tag ohne Soll gibt es keine Gutschrift. Das Monatssoll bleibt in den normalen Soll/Ist-Auswertungen bestehen; die Feiertagsgutschrift gleicht das Tages-Soll im Ist aus. Die Monats-E-Mail rechnet Soll und Ist wie die Zeitübersicht: Feiertage, einschließlich betrieblicher Feiertage, bleiben im Soll enthalten und werden im Ist automatisch gutgeschrieben.</p>
 
       <h3 id="ze-urlaub">Urlaub</h3>
-      <p>Der Urlaubsanspruch wird je Mitarbeiter und Jahr in den Mitarbeiterdaten festgelegt. Bei einer Urlaubsbuchung prüft das System das verbleibende Jahreskontingent; ist es ausgeschöpft, wird die Buchung abgelehnt. Urlaub zählt im Ist mit dem Tages-Soll des jeweiligen Datums, an Tagen ohne Soll mit 0 Stunden. Eine mehrtägige Eingabe legt einzelne Tagesbuchungen an; Wochenenden und hinterlegte Feiertage werden bei der Erfassung übersprungen.</p>
+      <p>Der Urlaubsanspruch wird je Mitarbeiter und Jahr in den Mitarbeiterdaten festgelegt. Der Wert 0 ist möglich; nur wenn für ein Jahr kein Anspruch eingetragen ist, verwendet die Anwendung 30 Tage als Vorgabe. Bei einer Urlaubsbuchung prüft das System das verbleibende Jahreskontingent; ist es ausgeschöpft, wird die Buchung abgelehnt. Urlaub zählt im Ist mit dem Tages-Soll des jeweiligen Datums, an Tagen ohne Soll mit 0 Stunden. Eine mehrtägige Eingabe legt einzelne Tagesbuchungen an; Wochenenden und hinterlegte Feiertage werden bei der Erfassung übersprungen.</p>
       <p>In der Stundenerfassung sehen Sie genommene Urlaubstage und den Anspruch. Im Jahreswechsel-Assistenten können berechtigte Personen den Anspruch für das Folgejahr übernehmen und anpassen.</p>
 
       <h3 id="ze-krank">Krankheit</h3>
       <p>Erfassen Sie Krankheit mit Typ <strong>Krank</strong>, bei Bedarf für einen Datumsbereich. Krankheit zählt pro Datum mit dem aktuellen Tages-Soll; an einem freien Tag werden 0 Stunden angerechnet. Die Zahl der Krankheitstage wird in der Stundenerfassung und den Mitarbeiterübersichten angezeigt.</p>
 
       <h3 id="ze-gleitzeit">Gleitzeitkonto</h3>
-      <p>Das Gleitzeitkonto können Administratoren unter <strong>Verwaltung → Allgemein</strong> aktivieren. Der laufende Saldo addiert für jeden Monat ab dem eingestellten Startdatum die Differenz <strong>Ist minus Soll</strong> sowie manuelle Gleitzeitkonto-Buchungen. Einzelne manuelle Buchungen können einen positiven oder negativen Stundenbetrag und einen verpflichtenden Kommentar enthalten. Der Erfassungstyp „Gleitzeit“ selbst zählt als 0 Ist-Stunden.</p>
+      <p>Das Gleitzeitkonto können Administratoren unter <strong>Verwaltung → Allgemein</strong> aktivieren. Der laufende Saldo addiert taggenau ab dem eingestellten Startdatum bis einschließlich heute die Differenz <strong>Ist minus Soll</strong> sowie manuelle Gleitzeitkonto-Buchungen im gleichen Zeitraum. Einzelne manuelle Buchungen können einen positiven oder negativen Stundenbetrag und einen verpflichtenden Kommentar enthalten. Der Erfassungstyp „Gleitzeit“ selbst zählt als 0 Ist-Stunden.</p>
       <p><strong>Beispiel April 2026:</strong> Bei 8 Sollstunden von Montag bis Freitag hat der Monat 22 Solltage und damit 176 Sollstunden. Angenommen, an 17 Tagen werden je 8 Stunden und an einem weiteren Tag 6 Stunden gearbeitet: Das sind 142 Arbeitsstunden. Zwei Urlaubstage ergeben 16 Ist-Stunden, zwei bayerische Feiertage mit Tages-Soll weitere 16 Ist-Stunden. Insgesamt sind das 174 Ist-Stunden; der Monatsbeitrag zum Konto beträgt <strong>174 − 176 = −2 Stunden</strong>. Für den vollständigen Kontostand kommen die übrigen Monate ab Startdatum und alle manuellen Buchungen hinzu.</p>
       <p>Im Jahreswechsel-Assistenten kann ein berechtigter Benutzer einen gewählten Saldo als Buchung am 1. Januar des Folgejahres übertragen oder den Betrag vorher anpassen.</p>
 
@@ -228,14 +228,14 @@
 
       <h3 id="ze-verwaltung">Zeitverwaltung für berechtigte Personen</h3>
       <p>Über <strong>Zeitverwaltung → Zeitübersicht</strong> öffnen berechtigte Personen eine Monatsübersicht mit den Ansichten <strong>Übersicht</strong>, <strong>Je Monteur</strong> und <strong>Je Tag</strong>. Die Anzeige berücksichtigt die Sichtbarkeitseinstellung des Mitarbeiters „In Zeitverwaltung anzeigen“; außerdem gelten die Rechte der angemeldeten Rolle. Die Zeitübersicht enthält Monatswerte für Soll, Ist und Differenz sowie die passenden Einzelbuchungen.</p>
-      <p>Die <strong>Stundenauswertung</strong> bietet Mitarbeiterfilter, Datumsbereich, Suche, Wochenprüfung und PDF-Export. Berechtigte Personen können dort Einträge nachtragen, bearbeiten oder löschen und Gleitzeitkonto-Buchungen verwalten.</p>
+      <p>Die <strong>Stundenauswertung</strong> bietet Mitarbeiterfilter, Datumsbereich, Suche, Wochenprüfung und PDF-Export. Berechtigte Personen können dort Einträge nachtragen, bearbeiten oder löschen und Gleitzeitkonto-Buchungen verwalten. Bei einer Zeitraumbuchung durch Admin oder Master werden nur Tage mit positivem Soll und ohne Feiertag gebucht.</p>
 
       <h3 id="ze-auswertung">Auswertungen, Exporte und Erinnerungen</h3>
       <ul>
-        <li>Die Stundenerfassung kann als <strong>PDF</strong> ausgegeben werden. Zeitübersicht und Stundenauswertung haben ebenfalls PDF-Exporte; die Mitarbeiter-Auswertung bietet einen <strong>CSV-Export</strong>.</li>
+        <li>Die Stundenerfassung kann als <strong>PDF</strong> ausgegeben werden. Zeitübersicht und Stundenauswertung haben ebenfalls PDF-Exporte; die Mitarbeiter-Auswertung bietet einen <strong>CSV-Export</strong>. Jahreswerte für Soll, Ist und Differenz laufen im aktuellen Jahr bis einschließlich heute und werden mit „(bis heute)“ gekennzeichnet.</li>
         <li>Im Jahreswechsel-Assistenten können die Stundenbuchungen eines Jahres als <strong>Excel-Datei</strong> heruntergeladen werden. Das Abschließen eines Jahres blendet Buchungen nur aus; es löscht sie nicht.</li>
-        <li>Wenn die monatliche Stundenauswertung per E-Mail eingerichtet und aktiviert ist, erstellt der Cron eine PDF-Auswertung des Vormonats mit Soll, Ist, Differenz, Arbeitsstunden sowie Urlaubs- und Krankheitstagen. Feiertage werden in dieser E-Mail aus dem Monatssoll herausgerechnet.</li>
-        <li>Der Cron für die Stunden-Erinnerung prüft den Vortag (außer Sonntag): Er sucht Mitarbeiter, die in der Wochenplanung einer Baustelle zugeteilt waren, aber keinen Arbeitseintrag gebucht haben. Fehlende Einträge werden protokolliert und als Ergebnis/Benachrichtigung gespeichert.</li>
+        <li>Wenn die monatliche Stundenauswertung per E-Mail eingerichtet und aktiviert ist, erstellt der Cron eine PDF-Auswertung des Vormonats mit Soll, Ist, Differenz, Arbeitsstunden sowie Urlaubs- und Krankheitstagen. Die Berechnung entspricht der Zeitübersicht und berücksichtigt auch betriebliche Feiertage.</li>
+        <li>Der Befehl für die Stunden-Erinnerung prüft den Vortag aus der Datenbank: Er sucht Mitarbeiter, die in der Wochenplanung einer Baustelle zugeteilt waren, aber noch keine Buchung für diesen Tag haben. Jede Buchung zählt dabei als erledigt, auch Urlaub oder Krank. Feiertage und Tage ohne Soll werden übersprungen. Die Prüfung läuft höchstens einmal täglich, ist abschaltbar und schreibt das Ergebnis in den Erinnerungs-Log.</li>
       </ul>
 
       <h3 id="ze-projekte">Projektübernahme und Rechte</h3>
@@ -348,6 +348,6 @@
   </main>
 </div>
 
-<footer class="doc">Baukalkulation ES · Bedienungsanleitung · Stand Version 3.0.10</footer>
+<footer class="doc">Baukalkulation ES · Bedienungsanleitung · Stand Version 3.0.12</footer>
 </body>
 </html>

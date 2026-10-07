@@ -3,7 +3,7 @@ COMPOSER ?= composer
 NPM      ?= npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install verify lint fix type-check test test-unit test-api test-pgsql test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
+.PHONY: help install verify lint fix type-check test test-unit test-api test-js test-pgsql test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
 
 help: ## Diese Übersicht
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -23,7 +23,7 @@ fix: ## Formatierung automatisch korrigieren
 type-check: ## Statische Analyse (PHPStan)
 	$(PHP) vendor/bin/phpstan analyse --memory-limit=2G
 
-test: ## Alle Tests
+test: test-js ## Alle Tests
 	$(PHP) vendor/bin/phpunit
 
 test-unit: ## Nur Unit-Tests
@@ -31,6 +31,9 @@ test-unit: ## Nur Unit-Tests
 
 test-api: ## Nur API-Tests
 	$(PHP) vendor/bin/phpunit --testsuite api
+
+test-js: ## JS-Helfer testen
+	$(NPM) run test:js
 
 PG_TEST_PORT ?= 55432
 test-pgsql: ## Alle Tests gegen PostgreSQL (Wegwerf-Container per Docker)

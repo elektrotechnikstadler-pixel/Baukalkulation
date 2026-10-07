@@ -15,7 +15,7 @@
 require_once __DIR__ . '/vendor/autoload.php';
 
 use App\Services\MailService;
-use App\Services\Sollzeit;
+use App\Services\Stundenauswertung;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -26,7 +26,7 @@ $force = in_array('--force', $argv ?? [], true);
 function saLog(string $msg): void {
     $ts = date('Y-m-d H:i:s');
     echo "[$ts] $msg\n";
-    @file_put_contents(DATA_DIR . 'erinnerung.log', "[$ts] $msg\n", FILE_APPEND);
+    file_put_contents(DATA_DIR . 'erinnerung.log', "[$ts] $msg\n", FILE_APPEND);
 }
 
 saLog('=== Stundenauswertung-E-Mail gestartet' . ($force ? ' [FORCE]' : '') . ' ===');
@@ -69,7 +69,7 @@ if (!$empfaenger || !filter_var($empfaenger, FILTER_VALIDATE_EMAIL)) {
 $lockFile = DATA_DIR . 'stundenauswertung_email_sent.txt';
 $zyklusKey = date('Y-m');
 if (!$force) {
-    if (file_exists($lockFile) && trim(@file_get_contents($lockFile)) === $zyklusKey) {
+    if (is_file($lockFile) && trim((string)file_get_contents($lockFile)) === $zyklusKey) {
         saLog("Für diesen Monat ($zyklusKey) bereits gesendet."); exit(0);
     }
     if ((int)date('j') < $tag) { saLog('Tag ' . date('j') . " < $tag -> noch nicht fällig."); exit(0); }
@@ -78,72 +78,15 @@ if (!$force) {
 
 // -- Zeitraum: Vormonat --
 $monatStart = date('Y-m-01', strtotime('first day of last month'));
-$monatEnde  = date('Y-m-t', strtotime('first day of last month'));
-$jahr       = (int)date('Y', strtotime($monatStart));
+$monatKey   = date('Y-m', strtotime($monatStart));
 $monatLabel = strftime_de($monatStart);
 
-// -- Feiertage (Bayern) für das Jahr --
-$feiertage = bayerischeFeiertage($jahr);
-$feiertagSet = array_flip($feiertage);
-
-// -- Nutzer laden --
-$users = $db->query("SELECT username, kuerzel, role, sollstundenTag, sollTageWoche, arbeitstage, sollzeitJeWochentag, sollstundenMo, sollstundenDi, sollstundenMi, sollstundenDo, sollstundenFr, sollstundenSa, sollstundenSo, showInZeitverwaltung FROM users ORDER BY LOWER(username)")->fetchAll();
-$users = array_filter($users, fn($u) => ($u['role'] ?? '') !== 'admin' && (int)($u['showInZeitverwaltung'] ?? 1) !== 0);
-
-// -- Zeiterfassung des Monats --
-$stmt = $db->prepare("SELECT username, datum, typ, stunden FROM zeiterfassung WHERE datum >= ? AND datum <= ?");
-$stmt->execute([$monatStart, $monatEnde]);
-$zeit = $stmt->fetchAll();
-$byUser = [];
-foreach ($zeit as $z) { $byUser[$z['username']][] = $z; }
-
-$rows = [];
-$sumSoll = 0; $sumIst = 0;
-foreach ($users as $u) {
-    $uname   = $u['username'];
-    $customTypen = $settings['ze_custom_typen'] ?? [];
-    if (!is_array($customTypen)) $customTypen = [];
-
-    // Soll-Arbeitstage im Monat (Arbeitstag & kein Feiertag)
-    $soll = 0.0;
-    for ($t = strtotime($monatStart); $t <= strtotime($monatEnde); $t = strtotime('+1 day', $t)) {
-        $key = date('Y-m-d', $t);
-        if (!isset($feiertagSet[$key])) $soll += Sollzeit::tagesSoll($u, $key);
-    }
-
-    $list = $byUser[$uname] ?? [];
-    $arbeitStd  = 0.0;
-    $ist = 0.0;
-    $urlaubTage = [];
-    $krankTage  = [];
-    foreach ($list as $e) {
-        $typ = $e['typ'] ?? '';
-        if ($typ === 'arbeit') $arbeitStd += (float)($e['stunden'] ?? 0);
-        if ($typ === 'urlaub') $urlaubTage[$e['datum']] = true;
-        if ($typ === 'krank') $krankTage[$e['datum']] = true;
-        $istGleichSoll = in_array($typ, ['feiertag', 'urlaub', 'krank'], true);
-        if (!$istGleichSoll) {
-            foreach ($customTypen as $customTyp) {
-                if (is_array($customTyp) && ($customTyp['value'] ?? null) === $typ) {
-                    $istGleichSoll = ($customTyp['istGleichSoll'] ?? false) === true;
-                    break;
-                }
-            }
-        }
-        // Feiertage fehlen im Monatssoll; Tages-Soll-Gutschriften dürfen das Ist dort nicht erhöhen.
-        if (isset($feiertagSet[$e['datum']]) && $istGleichSoll) continue;
-        $ist += Sollzeit::istStundenEintrag($u, $e, $customTypen);
-    }
-    $uCount = count($urlaubTage);
-    $kCount = count($krankTage);
-    $diff = $ist - $soll;
-
-    $sumSoll += $soll; $sumIst += $ist;
-    $rows[] = [
-        'name'   => $uname . ($u['kuerzel'] ? ' (' . $u['kuerzel'] . ')' : ''),
-        'soll'   => $soll, 'ist' => $ist, 'diff' => $diff,
-        'arbeit' => $arbeitStd, 'urlaub' => $uCount, 'krank' => $kCount,
-    ];
+$rows = Stundenauswertung::monat($db, $settings, $monatKey);
+$sumSoll = 0.0;
+$sumIst = 0.0;
+foreach ($rows as $r) {
+    $sumSoll += (float)$r['soll'];
+    $sumIst += (float)$r['ist'];
 }
 
 if (empty($rows)) { saLog('Keine Mitarbeiter/Buchungen für den Monat.'); }
@@ -186,7 +129,7 @@ $html = '<html><head><meta charset="utf-8"><style>'
     . '<td class="num" style="color:' . ($sumDiff >= 0 ? '#2E7D32' : '#C62828') . '">' . ($sumDiff >= 0 ? '+' : '') . $fmt($sumDiff) . '</td>'
     . '<td class="num"></td><td class="num"></td><td class="num"></td></tr></tfoot>'
     . '</table>'
-    . '<p class="foot">Ist wird je Erfassungstyp nach Tages-Soll und erfassten Stunden berechnet. Feiertage mindern das Monatssoll. '
+    . '<p class="foot">Ist wird je Erfassungstyp nach Tages-Soll und erfassten Stunden berechnet. Feiertage werden wie in der Zeitübersicht berücksichtigt. '
     . 'Automatisch erzeugte Monatsübersicht.</p>'
     . '</body></html>';
 
@@ -212,7 +155,7 @@ $bodyHtml = '<p>Anbei die monatliche Stundenauswertung (' . $h($monatLabel) . ')
 try {
     MailService::send($smtpCfg, $empfaenger, '', $subject, $bodyHtml, $pdfBytes, $pdfName, 'application/pdf');
     saLog("Stundenauswertung-E-Mail an $empfaenger gesendet ($monatLabel, " . count($rows) . ' Mitarbeiter).');
-    if (!$force) @file_put_contents($lockFile, $zyklusKey);
+    if (!$force) file_put_contents($lockFile, $zyklusKey);
 } catch (Throwable $e) {
     saLog('FEHLER: Versand: ' . $e->getMessage()); exit(1);
 }
@@ -220,30 +163,6 @@ try {
 saLog('=== Stundenauswertung-E-Mail fertig ===');
 
 // ── Hilfsfunktionen ──────────────────────────────────────────
-function bayerischeFeiertage(int $year): array {
-    // Ostersonntag per Gauß-Algorithmus (ohne ext-calendar).
-    $a = $year % 19; $b = intdiv($year, 100); $c = $year % 100;
-    $d = intdiv($b, 4); $e = $b % 4; $f = intdiv($b + 8, 25);
-    $g = intdiv($b - $f + 1, 3);
-    $hh = (19 * $a + $b - $d - $g + 15) % 30;
-    $i = intdiv($c, 4); $k = $c % 4;
-    $l = (32 + 2 * $e + 2 * $i - $hh - $k) % 7;
-    $m = intdiv($a + 11 * $hh + 22 * $l, 451);
-    $month = intdiv($hh + $l - 7 * $m + 114, 31);
-    $day = (($hh + $l - 7 * $m + 114) % 31) + 1;
-    $easter = strtotime(sprintf('%04d-%02d-%02d', $year, $month, $day));
-    $rel = fn($days) => date('Y-m-d', strtotime("$days days", $easter));
-    return [
-        "$year-01-01", "$year-01-06",
-        $rel(-2), $rel(1),
-        "$year-05-01",
-        $rel(39), $rel(50), $rel(60),
-        "$year-08-15",
-        "$year-10-03", "$year-11-01",
-        "$year-12-25", "$year-12-26",
-    ];
-}
-
 function strftime_de(string $ymd): string {
     $mn = ['', 'Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
     $t = strtotime($ymd);
