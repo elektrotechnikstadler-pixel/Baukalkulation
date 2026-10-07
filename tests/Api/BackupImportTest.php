@@ -115,6 +115,21 @@ final class BackupImportTest extends ApiTestCase
         $this->assertSame(['Muster GmbH'], array_column($this->assertOk($this->api->get('load_kunden'))['kunden'], 'firma'));
     }
 
+    public function testSicherungImUnterordnerWirdEingespielt(): void
+    {
+        $this->befuelle();
+        $entries = [];
+        foreach ($this->downloadEntries() as $name => $content) {
+            $entries['2026-09-25/' . $name] = $content;
+        }
+        $zip = $this->buildZip($entries);
+        $this->assertOk($this->api->post('save_kunde', ['firma' => 'Nach der Sicherung']));
+
+        $this->assertOk($this->api->upload('backup_upload', 'backup', $zip));
+
+        $this->assertSame(['Muster GmbH'], array_column($this->assertOk($this->api->get('load_kunden'))['kunden'], 'firma'));
+    }
+
     public function testManipulierteSicherungWirdAbgelehnt(): void
     {
         $this->befuelle();

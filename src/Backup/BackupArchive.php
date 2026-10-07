@@ -34,15 +34,16 @@ final class BackupArchive
             if ($password !== null && $password !== '') {
                 $zip->setPassword($password);
             }
+            $prefix = self::zipPrefix($zip);
             // Nur bekannte Dateien entpacken – keine Pfade aus dem Archiv übernehmen.
             foreach ([self::FILE_JSON, self::FILE_DB, self::FILE_MANIFEST] as $name) {
-                $stat = $zip->statName($name);
+                $stat = $zip->statName($prefix . $name);
                 if ($stat === false) continue;
                 $encrypted = ($stat['encryption_method'] ?? 0) !== \ZipArchive::EM_NONE;
                 if ($encrypted && ($password === null || $password === '')) {
                     throw new InvalidBackupException('Die Sicherung ist verschlüsselt – bitte Passwort angeben.', true);
                 }
-                $content = $zip->getFromName($name);
+                $content = $zip->getFromName($prefix . $name);
                 if ($content === false) {
                     throw $encrypted
                         ? new InvalidBackupException('Passwort falsch oder Sicherung beschädigt.', true)
@@ -57,6 +58,19 @@ final class BackupArchive
             $zip->close();
         }
         return self::fromFiles($tmp, $tmp);
+    }
+
+    /** Von Hand gezippte Sicherungsordner enthalten die Dateien in genau einem Unterordner (z. B. "2026-09-25/"). */
+    private static function zipPrefix(\ZipArchive $zip): string
+    {
+        if ($zip->statName(self::FILE_JSON) !== false) return '';
+        $found = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            if (preg_match('#^([^/\\\\]+/)' . preg_quote(self::FILE_JSON, '#') . '$#', (string)$zip->getNameIndex($i), $m)) {
+                $found[] = $m[1];
+            }
+        }
+        return count($found) === 1 ? $found[0] : '';
     }
 
     /** Gespeicherte Sicherung in BACKUP_DIR (Ordner). */
