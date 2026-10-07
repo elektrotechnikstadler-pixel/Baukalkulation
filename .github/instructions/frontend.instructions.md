@@ -11,3 +11,4 @@ applyTo: "**/public/**/*.js, **/public/**/*.html, **/public/**/*.css"
 - `script.min.js` ist generiert – nie direkt bearbeiten.
 - Das Vue/TS-Frontend unter `src/frontend/` ist inaktiv; dort nichts Neues anlegen.
 - Nutzerdaten per `textContent` bzw. escaped einfügen, nie ungeprüft per `innerHTML`.
+- Zeiterfassung: Soll/Ist, Feiertage, Gleitzeit, Urlaubsanspruch nur über `public/sollzeit.js` (PHP-Gegenstück synchron, Fallliste `tests/fixtures/sollzeit/faelle.json`, `npm.cmd run test:js`) – E-041.

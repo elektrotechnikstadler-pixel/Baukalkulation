@@ -15,3 +15,4 @@ applyTo: "**/src/**/*.php, **/modules/**/*.php, **/public/*.php, **/cron_*.php, 
 - Geheime Einstellungen über `Auth::SECRET_SETTINGS` / `SecretBox` speichern, nie im Klartext.
 - Kein `@`-Operator; Fehlerfälle explizit prüfen.
 - Neuer Code ohne neue PHPStan-Baseline-Einträge (Level 5).
+- Zeiterfassung: Soll/Ist, Feiertage, Gleitzeit, Urlaubsanspruch nur über `Services\Sollzeit`, `Feiertage`, `Gleitzeit` (JS-Gegenstück `public/sollzeit.js` synchron halten) – E-041.

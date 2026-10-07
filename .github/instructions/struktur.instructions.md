@@ -11,7 +11,7 @@ Abläufe werden übernommen, Werkzeuge durch PHP-Gegenstücke ersetzt. Keine Pyt
 |---|---|
 | `src/<paket>/` + `py.typed` | `src/` (PSR-4 `App\`), Module in `modules/<name>/`; neuer Code vollständig typisiert |
 | `cli.py` (Typer, `--version`) | `bin/console` (symfony/console) – neue CLI-Befehle dort, keine neuen Root-Skripte |
-| `tests/` + `conftest.py`, Marker `slow` | `tests/Unit`, `tests/Api`, Testsuites in `phpunit.xml.dist`, `#[Group('slow')]` |
+| `tests/` + `conftest.py`, Marker `slow` | `tests/Unit`, `tests/Api`, Testsuites in `phpunit.xml.dist`, `#[Group('slow')]`; JS-Helfer: `tests/js/*.test.mjs` mit `node --test` (Abweichung, Parität E-041) |
 | uv + `pyproject.toml` | Composer `composer.json` (+ npm nur für Frontend) |
 | ruff (Lint + Format) | PHP-CS-Fixer (PER-CS 2.0) |
 | ty (Typprüfung) | PHPStan (Baseline darf nur schrumpfen) |

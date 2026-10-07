@@ -48,3 +48,9 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-04 | sollzeit-wochentage | Tests | API-Test zu strikt auf JSON-Typ von 0 (1 roter Lauf) | – | 1 | – |
 | 2026-10-04 | anleitung-zeiterfassung | Planung | Anleitung beschrieb ZE003 als Speicher-Blocker (Major) | nur Katalog statt aktivem Pfad geprüft | 1 | E-081 |
 | 2026-10-04 | anleitung-zeiterfassung | Werkzeuge | PG-Testskript brach unter PowerShell 5.1 ab (`Stop` + stderr von docker) | NativeCommandError | 1 | E-082 |
+| 2026-10-07 | zeiterfassung-abgleich | Planung | Stunden-Erinnerung seit DB-Umstellung wirkungslos, Anleitung beschrieb sie als aktiv (Hoch) | Cron-Einstiegspunkte bei Datenquellen-Umstellung nicht geprüft | 1 | E-083 |
+| 2026-10-07 | zeiterfassung-abgleich | Frontend | Monats-Mail ohne betriebliche Feiertage; Wochenplanung ohne Wochentags-Soll (3.0.11) | duplizierte Feiertags-/Soll-Logik | 2 | E-041 → Instructions |
+| 2026-10-07 | zeiterfassung-abgleich | Planung | 5 Explore-Befunde „Hoch/Mittel“ widerlegt (betriebliche Feiertage, Legacy-Typen, Cron-Typen) | Subagent-Befund ungeprüft | 3 | E-072 |
+| 2026-10-07 | zeiterfassung-abgleich | Planung | Ungeplanter Benutzerfilter in der Erinnerung (Major) | Vertragsabweichung nicht gemeldet | 1 | E-084 |
+| 2026-10-07 | zeiterfassung-abgleich | Planung | Übernommene Doku-Cronzeit passte nicht zur Vortagslogik (Major) | Doku-Aussage nicht gegen aktiven Pfad geprüft | 2 | E-081 |
+| 2026-10-07 | zeiterfassung-abgleich | Tests | PHP↔JS-Parität ungetestet | fehlende JS-Testumgebung | 1 | E-036 |

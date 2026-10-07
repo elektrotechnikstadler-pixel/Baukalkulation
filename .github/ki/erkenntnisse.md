@@ -45,13 +45,14 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-033 | Parser-Randfälle nur in der betroffenen Zeile manipulieren; fremdes Zahlenformat in oberster Westmetall-Zeile → ältere Zeile ist akzeptiert (Veraltet nach 5 Tagen) | Sonst besteht auch ein falscher Fallback | AP-20260929-kupferpreis | nur hier |
 | E-034 | Externe Abrufe von Anfang an injizierbar planen | Gutfall (Admin-`force`) sonst nicht testbar | AP-20260929-kupferpreis | nur hier |
 | E-035 | Zeichensatz von Importdateien zeilenweise entscheiden (UTF-8 gültig → UTF-8, sonst Indizbytes CP850/Windows-1252, Datei-Vorgabe nur bei Gleichstand); Tests mit ASCII-Präfix und Mischdateien | Datanorm von FEGA & Schmitt ist CP850; Stichprobe allein klassifiziert falsch | AP-20260929-projektansicht | nur hier |
+| E-036 | Rechenregeln mit PHP- und JS-Implementierung über eine gemeinsame Fallliste prüfen (PHPUnit + `npm.cmd run test:js`, `node:test`/`node:vm`, keine neuen Pakete) | Parität war ungetestet; Abweichungen fielen erst in Anzeigen auf | AP-20261007-zeiterfassung-abgleich | nur hier |
 
 ## Frontend
 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
 | E-040 | In `vite.config.js` `publicDir: false` belassen | Sonst kopiert Vite `public/` nach `public/dist/` | Umbau Phase 1 | nur hier |
-| E-041 | Soll/Ist der Zeiterfassung nur über `src/Services/Sollzeit.php` bzw. das Gegenstück `public/sollzeit.js` berechnen (beide synchron halten); JS `getDay()` = ISO für Mo–Sa, nur Sonntag 0 ↔ 7 | Soll-Logik war 5-fach dupliziert und lief auseinander | AP-20261004-sollzeit-wochentage | nur hier |
+| E-041 | Soll/Ist, Feiertage, Gleitzeitsaldo und Urlaubsanspruch der Zeiterfassung nur über `src/Services/Sollzeit.php`, `Feiertage.php`, `Gleitzeit.php` bzw. das Gegenstück `public/sollzeit.js` berechnen (beide synchron halten, Fallliste `tests/fixtures/sollzeit/faelle.json` erweitern); JS `getDay()` = ISO für Mo–Sa, nur Sonntag 0 ↔ 7 | Soll-Logik war 5-fach, Feiertage 7-fach dupliziert und liefen auseinander (2. Auftreten: Monats-Mail ohne betriebliche Feiertage) | AP-20261004-sollzeit-wochentage, AP-20261007-zeiterfassung-abgleich | frontend.instructions.md, php-backend.instructions.md |
 
 ## Struktur (Vorlage copier-astral)
 
@@ -88,6 +89,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-079 | Jeder Container-Name in Compose (`APP_NAME`, `AUTOHEAL_NAME`, `UPDATER_NAME`) braucht im Installer einen projektbezogenen Standard und eine Konfliktprüfung | 2. Instanz brach mit „container name already in use“ (Updater) ab | Release 3.0.8 | nur hier |
 | E-081 | Jede für Nutzer sichtbare Änderung ergänzt `public/bedienungsanleitung.html` im selben AP; Aussagen aus dem Code belegen und vom Reviewer gegen den aktiven UI-/API-Pfad prüfen lassen (nicht nur gegen Kataloge) | Vorgabe Nutzer 2026-10-04; Anleitung versprach ZE003 als Speicher-Blocker (Major) | AP-20261004-anleitung-zeiterfassung | AGENTS.md, ki-leitstand.agent.md, architekt.agent.md |
 | E-082 | Vor jedem Commit Gesamtlauf auf SQLite und PostgreSQL lokal (`scripts/test-pgsql.ps1`, Docker Desktop starten); PostgreSQL nicht an die CI delegieren | Vorgabe Nutzer 2026-10-04 | Nutzer | AGENTS.md, ki-leitstand.agent.md |
+| E-083 | Wird eine Datenquelle umgestellt (z. B. JSON → Datenbank), alle Einstiegspunkte inkl. `cron_*.php`, `bin/console` und Admin-Trigger per grep auf die alte Quelle prüfen | Stunden- und Material-Erinnerung lasen nach der DB-Umstellung weiter JSON-Dateien und waren unbemerkt wirkungslos (Hoch) | AP-20261007-zeiterfassung-abgleich | nur hier |
+| E-084 | Der Schnittstellen-Vertrag im AP ist bindend: zusätzliche Filter/Einschränkungen nur als gemeldete Abweichung im AP, nie still | Erinnerung übersprang ungeplant Benutzer mit `showInZeitverwaltung = 0` (Major) | AP-20261007-zeiterfassung-abgleich | nur hier |
 
 ## Abgelöst
 
