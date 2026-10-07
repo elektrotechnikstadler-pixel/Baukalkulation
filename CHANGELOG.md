@@ -30,10 +30,40 @@
   (Stand 2026-10-01)
 - **PostgreSQL-Testläufe** für die Änderungen ab Kupferpreis/Datanorm (v3.0.1) bis v3.0.3 stehen aus
   (Docker-Dienst lokal nicht verfügbar); in der CI laufen sie automatisch. (Stand 2026-10-01)
+- **Material-Erinnerung vor Datenbankumstellung:** `cron_material_erinnerung.php` liest noch JSON-Dateien aus der
+  Zeit vor der Datenbankumstellung. (Stand 2026-10-07)
+- **Zeiterfassung Stufe 2:** Monats-Mail als `bin/console`-Befehl, `ZeiterfassungActions` verschlanken,
+  Offline-Cache-Revision für die Wochenplanung sowie die offenen Prüfpfade ZE003/ZE004. (Stand 2026-10-07)
 
 ---
 
 ## Unveröffentlicht
+
+---
+
+## v3.0.12 – Zeiterfassung: Auswertungen und Anzeigen abgeglichen
+
+### Behoben
+- Zeiterfassung: Die Stunden-Erinnerung liest die Datenbank statt alter JSON-Dateien und berücksichtigt den
+  Abschalter.
+- Monats-Mail: Soll und Ist entsprechen der Zeitübersicht; betriebliche Feiertage werden berücksichtigt.
+- Gleitzeitsaldo: Laufende Jahre werden taggenau ab Startdatum bis einschließlich heute berechnet.
+- Mitarbeiter-Jahresauswertungen: Soll, Ist und Differenz laufen im aktuellen Jahr bis heute.
+- Soll-Anzeigen zeigen die Sollzeitbeschreibung statt eines irreführenden einzelnen Soll/Tag-Werts.
+- Urlaubsanspruch 0 bleibt in Anzeige und Vorprüfung erhalten; 30 Tage gelten nur ohne Jahreseintrag.
+- Stundenauswertung-PDFs verwenden das Jahr des Filterzeitraums für Feiertage, Urlaub und Gleitzeit.
+- Admin-Zeitraumbuchungen erzeugen nur Einträge an Tagen mit Soll und ohne Feiertag.
+- Mobile Zeitübersicht: die pauschale Werktage-Karte wurde entfernt.
+- Urlaubsanspruch 0 ist speicherbar.
+
+### Geändert
+- Gleitzeit- und Jahreswerte verwenden als Stichtag im aktuellen Jahr „bis einschließlich heute“.
+- Monats-Mail stellt Soll/Ist wie die Zeitübersicht dar.
+- Neuer Befehl `zeit:erinnerung` ersetzt die direkte Cron-Logik für Stunden-Erinnerungen.
+
+### Sonstiges
+- Feiertags- und Gleitzeitberechnung sind in PHP und JavaScript zentralisiert.
+- JS-Paritätstests sichern die Sollzeit-Helfer gegen die gemeinsame Fallliste ab.
 
 ---
 

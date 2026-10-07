@@ -2,7 +2,7 @@
   "name": "Planning Dashboard",
   "short_name": "Planning",
   "description": "Projektkalkulation & Angebotserstellung für Baustellen",
-  "version": "3.0.11",
+  "version": "3.0.12",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
