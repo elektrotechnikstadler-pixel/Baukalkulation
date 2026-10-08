@@ -285,6 +285,9 @@ final class UpdatePruefung
                 ]);
                 $body = curl_exec($ch);
                 $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                if (!is_string($body) || $code !== 200) {
+                    error_log('[UpdatePruefung] HTTP ' . $code . ' ' . curl_error($ch));
+                }
                 curl_close($ch);
                 return is_string($body) && $code === 200 ? $body : null;
             }
