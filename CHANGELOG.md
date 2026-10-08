@@ -41,6 +41,18 @@
 
 ---
 
+## v3.0.13 – Mobile Stundenerfassung: neue Einträge mit 0 h
+
+### Behoben
+- Mobile Stundenerfassung: Neu angelegte Arbeits- und Abwesenheitseinträge sowie manuell erfasste
+  Custom-Arbeitstypen wurden mit 0 h gespeichert; die eingegebene bzw. aus Von/Bis/Pause berechnete
+  Zeit wurde erst beim Bearbeiten übernommen.
+
+### Sonstiges
+- Update-Prüfung protokolliert fehlgeschlagene HTTP-Abrufe (Statuscode und cURL-Fehler).
+
+---
+
 ## v3.0.12 – Zeiterfassung: Auswertungen und Anzeigen abgeglichen
 
 ### Behoben
