@@ -5132,7 +5132,8 @@ function saveStundenerfassung() {
   // Custom-Arbeitstyp ohne "Ist = Soll": manuelle Stunden; mit "Ist = Soll": Soll/Tag automatisch.
   const _isManualCustomArbeitM = isArbeitTypM(typ) && typ !== 'arbeit' && typ !== 'feiertag' && !mTypIstGleichSoll(typ);
   const enteredHours = parseFloat(document.getElementById('seStunden').value) || 0;
-  const stunden = (typ === 'arbeit' || typ === 'abwesend' || _isManualCustomArbeitM || sonstigZeitspanne)
+  const usesManualHours = typ === 'arbeit' || typ === 'abwesend' || _isManualCustomArbeitM || sonstigZeitspanne;
+  const stunden = usesManualHours
     ? enteredHours
     : bkIstStundenEintrag(seMobileUser, { datum, typ, stunden: 0 }, appSettings.ze_custom_typen);
   const baustelleId = typ === 'arbeit' ? (parseInt(document.getElementById('seBaustelle').value) || null) : null;
@@ -5244,7 +5245,7 @@ function saveStundenerfassung() {
     dates.forEach(d => {
       // Mehrfachbuchungen pro Tag bei Arbeitszeit und Abwesenheit erlaubt; Urlaub/Krank/Sonstig bleiben eindeutig
       if (typ !== 'arbeit' && typ !== 'abwesend' && existingDates.has(d)) return;
-      const entryHours = sonstigZeitspanne ? enteredHours : bkIstStundenEintrag(seMobileUser, { datum: d, typ, stunden: 0 }, appSettings.ze_custom_typen);
+      const entryHours = usesManualHours ? enteredHours : bkIstStundenEintrag(seMobileUser, { datum: d, typ, stunden: 0 }, appSettings.ze_custom_typen);
       pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden: entryHours, baustelleId, baustelleName, bemerkung, von, bis, pause });
       added++;
     });

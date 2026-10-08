@@ -1,7 +1,7 @@
 // ============================================================
 // Baukalkulation – Service Worker (PWA Offline Support)
 // ============================================================
-const CACHE_VERSION = 'bk-es-v231';
+const CACHE_VERSION = 'bk-es-v232';
 const PRECACHE_URLS = [
   './',
   './index.html',
