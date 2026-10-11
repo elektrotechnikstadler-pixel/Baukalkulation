@@ -989,6 +989,16 @@ function _mergeArrayById(base, loc, srv, resolution) {
   return { arr, conflict };
 }
 
+// 3-Wege-Zusammenführung einer Menge: Serverstand plus lokal Hinzugefügtes, ohne lokal Entferntes.
+function _mergeStringSet(base, loc, srv) {
+  const b = new Set(Array.isArray(base) ? base : []);
+  const l = new Set(Array.isArray(loc) ? loc : []);
+  const out = new Set(Array.isArray(srv) ? srv : []);
+  l.forEach(x => { if (!b.has(x)) out.add(x); });
+  b.forEach(x => { if (!l.has(x)) out.delete(x); });
+  return [...out];
+}
+
 // Führt eine einzelne Baustelle sektionsweise zusammen (beide Seiten haben sie geändert).
 // resolution ('mine'|'server') entscheidet NUR über echte Element-/Feld-Überschneidungen.
 function _mergeBaustelleSections(baseB, locB, srvB, resolution) {
@@ -1006,6 +1016,12 @@ function _mergeBaustelleSections(baseB, locB, srvB, resolution) {
     if (_BAUSTELLE_MERGE_SECTIONS.includes(k)) return;
     if (_isNextIdKey(k)) {
       merged[k] = Math.max(Number(locB && locB[k]) || 0, Number(srvB && srvB[k]) || 0, Number(baseB && baseB[k]) || 0) || 1;
+      return;
+    }
+    // Sperrliste der Import-Buchungen ist eine Menge: Hinzufügungen und Entfernungen beider
+    // Seiten übernehmen (der Server entfernt Sperren gelöschter Einträge) – nie ein Konflikt.
+    if (k === 'azImportBlocked') {
+      merged[k] = _mergeStringSet(baseB && baseB[k], locB && locB[k], srvB && srvB[k]);
       return;
     }
     const iCh = _mergeCanonStr(locB && locB[k]) !== _mergeCanonStr(baseB && baseB[k]);
@@ -2051,16 +2067,23 @@ async function movePositionToBaustelle(drag, destId) {
     : (item.beschreibung || 'Arbeitszeit-Eintrag');
   if (!confirm(`„${label}" nach „${dest.name}" verschieben?`)) return;
 
-  // A.2: Zeiterfassungs-Kaskade für auto-importierte Arbeitszeit-Einträge – ZUERST,
-  // damit bei einem Fehler nichts verschoben ist (sonst liefen Projekt und
-  // Zeiterfassung auseinander und der nächste Abgleich buchte doppelt).
-  if (key === 'arbeitszeit' && item.autoImport && item.zeitEntryId) {
+  // A.2: Verknüpfte Import-Buchungen verschiebt der Server atomar zusammen mit der
+  // Zeiterfassung (Projektbezug). Der Client speichert die Verschiebung NICHT selbst,
+  // sondern lädt danach den Projektstand – so können Projekt und Zeiterfassung nicht
+  // auseinanderlaufen (sonst Doppelbuchung, wenn das Projekt-Speichern scheitert).
+  // Altbuchungen ohne zeitUser lassen sich keinem Zeiteintrag zuordnen und werden wie
+  // bisher nur im Projekt verschoben.
+  if (key === 'arbeitszeit' && item.autoImport && item.zeitEntryId && item.zeitUser) {
+    if (_hatUngespeicherteProjektAenderungen()) {
+      showNotification('Es werden noch Änderungen gespeichert. Bitte kurz warten und erneut verschieben.', 'warning');
+      return;
+    }
     let j = null;
     try {
       const res = await fetch('api.php?action=move_position', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ zeitEntryId: item.zeitEntryId, zeitUser: item.zeitUser || null, destBaustelleId: destId })
+        body: JSON.stringify({ zeitEntryId: item.zeitEntryId, zeitUser: item.zeitUser, srcBaustelleId: src.id, destBaustelleId: destId })
       });
       j = await res.json().catch(() => null);
     } catch (err) {
@@ -2068,6 +2091,7 @@ async function movePositionToBaustelle(drag, destId) {
     }
     if (!j || !j.ok) {
       showNotification('Verschieben fehlgeschlagen: ' + ((j && j.error) || 'Verbindung unterbrochen') + ' – nichts wurde geändert.', 'error');
+      if (j && j.reload) { await loadData(); renderSidebar(); renderDetail(); }
       return;
     }
     // Eigene Zeiterfassung: Cache und Revision mitziehen, damit ein nachfolgender
@@ -2084,6 +2108,11 @@ async function movePositionToBaustelle(drag, destId) {
         await _reloadZeitDesktop(false);
       }
     }
+    await loadData();
+    showNotification(`„${label}" nach „${dest.name}" verschoben.`, 'success');
+    renderSidebar();
+    renderDetail();
+    return;
   }
 
   // Aus Quelle entfernen, in Ziel mit neuer lokaler ID einfügen
@@ -8486,8 +8515,9 @@ function setStundenKat(id, field, val) {
     appData.baustellen.forEach(b => {
       b.arbeitszeit.forEach(r => {
         if (r.stundenKatId === id) {
-          if (field === 'preis') r.stundenpreis = k.preis;
-          if (field === 'fixkosten') r.fixkosten = k.fixkosten;
+          // Spiegel mitziehen: der neue Katalogpreis ist kein Handpreis.
+          if (field === 'preis') { r.stundenpreis = k.preis; if ('zeitStundenpreis' in r) r.zeitStundenpreis = k.preis; }
+          if (field === 'fixkosten') { r.fixkosten = k.fixkosten; if ('zeitFixkosten' in r) r.zeitFixkosten = k.fixkosten; }
         }
       });
     });
@@ -12626,7 +12656,7 @@ async function runAutoImport() {
     const j = await r.json();
     if (j.ok) {
       if (resEl) resEl.textContent = `? ${j.imported} Einträge importiert`;
-      if (j.imported > 0 || j.dataRev != null) loadData();
+      if (j.imported > 0 || j.dataRev != null) await _projektstandNachZeitAbgleich(j);
     } else {
       if (resEl) { resEl.style.color = '#e53935'; resEl.textContent = j.error || 'Fehler'; }
     }

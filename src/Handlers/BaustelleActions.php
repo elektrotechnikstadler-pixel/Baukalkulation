@@ -934,12 +934,16 @@ class BaustelleActions
 
     /** move_position
      *
-     * A.2: Kaskadiert das Verschieben eines auto-importierten Arbeitszeit-Eintrags
-     * zwischen Baustellen auf die zugehörige Zeiterfassung. Die eigentliche
-     * Positions-Verschiebung im Baustellen-JSON erfolgt clientseitig via Full-Replace
-     * (save). Hier wird nur die verknüpfte zeiterfassung.baustelleId aktualisiert.
+     * A.2: Verschiebt einen auto-importierten Arbeitszeit-Eintrag zwischen Baustellen
+     * und hängt die verknüpfte Zeiterfassung (nur baustelleId) mit um.
      *
-     * Erwartet: { zeitEntryId, zeitUser, destBaustelleId }
+     * Mit srcBaustelleId verschiebt der Server auch die Projektbuchung selbst – atomar
+     * in derselben Transaktion. Sonst könnten Zeiterfassung und Projekt auseinanderlaufen,
+     * wenn das anschließende Projekt-Speichern des Clients scheitert oder im Konflikt
+     * verworfen wird (Folge: Doppelbuchung). Ohne srcBaustelleId (ältere Clients) wird wie
+     * bisher nur die Zeiterfassung umgehängt.
+     *
+     * Erwartet: { zeitEntryId, zeitUser, destBaustelleId, srcBaustelleId? }
      */
     public function movePosition(): void
     {
@@ -950,9 +954,12 @@ class BaustelleActions
         $destBaustelleId = isset($this->body['destBaustelleId']) && $this->body['destBaustelleId'] !== null
             ? (int)$this->body['destBaustelleId']
             : null;
+        $srcBaustelleId  = isset($this->body['srcBaustelleId']) ? (int)$this->body['srcBaustelleId'] : null;
 
-        // Ohne verknüpften Zeiterfassungs-Eintrag gibt es nichts zu kaskadieren.
+        // Ohne verknüpften Zeiterfassungs-Eintrag gibt es nichts zu kaskadieren. Eine
+        // angeforderte Projektverschiebung darf dann nicht still als erfolgreich gelten.
         if ($zeitEntryId <= 0 || $zeitUser === '') {
+            if ($srcBaustelleId !== null) jsonOut(['error' => 'Die Buchung ist keinem Zeiteintrag zugeordnet.'], 400);
             jsonOut(['ok' => true, 'updated' => 0]);
         }
 
@@ -963,62 +970,134 @@ class BaustelleActions
         if ($role !== 'admin' && $role !== 'master' && strcasecmp($zeitUser, $currentUser) !== 0) {
             jsonOut(['error' => 'Keine Berechtigung, fremde Zeiterfassung zu verschieben.'], 403);
         }
+        if ($srcBaustelleId !== null) {
+            if ($destBaustelleId === null || $srcBaustelleId === $destBaustelleId) {
+                jsonOut(['error' => 'Ungültiges Ziel-Projekt.'], 400);
+            }
+            // Gleiche Rechte wie beim Bearbeiten der Arbeitszeit in der Projektansicht.
+            $vis = Auth::getEffectiveVisibility($this->db);
+            $sichtbar = $vis === 'all' || (is_array($vis)
+                && in_array($srcBaustelleId, array_map('intval', $vis), true)
+                && in_array($destBaustelleId, array_map('intval', $vis), true));
+            if (!Auth::canDo($this->db, 'canEditArbeitszeit') || !$sichtbar) {
+                jsonOut(['error' => 'Keine Berechtigung, Arbeitszeit zu verschieben.'], 403);
+            }
+        }
 
         $zeitRev = null;
+        $dataRev = null;
+        $gefunden = true;
+        $updated = 0;
         $this->db->beginTransaction();
         try {
-            $old = \App\Database::fetchOne(
-                $this->db,
-                "SELECT username, datum, baustelleId, baustelleName FROM zeiterfassung
-                  WHERE entryId = ? AND LOWER(username) = LOWER(?)",
-                [$zeitEntryId, $zeitUser]
-            );
-            $neuName = '';
-            if ($destBaustelleId !== null) {
-                $bn = \App\Database::fetchOne($this->db, "SELECT name FROM baustellen WHERE id = ?", [$destBaustelleId]);
-                $neuName = (string)($bn['name'] ?? '');
+            if ($srcBaustelleId !== null) {
+                $gefunden = $this->verschiebeProjektbuchung($srcBaustelleId, (int)$destBaustelleId, $zeitEntryId, $zeitUser);
             }
-            $now = date('Y-m-d H:i:s');
+            if (!$gefunden) {
+                $this->db->rollBack();
+            } else {
+                $old = \App\Database::fetchOne(
+                    $this->db,
+                    "SELECT username, datum, baustelleId, baustelleName FROM zeiterfassung
+                      WHERE entryId = ? AND LOWER(username) = LOWER(?)",
+                    [$zeitEntryId, $zeitUser]
+                );
+                $neuName = '';
+                if ($destBaustelleId !== null) {
+                    $bn = \App\Database::fetchOne($this->db, "SELECT name FROM baustellen WHERE id = ?", [$destBaustelleId]);
+                    $neuName = (string)($bn['name'] ?? '');
+                }
+                $now = date('Y-m-d H:i:s');
 
-            $stmt = $this->db->prepare(
-                "UPDATE zeiterfassung SET baustelleId = :bid, baustelleName = :bname, updatedAt = :now
-                  WHERE entryId = :eid AND LOWER(username) = LOWER(:user)"
-            );
-            $stmt->execute([
-                ':bid'   => $destBaustelleId,
-                ':bname' => $neuName,
-                ':now'   => $now,
-                ':eid'   => $zeitEntryId,
-                ':user'  => $zeitUser,
-            ]);
-
-            // Umbuchung lückenlos protokollieren (alter/neuer Projektbezug, Bearbeiter).
-            $altBId = $old && $old['baustelleId'] !== null ? (int)$old['baustelleId'] : null;
-            if ($old && $altBId !== $destBaustelleId) {
-                $this->db->prepare(
-                    "INSERT INTO zeiterfassung_log (username, entryId, aktion, alteWerte, neueWerte, geaendertVon, geaendertAm)
-                     VALUES (?,?,'move',?,?,?,?)"
-                )->execute([
-                    $zeitUser,
-                    $zeitEntryId,
-                    json_encode(['baustelleId' => $altBId, 'baustelleName' => (string)($old['baustelleName'] ?? '')], JSON_UNESCAPED_UNICODE),
-                    json_encode(['baustelleId' => $destBaustelleId, 'baustelleName' => $neuName], JSON_UNESCAPED_UNICODE),
-                    $currentUser,
-                    $now,
+                $stmt = $this->db->prepare(
+                    "UPDATE zeiterfassung SET baustelleId = :bid, baustelleName = :bname, updatedAt = :now
+                      WHERE entryId = :eid AND LOWER(username) = LOWER(:user)"
+                );
+                $stmt->execute([
+                    ':bid'   => $destBaustelleId,
+                    ':bname' => $neuName,
+                    ':now'   => $now,
+                    ':eid'   => $zeitEntryId,
+                    ':user'  => $zeitUser,
                 ]);
+                $updated = $stmt->rowCount();
+
+                // Umbuchung lückenlos protokollieren (alter/neuer Projektbezug, Bearbeiter).
+                $altBId = $old && $old['baustelleId'] !== null ? (int)$old['baustelleId'] : null;
+                if ($old && $altBId !== $destBaustelleId) {
+                    $this->db->prepare(
+                        "INSERT INTO zeiterfassung_log (username, entryId, aktion, alteWerte, neueWerte, geaendertVon, geaendertAm)
+                         VALUES (?,?,'move',?,?,?,?)"
+                    )->execute([
+                        $zeitUser,
+                        $zeitEntryId,
+                        json_encode(['baustelleId' => $altBId, 'baustelleName' => (string)($old['baustelleName'] ?? '')], JSON_UNESCAPED_UNICODE),
+                        json_encode(['baustelleId' => $destBaustelleId, 'baustelleName' => $neuName], JSON_UNESCAPED_UNICODE),
+                        $currentUser,
+                        $now,
+                    ]);
+                }
+                // Andere Geräte des Mitarbeiters müssen die Umbuchung erkennen, sonst
+                // speichern sie den alten Projektbezug ohne Konflikt zurück.
+                if ($old) {
+                    $zeitRev = \App\Handlers\ZeiterfassungActions::bumpZeitRev($this->db, (string)$old['username']);
+                }
+                if ($srcBaustelleId !== null) {
+                    $dataRev = \App\DataService::bumpRev($this->db, $currentUser);
+                }
+                $this->db->commit();
             }
-            // Andere Geräte des Mitarbeiters müssen die Umbuchung erkennen, sonst
-            // speichern sie den alten Projektbezug ohne Konflikt zurück.
-            if ($old) {
-                $zeitRev = \App\Handlers\ZeiterfassungActions::bumpZeitRev($this->db, (string)$old['username']);
-            }
-            $this->db->commit();
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             error_log('[bk] move_position fehlgeschlagen: ' . $e->getMessage());
             jsonOut(['error' => 'Zeiterfassung konnte nicht aktualisiert werden.'], 500);
         }
 
-        jsonOut(['ok' => true, 'updated' => $stmt->rowCount(), 'zeitRev' => $zeitRev]);
+        if (!$gefunden) {
+            jsonOut(['error' => 'Die Buchung wurde im Projekt nicht gefunden – bitte neu laden.', 'reload' => true], 409);
+        }
+        jsonOut(['ok' => true, 'updated' => $updated, 'zeitRev' => $zeitRev, 'dataRev' => $dataRev]);
+    }
+
+    /**
+     * Verschiebt die verknüpfte Import-Buchung (zeitEntryId + zeitUser) von einem aktiven
+     * Projekt in ein anderes. Stunden, Datum, Preise und Handänderungen bleiben unverändert;
+     * die Buchung erhält im Ziel eine neue Positions-ID oberhalb von nextAzId.
+     *
+     * @return bool false, wenn Quelle/Ziel nicht aktiv sind oder die Buchung fehlt
+     */
+    private function verschiebeProjektbuchung(int $srcId, int $destId, int $zeitEntryId, string $zeitUser): bool
+    {
+        $stmt = $this->db->prepare("SELECT data FROM baustellen WHERE id = ? AND archiviert = 0");
+        $stmt->execute([$srcId]);
+        $srcRaw = $stmt->fetchColumn();
+        $stmt->execute([$destId]);
+        $destRaw = $stmt->fetchColumn();
+        if ($srcRaw === false || $destRaw === false) return false;
+
+        $src  = json_decode((string)$srcRaw, true) ?: [];
+        $dest = json_decode((string)$destRaw, true) ?: [];
+        $item = null;
+        foreach ($src['arbeitszeit'] ?? [] as $idx => $a) {
+            if (is_array($a) && !empty($a['autoImport']) && (int)($a['zeitEntryId'] ?? 0) === $zeitEntryId
+                && strcasecmp((string)($a['zeitUser'] ?? ''), $zeitUser) === 0) {
+                $item = $a;
+                array_splice($src['arbeitszeit'], $idx, 1);
+                break;
+            }
+        }
+        if ($item === null) return false;
+
+        if (!isset($dest['arbeitszeit']) || !is_array($dest['arbeitszeit'])) $dest['arbeitszeit'] = [];
+        $maxId = 0;
+        foreach ($dest['arbeitszeit'] as $a) $maxId = max($maxId, (int)($a['id'] ?? 0));
+        $item['id'] = max($maxId + 1, (int)($dest['nextAzId'] ?? 1));
+        $dest['nextAzId'] = $item['id'] + 1;
+        array_unshift($dest['arbeitszeit'], $item);
+
+        $upd = $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?");
+        $upd->execute([json_encode($src, JSON_UNESCAPED_UNICODE), $srcId]);
+        $upd->execute([json_encode($dest, JSON_UNESCAPED_UNICODE), $destId]);
+        return true;
     }
 }

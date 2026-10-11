@@ -41,6 +41,37 @@
 
 ---
 
+## v3.0.16 – Projektbuchung: Nachprüfung auf Datenverlust
+
+### Behoben
+- Texte und Fehlermeldungen der Zeiterfassung zeigten seit 3.0.15 verfälschte Umlaute
+  (z. B. „UngÃ¼ltige Parameter“) – Kodierung der Quelldatei wiederhergestellt; ein neuer Test
+  verhindert doppelt kodierte Umlaute im Quelltext.
+- Eine geänderte Standard-Stundenkategorie eines Mitarbeiters preiste dessen bestehende Projektbuchungen
+  beim nächsten Speichern um. Kategorie und Preis folgen jetzt nur einer ausdrücklich gewählten
+  Kategorie des Eintrags.
+- Ein im Projekt von Hand gesetzter Stundenpreis wurde bei einem Kategoriewechsel bzw. „Zeiterfassung
+  übernehmen“ überschrieben; er bleibt jetzt erhalten.
+- „Jetzt importieren“ war für jeden angemeldeten Benutzer aufrufbar (nur der Knopf war versteckt) – jetzt
+  nur für Administratoren; ungespeicherte Projektänderungen werden dabei nicht mehr verworfen.
+- Verschieben einer Import-Buchung in ein anderes Projekt erfolgt serverseitig in einem Schritt mit der
+  Zeiterfassung. Bisher konnte ein fehlgeschlagenes oder im Konflikt verworfenes Projekt-Speichern zu einer
+  Doppelbuchung oder dem Verlust einer Handänderung führen.
+- Eine im Projekt gesperrte (gelöschte) Import-Buchung blockierte auch einen späteren neuen Eintrag mit
+  derselben Nummer; die Sperre wird aufgehoben, sobald der ursprüngliche Eintrag gelöscht ist. Beim
+  Zusammenführen gleichzeitiger Projektänderungen (Desktop) bleiben Sperren beider Seiten erhalten.
+- Eine Katalog-Preisänderung markiert betroffene Import-Buchungen nicht mehr fälschlich als „Preis von Hand geändert“.
+
+### Bekannt / offen
+- Fügen zwei Seiten gleichzeitig Arbeitszeit-Zeilen mit derselben Positionsnummer hinzu (z. B. ungespeicherte
+  Projektänderung während eines Abgleichs oder Verschiebens), meldet das Zusammenführen einen Konflikt
+  (Altverhalten, eigenes Arbeitspaket).
+- PostgreSQL: Gleichzeitige Schreibvorgänge auf Projektdaten (Projekt-Speichern und serverseitiger Abgleich bzw.
+  Verschieben) sperren die Revision nicht exklusiv; in einem sehr engen Zeitfenster kann der zuletzt
+  Schreibende gewinnen (Altverhalten seit v2.10.48, eigenes Arbeitspaket). SQLite ist nicht betroffen.
+
+---
+
 ## v3.0.15 – Zeiterfassung und Projektbuchung lückenlos abgleichen
 
 ### Behoben

@@ -380,6 +380,123 @@ final class ZeiterfassungProjektbuchungTest extends ApiTestCase
         self::assertEquals(70, $buchung['stundenpreis']);
     }
 
+    public function testJetztImportierenNurFuerAdmin(): void
+    {
+        $this->assertStatus(403, $this->monteur->post('auto_import_stunden', []));
+    }
+
+    public function testGeaenderteStandardkategoriePreistAlteBuchungenNichtUm(): void
+    {
+        $this->assertOk($this->api->post('set_stunden_kategorie', ['username' => 'monteur', 'stundenKategorie' => 'Monteur']));
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1, ['stundenKatId' => null])]);
+
+        $this->assertOk($this->api->post('set_stunden_kategorie', ['username' => 'monteur', 'stundenKategorie' => 'Meister']));
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1, ['stundenKatId' => null, 'bemerkung' => 'erneut'])]);
+
+        $buchung = $this->buchungen(1)[0];
+        self::assertSame(10, $buchung['stundenKatId']);
+        self::assertEquals(50, $buchung['stundenpreis']);
+    }
+
+    public function testHandpreisImProjektBleibtBeiKategoriewechsel(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);
+        $this->bucheImProjektUm(1, static fn(array $a): array => ['stundenpreis' => 99] + $a);
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1, ['stundenKatId' => 11])]);
+
+        $buchung = $this->buchungen(1)[0];
+        self::assertSame(10, $buchung['stundenKatId']);
+        self::assertEquals(99, $buchung['stundenpreis']);
+    }
+
+    public function testZeiterfassungUebernehmenBehaeltHandpreis(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);
+        $this->bucheImProjektUm(1, static fn(array $a): array => ['stunden' => 6, 'stundenpreis' => 99] + $a);
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1, ['stundenKatId' => 11])]);
+
+        $this->assertOk($this->api->post('repair_booking', ['username' => 'monteur', 'entryId' => 101, 'aktion' => 'uebernehmen']));
+
+        $buchung = $this->buchungen(1)[0];
+        self::assertEquals(8, $buchung['stunden']);
+        self::assertEquals(99, $buchung['stundenpreis']);
+    }
+
+    public function testServerseitigesVerschiebenVerhindertDoppelbuchung(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        $this->bucheImProjektUm(1, static fn(array $a): array => ['stunden' => 6] + $a);
+
+        $moved = $this->assertOk($this->api->post('move_position', [
+            'zeitEntryId'     => 101,
+            'zeitUser'        => 'monteur',
+            'srcBaustelleId'  => 1,
+            'destBaustelleId' => 2,
+        ]));
+        self::assertIsInt($moved['dataRev']);
+
+        // Kein Projekt-Speichern des Clients nötig: der Abgleich danach bucht nichts doppelt.
+        $this->speichern(array_values($this->zeiteintraege()));
+        self::assertCount(0, $this->buchungen(1));
+        $ziel = $this->buchungen(2);
+        self::assertCount(1, $ziel);
+        self::assertEquals(6, $ziel[0]['stunden']);
+        self::assertEquals(8, $this->zeiteintraege()[101]['stunden']);
+        self::assertSame(2, $this->zeiteintraege()[101]['baustelleId']);
+    }
+
+    public function testServerseitigesVerschiebenBrauchtArbeitszeitRecht(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+
+        $this->assertStatus(403, $this->monteur->post('move_position', [
+            'zeitEntryId'     => 101,
+            'zeitUser'        => 'monteur',
+            'srcBaustelleId'  => 1,
+            'destBaustelleId' => 2,
+        ]));
+        self::assertCount(1, $this->buchungen(1));
+        self::assertSame(1, $this->zeiteintraege()[101]['baustelleId']);
+    }
+
+    public function testVerschiebenOhneBuchungImQuellprojektAendertNichts(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+
+        $this->assertStatus(409, $this->api->post('move_position', [
+            'zeitEntryId'     => 101,
+            'zeitUser'        => 'monteur',
+            'srcBaustelleId'  => 2,
+            'destBaustelleId' => 1,
+        ]));
+        self::assertSame(1, $this->zeiteintraege()[101]['baustelleId']);
+        self::assertCount(1, $this->buchungen(1));
+    }
+
+    public function testSperreGiltNichtFuerNeuenEintragMitWiederverwendeterId(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);
+        $daten = $this->ladeDaten();
+        $baustellen = $daten['baustellen'];
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 1) {
+                $b['arbeitszeit'] = [];
+                $b['azImportBlocked'] = ['id:monteur:101'];
+            }
+        }
+        unset($b);
+        $this->saveBaustellen($baustellen, (int) $daten['rev']);
+
+        // Eintrag gelöscht, danach neuer Eintrag mit derselben (wiederverwendeten) ID.
+        $this->speichern([$this->eintrag(100, '2026-03-01', 2)]);
+        $this->speichern([$this->eintrag(100, '2026-03-01', 2), $this->eintrag(101, '2026-03-05', 7, 1, ['clientUuid' => 'neu-101'])]);
+
+        $buchungen = $this->buchungen(1);
+        self::assertContains(7.0, array_map(static fn(array $a): float => (float) $a['stunden'], $buchungen));
+        self::assertSame('', $this->zeiteintraege()[101]['errorCode']);
+    }
+
     public function testGesperrteBuchungWirdNichtNeuGebuchtUndNichtGemeldet(): void
     {
         $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);

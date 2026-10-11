@@ -16,7 +16,7 @@ class ZeiterfassungActions
     public function __construct(private \PDO $db, private array $body) {}
 
     /**
-     * LÃ¤dt die Arbeitszeit-Konfiguration eines Users.
+     * Lädt die Arbeitszeit-Konfiguration eines Users.
      * @return array<string, mixed>
      */
     private function loadUserZeitConfig(string $username): array
@@ -27,13 +27,13 @@ class ZeiterfassungActions
         return $u + ['urlaubProJahr' => $upj];
     }
 
-    /** Gutschrift-Stunden fÃ¼r einen Abwesenheitstag nach dem aktuellen Tages-Soll. */
+    /** Gutschrift-Stunden für einen Abwesenheitstag nach dem aktuellen Tages-Soll. */
     private function absenceStundenForDate(string $datum, array $zeitCfg): float
     {
         return Sollzeit::tagesSoll($zeitCfg, $datum);
     }
 
-    /** Ermittelt das Urlaubs-Jahreslimit (Default 30, falls fÃ¼r das Jahr nichts hinterlegt). */
+    /** Ermittelt das Urlaubs-Jahreslimit (Default 30, falls für das Jahr nichts hinterlegt). */
     private function urlaubLimitForYear(array $urlaubProJahr, string $year): int
     {
         return (int)Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => $urlaubProJahr], (int)$year);
@@ -46,9 +46,9 @@ class ZeiterfassungActions
         $username = $_SESSION['username'];
         $entries  = $this->body['entries'] ?? [];
         if (!is_array($entries)) {
-            jsonOut(['error' => 'UngÃ¼ltige Zeiterfassungsdaten.'], 400);
+            jsonOut(['error' => 'Ungültige Zeiterfassungsdaten.'], 400);
         }
-        // Blocker-PrÃ¼fung Ã¼ber den zentralen Fehlbuchungs-Katalog (ZE001/ZE002/ZE010/ZE011).
+        // Blocker-Prüfung über den zentralen Fehlbuchungs-Katalog (ZE001/ZE002/ZE010/ZE011).
         $blockers = BuchungValidator::findBlockers($entries);
         if ($blockers) {
             $first = $blockers[0];
@@ -61,15 +61,15 @@ class ZeiterfassungActions
         $settings  = Auth::loadSettings($this->db);
         $erweitert = !empty($settings['erweiterte_zeiterfassung']);
 
-        // Audit: alte EintrÃ¤ge lesen
+        // Audit: alte Einträge lesen
         $oldRows = Database::fetchAll($this->db, "SELECT entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause FROM zeiterfassung WHERE username = ?", [$username]);
 
         // Arbeitszeit-Konfiguration (Soll/Tag, Arbeitstage, Urlaubslimit) laden
         $zeitCfg = $this->loadUserZeitConfig($username);
 
-        // Urlaubslimit-PrÃ¼fung: Buchung nur blockieren, wenn NEUE Urlaubstage Ã¼ber das
-        // Jahreslimit hinaus hinzukommen. Bestehende Ãœber-Limit-Altdaten werden geduldet,
-        // damit reine Bearbeitungen (z.B. Arbeits-Eintrag Ã¤ndern) nicht scheitern.
+        // Urlaubslimit-Prüfung: Buchung nur blockieren, wenn NEUE Urlaubstage über das
+        // Jahreslimit hinaus hinzukommen. Bestehende Über-Limit-Altdaten werden geduldet,
+        // damit reine Bearbeitungen (z.B. Arbeits-Eintrag ändern) nicht scheitern.
         $oldUrlaubByYear = [];
         foreach (Database::fetchAll($this->db, "SELECT datum FROM zeiterfassung WHERE username = ? AND typ = 'urlaub'", [$username]) as $r) {
             $y = substr((string)($r['datum'] ?? ''), 0, 4);
@@ -85,11 +85,11 @@ class ZeiterfassungActions
             $limit  = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], (string)$y);
             $oldCnt = $oldUrlaubByYear[$y] ?? 0;
             if ($cnt > $limit && $cnt > $oldCnt) {
-                jsonOut(['error' => "Urlaubslimit fÃ¼r {$y} erreicht ({$limit} Tage). Buchung nicht mÃ¶glich."], 400);
+                jsonOut(['error' => "Urlaubslimit für {$y} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
             }
         }
 
-        // Auto-Import-Konfiguration des Users (KÃ¼rzel + Stundenkategorie) vorab laden,
+        // Auto-Import-Konfiguration des Users (Kürzel + Stundenkategorie) vorab laden,
         // damit die Projektbuchung in derselben Transaktion wie die Zeiterfassung erfolgt.
         $u = Database::fetchOne($this->db, "SELECT kuerzel, stundenKategorie FROM users WHERE username = ?", [$username]);
         $kuerzel   = (string)($u['kuerzel'] ?? '');
@@ -99,37 +99,37 @@ class ZeiterfassungActions
         $autoRemoved  = 0;
         $newDataRev   = null;
         $newZeitRev   = null;
-        // Alte Clients kennen das Flag nicht -> Default true erhÃ¤lt deren Verhalten.
+        // Alte Clients kennen das Flag nicht -> Default true erhält deren Verhalten.
         $fullSnapshot = !array_key_exists('fullSnapshot', $this->body) || !empty($this->body['fullSnapshot']);
 
-        // Projektnamen fÃ¼r die Denormalisierung (inkl. archivierter Projekte).
+        // Projektnamen für die Denormalisierung (inkl. archivierter Projekte).
         $projektNamen = [];
         foreach (Database::fetchAll($this->db, "SELECT id, name FROM baustellen") as $pn) {
             $projektNamen[(int)$pn['id']] = (string)$pn['name'];
         }
 
-        // â”€â”€ Optimistic Locking â”€â”€
+        // ── Optimistic Locking ──
         // Kennt der Client eine Revision und ist die serverseitige neuer, hat ein
-        // anderes GerÃ¤t zwischenzeitlich gespeichert. Statt still zu Ã¼berschreiben
+        // anderes Gerät zwischenzeitlich gespeichert. Statt still zu überschreiben
         // wird der Konflikt gemeldet; der Client kann per clientUuid mergen.
         $baseZeitRev = array_key_exists('baseZeitRev', $this->body) && $this->body['baseZeitRev'] !== null
             ? (int)$this->body['baseZeitRev'] : null;
         $currentZeitRev = $this->currentZeitRev($username);
         if ($baseZeitRev !== null && empty($this->body['forceReplace']) && $baseZeitRev < $currentZeitRev) {
             jsonOut([
-                'error'      => 'Die Stunden wurden zwischenzeitlich auf einem anderen GerÃ¤t geÃ¤ndert. '
-                              . 'Es wurde nichts Ã¼berschrieben â€“ bitte neu laden.',
+                'error'      => 'Die Stunden wurden zwischenzeitlich auf einem anderen Gerät geändert. '
+                              . 'Es wurde nichts überschrieben – bitte neu laden.',
                 'code'       => 'zeit_conflict',
                 'needsMerge' => true,
                 'zeitRev'    => $currentZeitRev,
             ], 409);
         }
 
-        // â”€â”€ Datenverlust-Schutz: destruktives Full-Replace abfangen â”€â”€
+        // ── Datenverlust-Schutz: destruktives Full-Replace abfangen ──
         // save_zeiterfassung ersetzt ALLE Stunden des Users. Ein veralteter/leerer
-        // Client-Payload (fehlgeschlagenes Laden, zweites GerÃ¤t/Tab) wÃ¼rde sonst die
-        // gesamte Zeiterfassung Ã¼berschreiben. Bei drastischer Schrumpfung ohne
-        // ausdrÃ¼ckliche BestÃ¤tigung (forceReplace) wird NICHTS verÃ¤ndert.
+        // Client-Payload (fehlgeschlagenes Laden, zweites Gerät/Tab) würde sonst die
+        // gesamte Zeiterfassung überschreiben. Bei drastischer Schrumpfung ohne
+        // ausdrückliche Bestätigung (forceReplace) wird NICHTS verändert.
         $forceReplace = !empty($this->body['forceReplace']);
         $dbCount = (int)(Database::fetchOne($this->db, "SELECT COUNT(*) AS c FROM zeiterfassung WHERE username = ?", [$username])['c'] ?? 0);
         $inCount = count($entries);
@@ -138,8 +138,8 @@ class ZeiterfassungActions
             $drastic = ($inCount === 0 && $dbCount >= 3) || ($deletes >= 5 && $inCount < $dbCount / 2);
             if ($drastic) {
                 jsonOut([
-                    'error'        => "Speichern abgebrochen: Es wÃ¼rden {$deletes} von {$dbCount} StundeneintrÃ¤gen gelÃ¶scht. "
-                                    . "Vermutlich ist die Erfassung nicht vollstÃ¤ndig geladen â€“ es wurde NICHTS verÃ¤ndert.",
+                    'error'        => "Speichern abgebrochen: Es würden {$deletes} von {$dbCount} Stundeneinträgen gelöscht. "
+                                    . "Vermutlich ist die Erfassung nicht vollständig geladen – es wurde NICHTS verändert.",
                     'needsConfirm' => true,
                 ], 409);
             }
@@ -150,7 +150,7 @@ class ZeiterfassungActions
         // Verhindert asynchrone Fehlbuchungen bei Abbruch/Timeout des Requests.
         $this->db->beginTransaction();
         try {
-            // IdentitÃ¤t und Erstellzeitpunkt Ã¼ber den Full-Replace hinweg retten,
+            // Identität und Erstellzeitpunkt über den Full-Replace hinweg retten,
             // damit clientUuid und createdAt nicht bei jedem Speichern neu entstehen.
             $prevMeta = [];
             $vorherWerte = []; // entryId => Werte vor dem Speichern (Altbuchungen ohne Spiegel)
@@ -188,7 +188,7 @@ class ZeiterfassungActions
                 $bId = isset($e['baustelleId']) && $e['baustelleId'] !== '' && $e['baustelleId'] !== null
                     ? (int)$e['baustelleId'] : null;
                 // Projektname denormalisieren: die Zuordnung muss ein Archivieren
-                // oder LÃ¶schen des Projekts Ã¼berleben.
+                // oder Löschen des Projekts überleben.
                 $bName = $bId !== null ? (string)($projektNamen[$bId] ?? ($prev['baustelleName'] ?? '')) : '';
 
                 $stmt->execute([
@@ -222,7 +222,7 @@ class ZeiterfassungActions
                     'stunden'     => $stundenVal,
                 ];
 
-                // Projektwechsel fÃ¼r den Audit-Trail vormerken.
+                // Projektwechsel für den Audit-Trail vormerken.
                 $prevBId = $prev !== null && $prev['baustelleId'] !== null ? (int)$prev['baustelleId'] : null;
                 if ($prev !== null && $prevBId !== $bId) {
                     $moveLogs[] = [
@@ -247,13 +247,13 @@ class ZeiterfassungActions
             $autoUpdated  = $sync['updated'];
             $autoRemoved  = $sync['removed'];
 
-            // Umbuchungen protokollieren (lÃ¼ckenlose Historie, unabhÃ¤ngig von der
+            // Umbuchungen protokollieren (lückenlose Historie, unabhängig von der
             // Einstellung "erweiterte Zeiterfassung").
             if ($moveLogs) $this->writeMoveLogs($username, $moveLogs, $username, $now);
 
-            // Hat der Auto-Import/Abgleich Baustellen-Daten verÃ¤ndert, die globale
-            // Datensatz-Revision erhÃ¶hen (Optimistic Locking), damit andere Clients
-            // den neuen Stand erkennen. $newDataRev wird dem Client zurÃ¼ckgegeben,
+            // Hat der Auto-Import/Abgleich Baustellen-Daten verändert, die globale
+            // Datensatz-Revision erhöhen (Optimistic Locking), damit andere Clients
+            // den neuen Stand erkennen. $newDataRev wird dem Client zurückgegeben,
             // sodass sein appDataRev aktuell bleibt (kein Selbst-Konflikt).
             if ($sync['changed']) {
                 $newDataRev = \App\DataService::bumpRev($this->db, $username);
@@ -286,18 +286,18 @@ class ZeiterfassungActions
 
     /**
      * Gleicht die Projektbuchungen eines Mitarbeiters mit seinem Zeiterfassungs-Stand ab:
-     * verwaiste entfernen, fehlende anlegen, geÃ¤nderte Werte nachziehen und den
-     * Buchungsstatus setzen. LÃ¤uft in der Transaktion des Aufrufers und schreibt nie
-     * Stunden oder Datum in die Zeiterfassung zurÃ¼ck.
+     * verwaiste entfernen, fehlende anlegen, geänderte Werte nachziehen und den
+     * Buchungsstatus setzen. Läuft in der Transaktion des Aufrufers und schreibt nie
+     * Stunden oder Datum in die Zeiterfassung zurück.
      *
-     * Deklariert der Client den Payload als unvollstÃ¤ndig (z.B. Offline-Merge), wird
-     * NICHT aufgerÃ¤umt â€“ sonst wÃ¼rden fremde Projektbuchungen anhand einer Teilmenge
-     * gelÃ¶scht.
+     * Deklariert der Client den Payload als unvollständig (z.B. Offline-Merge), wird
+     * NICHT aufgeräumt – sonst würden fremde Projektbuchungen anhand einer Teilmenge
+     * gelöscht.
      *
-     * @param list<int> $vorherProjektIds Projekte des Stands vor der Ã„nderung, damit
+     * @param list<int> $vorherProjektIds Projekte des Stands vor der Änderung, damit
      *                                    auch dort verwaiste Buchungen entfernt werden
      * @param array<int, array<string, mixed>> $vorherWerte entryId => Zeiteintrag vor der
-     *                                    Ã„nderung (stunden, datum, stundenKatId)
+     *                                    Änderung (stunden, datum, stundenKatId)
      * @return array{imported: int, updated: int, removed: int, changed: bool}
      */
     private function syncProjektbuchungen(
@@ -314,25 +314,26 @@ class ZeiterfassungActions
         $result = ['imported' => 0, 'updated' => 0, 'removed' => 0, 'changed' => false];
         if ($kuerzel !== '') {
             if ($fullSnapshot) {
-                $result['removed'] = $this->reconcileAutoImport($username, $kuerzel, $entries, $vorherProjektIds);
+                $abgleich = $this->reconcileAutoImport($username, $kuerzel, $entries, $vorherProjektIds);
+                $result['removed'] = $abgleich['removed'];
+                $result['changed'] = $abgleich['written'];
             }
             if ($autoImportAktiv) {
                 $import = $this->autoImportEntries($username, $kuerzel, $kategorie, $entries, $vorherWerte);
                 $result['imported'] = $import['created'];
                 $result['updated']  = $import['updated'];
-                $result['changed']  = $import['written'];
+                $result['changed']  = $result['changed'] || $import['written'];
             }
-            $result['changed'] = $result['changed'] || $result['removed'] > 0;
         }
 
-        // Status NACH dem Abgleich bestimmen, damit neue Buchungen berÃ¼cksichtigt sind.
+        // Status NACH dem Abgleich bestimmen, damit neue Buchungen berücksichtigt sind.
         $this->applyBuchungsStatus($username, $kuerzel, $written, $autoImportAktiv);
         return $result;
     }
 
     /**
-     * Gleicht nach einer Admin-Ã„nderung den vollstÃ¤ndigen Stand des Ziel-Benutzers ab
-     * (gleiche Regeln wie save_zeiterfassung) und setzt den Status aller EintrÃ¤ge neu.
+     * Gleicht nach einer Admin-Änderung den vollständigen Stand des Ziel-Benutzers ab
+     * (gleiche Regeln wie save_zeiterfassung) und setzt den Status aller Einträge neu.
      *
      * @param list<int> $vorherProjektIds
      * @param array<int, array<string, mixed>> $vorherWerte siehe {@see syncProjektbuchungen()}
@@ -356,8 +357,8 @@ class ZeiterfassungActions
     }
 
     /**
-     * Setzt den Buchungsstatus aller EintrÃ¤ge eines Benutzers zurÃ¼ck und liefert sie
-     * im Format von save_zeiterfassung (id = entryId) fÃ¼r einen neuen Abgleich.
+     * Setzt den Buchungsstatus aller Einträge eines Benutzers zurück und liefert sie
+     * im Format von save_zeiterfassung (id = entryId) für einen neuen Abgleich.
      *
      * @return list<array<string, mixed>>
      */
@@ -365,7 +366,7 @@ class ZeiterfassungActions
     {
         $this->db->prepare("UPDATE zeiterfassung SET status = ?, errorCode = '', errorMessage = '' WHERE username = ?")
             ->execute([BuchungValidator::STATUS_VALID, $username]);
-        // entryId MUSS als "id" gelesen werden â€“ sonst gelten alle VerknÃ¼pfungen als verwaist.
+        // entryId MUSS als "id" gelesen werden – sonst gelten alle Verknüpfungen als verwaist.
         return Database::fetchAll(
             $this->db,
             "SELECT entryId AS id, clientUuid, datum, typ, baustelleId, stunden, stundenKatId, bemerkung
@@ -374,7 +375,7 @@ class ZeiterfassungActions
         );
     }
 
-    /** Bewertet den Buchungsstatus aller EintrÃ¤ge eines Benutzers neu (nach Reparaturen). */
+    /** Bewertet den Buchungsstatus aller Einträge eines Benutzers neu (nach Reparaturen). */
     private function aktualisiereBuchungsStatus(string $username): void
     {
         $u = Database::fetchOne($this->db, "SELECT kuerzel FROM users WHERE username = ?", [$username]);
@@ -387,9 +388,9 @@ class ZeiterfassungActions
     }
 
     /**
-     * Bucht alle Arbeits-EintrÃ¤ge des aktuellen Speichervorgangs in die jeweiligen
+     * Bucht alle Arbeits-Einträge des aktuellen Speichervorgangs in die jeweiligen
      * Baustellen (Auto-Import) und zieht bestehende Buchungen nach.
-     * Idempotent Ã¼ber {@see ensureProjectBookingInData()}.
+     * Idempotent über {@see ensureProjectBookingInData()}.
      *
      * @param array<int, array<string, mixed>> $vorherWerte siehe {@see syncProjektbuchungen()}
      * @return array{created: int, updated: int, written: bool}
@@ -452,11 +453,11 @@ class ZeiterfassungActions
     }
 
     /**
-     * Stellt sicher, dass fÃ¼r einen Arbeits-Zeiteintrag eine Projektbuchung
+     * Stellt sicher, dass für einen Arbeits-Zeiteintrag eine Projektbuchung
      * (arbeitszeit-Position mit autoImport=true) in der Ziel-Baustelle existiert.
-     * VerknÃ¼pfung primÃ¤r exakt Ã¼ber zeitEntryId/zeitUser; Legacy-Positionen ohne
-     * Link werden per Fuzzy-Treffer (KÃ¼rzel/Datum/Stunden) erkannt und â€“ sofern
-     * eine entryId vorliegt â€“ nachtrÃ¤glich mit dem Link versehen (Migration).
+     * Verknüpfung primär exakt über zeitEntryId/zeitUser; Legacy-Positionen ohne
+     * Link werden per Fuzzy-Treffer (Kürzel/Datum/Stunden) erkannt und – sofern
+     * eine entryId vorliegt – nachträglich mit dem Link versehen (Migration).
      *
      * @param array $entry Zeiteintrag mit Keys id, datum, stunden, bemerkung
      * @param bool  $geschrieben true, wenn Projektdaten gespeichert wurden (auch ohne neue Buchung)
@@ -510,11 +511,11 @@ class ZeiterfassungActions
 
     /**
      * Stellt die Projektbuchung zu einem Arbeits-Zeiteintrag in den Baustellen-Daten
-     * sicher: neu anlegen oder â€“ bei exakter VerknÃ¼pfung â€“ nach {@see zieheBuchungNach()}
+     * sicher: neu anlegen oder – bei exakter Verknüpfung – nach {@see zieheBuchungNach()}
      * aktualisieren.
      *
-     * @param bool $changed wird nur auf true gesetzt, nie zurÃ¼ckgesetzt
-     * @param array<string, mixed>|null $vorher Zeiteintrag vor der Ã„nderung (fÃ¼r Altbuchungen ohne Spiegel)
+     * @param bool $changed wird nur auf true gesetzt, nie zurückgesetzt
+     * @param array<string, mixed>|null $vorher Zeiteintrag vor der Änderung (für Altbuchungen ohne Spiegel)
      * @return ''|'created'|'updated'
      */
     private function ensureProjectBookingInData(
@@ -534,8 +535,8 @@ class ZeiterfassungActions
         if ($stunden <= 0 || $datum === '') return '';
         if (!isset($bData['arbeitszeit']) || !is_array($bData['arbeitszeit'])) $bData['arbeitszeit'] = [];
 
-        // Sperrliste: Vom Nutzer archivierte/gelÃ¶schte Buchungen NICHT erneut anlegen.
-        // SchlÃ¼ssel identisch zum Client (_azBookingKeys in script.js).
+        // Sperrliste: Vom Nutzer archivierte/gelöschte Buchungen NICHT erneut anlegen.
+        // Schlüssel identisch zum Client (_azBookingKeys in script.js).
         $blocked = (isset($bData['azImportBlocked']) && is_array($bData['azImportBlocked'])) ? $bData['azImportBlocked'] : [];
         if ($blocked) {
             $idKey = 'id:' . strtolower($username) . ':' . $eid;
@@ -546,12 +547,12 @@ class ZeiterfassungActions
         }
 
         // Preis aus Stundenkatalog (v2.9.20: Cents -> Euro).
-        // Bevorzugt die pro Zeiteintrag gewÃ¤hlte Kategorie (stundenKatId), damit die
-        // Projektbuchung dieselbe Kategorie/den selben Preis wie die Desktop-Auswahl trÃ¤gt.
+        // Bevorzugt die pro Zeiteintrag gewählte Kategorie (stundenKatId), damit die
+        // Projektbuchung dieselbe Kategorie/den selben Preis wie die Desktop-Auswahl trägt.
         // Fallback: Standard-Stundenkategorie des Users.
         $sk = $this->katalogEintrag($entry, $kategorie, $catalogById, $catalogByName);
 
-        // Duplikat-/BestandsprÃ¼fung
+        // Duplikat-/Bestandsprüfung
         foreach ($bData['arbeitszeit'] as $idx => $existing) {
             if (!($existing['autoImport'] ?? false)) continue;
             $hasLink = isset($existing['zeitEntryId']) && (int)$existing['zeitEntryId'] > 0;
@@ -561,11 +562,13 @@ class ZeiterfassungActions
                 && strcasecmp((string)($existing['zeitUser'] ?? ''), $username) === 0) {
                 $vorherBuchung = $bData['arbeitszeit'][$idx];
                 if ($vorher !== null) {
-                    // Eintragskategorie (null = Standard des Benutzers) wie bei der Buchung auflÃ¶sen.
+                    // Eintragskategorie (null = Standard des Benutzers) wie bei der Buchung auflösen.
                     $vk = $this->katalogEintrag($vorher, $kategorie, $catalogById, $catalogByName);
                     $vorher['stundenKatId'] = $vk ? (int)$vk['id'] : null;
                 }
-                $nachgezogen = $this->zieheBuchungNach($bData['arbeitszeit'][$idx], $stunden, $datum, $sk, $vorher);
+                $nachgezogen = $this->zieheBuchungNach(
+                    $bData['arbeitszeit'][$idx], $stunden, $datum, $sk, self::hatEigeneKategorie($entry), $catalogById, $vorher
+                );
                 if ($bData['arbeitszeit'][$idx] !== $vorherBuchung) $changed = true;
                 return $nachgezogen ? 'updated' : '';
             }
@@ -575,10 +578,10 @@ class ZeiterfassungActions
                 && abs((float)($existing['stunden'] ?? 0) - $stunden) < 0.01) {
                 // Legacy-Fuzzy-Treffer: Buchung existiert bereits.
                 if ($eid > 0) {
-                    // NachtrÃ¤glich mit exaktem Link versehen (Migration).
+                    // Nachträglich mit exaktem Link versehen (Migration).
                     $bData['arbeitszeit'][$idx]['zeitEntryId'] = $eid;
                     $bData['arbeitszeit'][$idx]['zeitUser']    = $username;
-                    $this->zieheBuchungNach($bData['arbeitszeit'][$idx], $stunden, $datum, $sk);
+                    $this->zieheBuchungNach($bData['arbeitszeit'][$idx], $stunden, $datum, $sk, self::hatEigeneKategorie($entry), $catalogById);
                     $changed = true;
                 }
                 return '';
@@ -609,6 +612,8 @@ class ZeiterfassungActions
             $item['zeitStunden']      = $stunden;
             $item['zeitDatum']        = $datum;
             $item['zeitStundenKatId'] = $stundenKatId;
+            $item['zeitStundenpreis'] = $item['stundenpreis'];
+            $item['zeitFixkosten']    = $item['fixkosten'];
         }
         $bData['arbeitszeit'][] = $item;
         $changed = true;
@@ -616,7 +621,7 @@ class ZeiterfassungActions
     }
 
     /**
-     * Katalogzeile fÃ¼r einen Zeiteintrag: bevorzugt die pro Eintrag gewÃ¤hlte
+     * Katalogzeile für einen Zeiteintrag: bevorzugt die pro Eintrag gewählte
      * Kategorie, sonst die Standard-Stundenkategorie des Benutzers.
      *
      * @return array<string, mixed>|null
@@ -629,24 +634,30 @@ class ZeiterfassungActions
     }
 
     /**
-     * Zieht eine verknÃ¼pfte Projektbuchung dem Zeiteintrag nach.
+     * Zieht eine verknüpfte Projektbuchung dem Zeiteintrag nach.
      *
      * Die Felder zeitStunden/zeitDatum/zeitStundenKatId spiegeln den zuletzt
      * abgeglichenen Zeiteintrag. Weicht die Buchung davon ab, wurde sie im Projekt von
-     * Hand geÃ¤ndert und behÃ¤lt ihre Werte; nur der Spiegel wird aktualisiert. Altbuchungen
-     * ohne Spiegel werden mit dem Zeiteintrag vor der Ã„nderung ($vorher) verglichen; ist
-     * auch der unbekannt, wird nichts Ã¼berschrieben. Kategorie und Preis folgen nach
-     * derselben Regel.
+     * Hand geändert und behält ihre Werte; nur der Spiegel wird aktualisiert. Altbuchungen
+     * ohne Spiegel werden mit dem Zeiteintrag vor der Änderung ($vorher) verglichen; ist
+     * auch der unbekannt, wird nichts überschrieben. Zur Kategorie siehe {@see folgeKategorie()}.
      *
      * @param array<string, mixed>      $booking
-     * @param array<string, mixed>|null $sk     Katalogzeile des Zeiteintrags
-     * @param array<string, mixed>|null $vorher Zeiteintrag vor der Ã„nderung
-     * @return bool true, wenn Stunden, Datum oder Kategorie geÃ¤ndert wurden
+     * @param array<string, mixed>|null $sk          Katalogzeile des Zeiteintrags
+     * @param bool                      $katExplizit Eintrag hat eine eigene Stundenkategorie
+     * @param array<int, array<string, mixed>> $catalogById
+     * @param array<string, mixed>|null $vorher      Zeiteintrag vor der Änderung
+     * @return bool true, wenn Stunden, Datum oder Kategorie geändert wurden
      */
-    private function zieheBuchungNach(array &$booking, float $stunden, string $datum, ?array $sk, ?array $vorher = null): bool
-    {
-        $katId = static fn(mixed $v): ?int => ($v === null || $v === '') ? null : (int)$v;
-        $neueKatId = $sk ? (int)$sk['id'] : null;
+    private function zieheBuchungNach(
+        array &$booking,
+        float $stunden,
+        string $datum,
+        ?array $sk,
+        bool $katExplizit,
+        array $catalogById,
+        ?array $vorher = null
+    ): bool {
         $geaendert = false;
 
         $spiegel = array_key_exists('zeitStunden', $booking)
@@ -664,45 +675,118 @@ class ZeiterfassungActions
                 $booking['datum']   = $datum;
                 $geaendert = true;
             }
-
-            $buchungKat = $katId($booking['stundenKatId'] ?? null);
-            if ($sk && $buchungKat === $katId($spiegel['kat']) && $buchungKat !== $neueKatId) {
-                $booking['stundenKatId'] = $neueKatId;
-                $booking['stundenpreis'] = money_from_cents($sk['preis']);
-                $booking['fixkosten']    = money_from_cents($sk['fixkosten']);
-                $geaendert = true;
-            }
+            if ($this->folgeKategorie($booking, $sk, $katExplizit, $catalogById, $spiegel['kat'])) $geaendert = true;
         }
 
         if (abs((float)($booking['zeitStunden'] ?? -1) - $stunden) >= 0.01) $booking['zeitStunden'] = $stunden;
         if (($booking['zeitDatum'] ?? null) !== $datum) $booking['zeitDatum'] = $datum;
-        if (!array_key_exists('zeitStundenKatId', $booking) || $katId($booking['zeitStundenKatId']) !== $neueKatId) {
-            $booking['zeitStundenKatId'] = $neueKatId;
-        }
+        $this->spiegleKategorie($booking, $sk, $katExplizit);
         return $geaendert;
     }
 
     /**
-     * Gleicht die Auto-Import-Buchungen eines Mitarbeiters in den Baustellen mit
-     * seiner aktuellen Stundenerfassung ab. Auto-Import-Positionen, fÃ¼r die es keinen
-     * passenden Arbeits-Eintrag mehr gibt, werden entfernt. So werden gelÃ¶schte oder
-     * geÃ¤nderte Stunden auch im Projekt zurÃ¼ckgenommen.
+     * Übernimmt Kategorie, Stundenpreis und Fixkosten des Zeiteintrags in die Buchung.
      *
-     * Die Zuordnung erfolgt primÃ¤r Ã¼ber zeitUser, nicht Ã¼ber das KÃ¼rzel: zwei Benutzer
-     * mit demselben KÃ¼rzel wÃ¼rden sich sonst gegenseitig Buchungen aus den Projekten
-     * lÃ¶schen. Legacy-Positionen ohne zeitUser werden bei mehrdeutigem KÃ¼rzel gar nicht
+     * Nur bei einer ausdrücklich gewählten Kategorie des Eintrags – eine geänderte
+     * Standardkategorie des Benutzers preist bestehende Buchungen nicht um. Wurden
+     * Kategorie oder Preis im Projekt von Hand geändert, bleibt die Buchung unverändert.
+     *
+     * @param array<string, mixed>             $booking
+     * @param array<string, mixed>|null        $sk
+     * @param array<int, array<string, mixed>> $catalogById
+     */
+    private function folgeKategorie(array &$booking, ?array $sk, bool $katExplizit, array $catalogById, mixed $spiegelKat): bool
+    {
+        if (!$sk || !$katExplizit) return false;
+        $neueKatId  = (int)$sk['id'];
+        $buchungKat = self::katId($booking['stundenKatId'] ?? null);
+        if ($buchungKat === $neueKatId || $buchungKat !== self::katId($spiegelKat)) return false;
+        if ($this->preisHandGeaendert($booking, $catalogById)) return false;
+
+        $booking['stundenKatId']      = $neueKatId;
+        $booking['stundenpreis']      = money_from_cents($sk['preis']);
+        $booking['fixkosten']         = money_from_cents($sk['fixkosten']);
+        $booking['zeitStundenpreis']  = $booking['stundenpreis'];
+        $booking['zeitFixkosten']     = $booking['fixkosten'];
+        return true;
+    }
+
+    /**
+     * Wurden Stundenpreis oder Fixkosten der Buchung im Projekt von Hand geändert?
+     * Vergleich mit dem zuletzt vom System gesetzten Preis (zeitStundenpreis/zeitFixkosten),
+     * bei älteren Buchungen mit dem aktuellen Katalogpreis ihrer Kategorie. Ist das nicht
+     * bestimmbar, gilt der Preis als geändert (nichts wird überschrieben).
+     *
+     * @param array<string, mixed>             $booking
+     * @param array<int, array<string, mixed>> $catalogById
+     */
+    private function preisHandGeaendert(array $booking, array $catalogById): bool
+    {
+        if (array_key_exists('zeitStundenpreis', $booking)) {
+            $preis = (float)$booking['zeitStundenpreis'];
+            $fix   = (float)($booking['zeitFixkosten'] ?? 0);
+        } else {
+            $kat = $catalogById[self::katId($booking['stundenKatId'] ?? null) ?? 0] ?? null;
+            if (!$kat) return true;
+            $preis = money_from_cents($kat['preis']);
+            $fix   = money_from_cents($kat['fixkosten']);
+        }
+        return abs((float)($booking['stundenpreis'] ?? 0) - $preis) >= 0.005
+            || abs((float)($booking['fixkosten'] ?? 0) - $fix) >= 0.005;
+    }
+
+    /**
+     * Spiegelt die Kategorie des Zeiteintrags. Ohne eigene Kategorie des Eintrags
+     * (Standard des Benutzers) bleibt der Spiegel unverändert, damit eine spätere
+     * ausdrückliche Wahl korrekt erkannt wird.
+     *
+     * @param array<string, mixed>      $booking
+     * @param array<string, mixed>|null $sk
+     */
+    private function spiegleKategorie(array &$booking, ?array $sk, bool $katExplizit): void
+    {
+        if ($katExplizit) {
+            $neu = $sk ? (int)$sk['id'] : null;
+            if (!array_key_exists('zeitStundenKatId', $booking) || self::katId($booking['zeitStundenKatId']) !== $neu) {
+                $booking['zeitStundenKatId'] = $neu;
+            }
+        } elseif (!array_key_exists('zeitStundenKatId', $booking)) {
+            $booking['zeitStundenKatId'] = self::katId($booking['stundenKatId'] ?? null);
+        }
+    }
+
+    private static function katId(mixed $v): ?int
+    {
+        return ($v === null || $v === '') ? null : (int)$v;
+    }
+
+    /** Hat der Zeiteintrag eine eigene Stundenkategorie (statt des Benutzer-Standards)? */
+    private static function hatEigeneKategorie(array $entry): bool
+    {
+        return isset($entry['stundenKatId']) && $entry['stundenKatId'] !== '' && (int)$entry['stundenKatId'] > 0;
+    }
+
+    /**
+     * Gleicht die Auto-Import-Buchungen eines Mitarbeiters in den Baustellen mit
+     * seiner aktuellen Stundenerfassung ab. Auto-Import-Positionen, für die es keinen
+     * passenden Arbeits-Eintrag mehr gibt, werden entfernt. So werden gelöschte oder
+     * geänderte Stunden auch im Projekt zurückgenommen.
+     *
+     * Die Zuordnung erfolgt primär über zeitUser, nicht über das Kürzel: zwei Benutzer
+     * mit demselben Kürzel würden sich sonst gegenseitig Buchungen aus den Projekten
+     * löschen. Legacy-Positionen ohne zeitUser werden bei mehrdeutigem Kürzel gar nicht
      * mehr angefasst.
      *
      * @param list<int> $zusatzProjektIds weitere Projekte (Vorher-Stand), deren Buchungen
      *                                    ebenfalls abgeglichen werden
-     * @return int Anzahl entfernter Auto-Import-Positionen
+     * @return array{removed: int, written: bool} entfernte Auto-Import-Positionen und ob Projektdaten geschrieben wurden
      */
-    private function reconcileAutoImport(string $username, string $kuerzel, array $entries, array $zusatzProjektIds = []): int
+    private function reconcileAutoImport(string $username, string $kuerzel, array $entries, array $zusatzProjektIds = []): array
     {
         $ambiguous = $this->kuerzelIsAmbiguous($kuerzel);
 
-        // GewÃ¼nschte Buchungen je Baustelle ableiten:
-        //  - exakt: Menge der zeitEntryIds (moderne, verknÃ¼pfte Positionen)
+        // Gewünschte Buchungen je Baustelle ableiten:
+        //  - exakt: Menge der zeitEntryIds (moderne, verknüpfte Positionen)
         //  - fuzzy: Multiset datum|stunden (Legacy-Positionen ohne Link)
         $desiredIds   = []; // [bId => [entryId => true]]
         $desiredFuzzy = []; // [bId => ['datum|stunden' => count]]
@@ -719,42 +803,64 @@ class ZeiterfassungActions
         }
 
         $removed = 0;
+        $geschrieben = false;
+        // Alle noch vorhandenen Eintrags-IDs des Benutzers (jeder Typ): Sperren für gelöschte
+        // Einträge werden aufgehoben, weil die ID sonst bei einem neuen Eintrag wiederverwendet
+        // würde und dieser nie gebucht würde.
+        $vorhandeneIds = [];
+        foreach ($entries as $entry) {
+            $eid = isset($entry['id']) ? (int)$entry['id'] : 0;
+            if ($eid > 0) $vorhandeneIds[$eid] = true;
+        }
+        $sperrPrefix = 'id:' . strtolower($username) . ':';
         // Nur betroffene Baustellen laden (Performance): aktuell referenzierte und die des
-        // Vorher-Stands â€“ sonst bliebe nach einem Projektwechsel die alte Buchung stehen.
+        // Vorher-Stands – sonst bliebe nach einem Projektwechsel die alte Buchung stehen.
         $affectedBIds = array_values(array_unique(array_merge(
             array_keys($desiredIds),
             array_keys($desiredFuzzy),
             array_filter($zusatzProjektIds, static fn(int $id): bool => $id > 0)
         )));
-        if (empty($affectedBIds)) return 0;
+        if (empty($affectedBIds)) return ['removed' => 0, 'written' => false];
         $phB = implode(',', array_fill(0, count($affectedBIds), '?'));
         // Archivierte Projekte werden nicht angefasst: dort ist der Buchungsstand
-        // eingefroren und darf nicht nachtrÃ¤glich bereinigt werden.
+        // eingefroren und darf nicht nachträglich bereinigt werden.
         $rows = Database::fetchAll($this->db, "SELECT id, data FROM baustellen WHERE archiviert = 0 AND id IN ($phB)", $affectedBIds);
         foreach ($rows as $bRow) {
             $bId   = (int)$bRow['id'];
             $bData = json_decode($bRow['data'], true) ?: [];
-            if (empty($bData['arbeitszeit']) || !is_array($bData['arbeitszeit'])) continue;
+            $changed = false;
 
+            if (!empty($bData['azImportBlocked']) && is_array($bData['azImportBlocked'])) {
+                $sperren = array_values(array_filter(
+                    $bData['azImportBlocked'],
+                    static fn($k): bool => !is_string($k) || !str_starts_with($k, $sperrPrefix)
+                        || !empty($vorhandeneIds[(int)substr($k, strlen($sperrPrefix))])
+                ));
+                if (count($sperren) !== count($bData['azImportBlocked'])) {
+                    $bData['azImportBlocked'] = $sperren;
+                    $changed = true;
+                }
+            }
+
+            $arbeitszeit = (isset($bData['arbeitszeit']) && is_array($bData['arbeitszeit'])) ? $bData['arbeitszeit'] : [];
             $ids     = $desiredIds[$bId] ?? [];
             $fuzzy   = $desiredFuzzy[$bId] ?? [];
             $kept    = [];
-            $changed = false;
-            foreach ($bData['arbeitszeit'] as $a) {
+            foreach ($arbeitszeit as $a) {
                 $isAuto = is_array($a) && ($a['autoImport'] ?? false);
                 $zu     = $isAuto ? (string)($a['zeitUser'] ?? '') : '';
                 if ($zu !== '') {
-                    // VerknÃ¼pfte Position: gehÃ¶rt eindeutig einem Benutzer, unabhÃ¤ngig vom KÃ¼rzel.
+                    // Verknüpfte Position: gehört eindeutig einem Benutzer, unabhängig vom Kürzel.
                     $isAutoByUser = strcasecmp($zu, $username) === 0;
                 } else {
-                    // Legacy ohne Link: nur bei eindeutigem KÃ¼rzel zuordenbar.
+                    // Legacy ohne Link: nur bei eindeutigem Kürzel zuordenbar.
                     $isAutoByUser = $isAuto && ($a['erstelltVon'] ?? '') === $kuerzel && !$ambiguous;
                 }
                 if (!$isAutoByUser) { $kept[] = $a; continue; }
 
                 $eid = isset($a['zeitEntryId']) ? (int)$a['zeitEntryId'] : 0;
                 if ($eid > 0) {
-                    // Exakte VerknÃ¼pfung: behalten, solange der Zeiteintrag existiert.
+                    // Exakte Verknüpfung: behalten, solange der Zeiteintrag existiert.
                     if (!empty($ids[$eid])) { $kept[] = $a; }
                     else { $changed = true; $removed++; }
                 } else {
@@ -765,15 +871,16 @@ class ZeiterfassungActions
                 }
             }
             if ($changed) {
-                $bData['arbeitszeit'] = array_values($kept);
+                if ($arbeitszeit) $bData['arbeitszeit'] = array_values($kept);
                 $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?")
                          ->execute([json_encode($bData, JSON_UNESCAPED_UNICODE), $bId]);
+                $geschrieben = true;
             }
         }
-        return $removed;
+        return ['removed' => $removed, 'written' => $geschrieben];
     }
 
-    /** PrÃ¼ft, ob ein KÃ¼rzel an mehr als einen Benutzer vergeben ist (Altbestand). */
+    /** Prüft, ob ein Kürzel an mehr als einen Benutzer vergeben ist (Altbestand). */
     private function kuerzelIsAmbiguous(string $kuerzel): bool
     {
         if ($kuerzel === '') return true;
@@ -782,12 +889,12 @@ class ZeiterfassungActions
     }
 
     /**
-     * reconcile_bookings â€“ QuerprÃ¼fung Zeiterfassung â†” Projektbuchung (Admin/Master).
+     * reconcile_bookings – Querprüfung Zeiterfassung ↔ Projektbuchung (Admin/Master).
      *
      * Findet Fehlbuchungen in beide Richtungen:
-     *  - orphans: Arbeits-ZeiteintrÃ¤ge mit Baustelle, fÃ¼r die KEINE Projektbuchung
+     *  - orphans: Arbeits-Zeiteinträge mit Baustelle, für die KEINE Projektbuchung
      *    (arbeitszeit-Position) existiert.
-     *  - ghosts:  verknÃ¼pfte Projektbuchungen (autoImport + zeitEntryId), zu denen
+     *  - ghosts:  verknüpfte Projektbuchungen (autoImport + zeitEntryId), zu denen
      *    KEIN Zeiterfassungs-Eintrag mehr existiert.
      */
     public function reconcileBookings(): void
@@ -805,7 +912,7 @@ class ZeiterfassungActions
 
         $projekte = BuchungValidator::loadProjekte($this->db);
 
-        // VerknÃ¼pfte Projektbuchungen fÃ¼r die Ghost-PrÃ¼fung sammeln.
+        // Verknüpfte Projektbuchungen für die Ghost-Prüfung sammeln.
         $linkedBookings = [];
         foreach ($projekte as $bId => $p) {
             foreach ($p['az'] as $a) {
@@ -826,7 +933,7 @@ class ZeiterfassungActions
             }
         }
 
-        // Zeiterfassung: relevante Arbeits-EintrÃ¤ge
+        // Zeiterfassung: relevante Arbeits-Einträge
         $zrows = Database::fetchAll(
             $this->db,
             "SELECT username, entryId, clientUuid, datum, baustelleId, stunden, bemerkung, baustelleName
@@ -834,7 +941,7 @@ class ZeiterfassungActions
               WHERE typ = 'arbeit' AND baustelleId IS NOT NULL AND stunden > 0"
         );
 
-        $zeitIndex = []; // "bId|eid|userLower" => true (fÃ¼r Ghost-PrÃ¼fung)
+        $zeitIndex = []; // "bId|eid|userLower" => true (für Ghost-Prüfung)
         $orphans   = [];
         $abweichungen = [];
         $hinweise  = [];
@@ -880,7 +987,7 @@ class ZeiterfassungActions
             else                       $hinweise[] = $befund;
         }
 
-        // Ghosts: verknÃ¼pfte Buchungen ohne passende Zeiterfassung
+        // Ghosts: verknüpfte Buchungen ohne passende Zeiterfassung
         $ghosts = [];
         foreach ($linkedBookings as $bk) {
             $key = $bk['baustelleId'] . '|' . $bk['zeitEntryId'] . '|' . strtolower($bk['zeitUser']);
@@ -907,11 +1014,11 @@ class ZeiterfassungActions
     }
 
     /**
-     * diagnose_fehlbuchungen â€“ read-only Ursachenanalyse (Admin/Master).
+     * diagnose_fehlbuchungen – read-only Ursachenanalyse (Admin/Master).
      *
-     * Beantwortet die Frage "warum gilt diese Buchung als Fehlbuchung?" fÃ¼r jeden
-     * Eintrag und aggregiert die Befunde je Benutzer. VerÃ¤ndert nichts.
-     * Optional: ?username=â€¦ schrÃ¤nkt auf einen Benutzer ein.
+     * Beantwortet die Frage "warum gilt diese Buchung als Fehlbuchung?" für jeden
+     * Eintrag und aggregiert die Befunde je Benutzer. Verändert nichts.
+     * Optional: ?username=… schränkt auf einen Benutzer ein.
      */
     public function diagnoseFehlbuchungen(): void
     {
@@ -935,7 +1042,7 @@ class ZeiterfassungActions
             ];
         }
 
-        // KÃ¼rzel-Kollisionen: zwei Benutzer mit demselben KÃ¼rzel lÃ¶schen sich
+        // Kürzel-Kollisionen: zwei Benutzer mit demselben Kürzel löschen sich
         // gegenseitig Projektbuchungen (erstelltVon ist dann nicht mehr eindeutig).
         $kuerzelMap = [];
         foreach (Database::fetchAll($this->db, "SELECT username, kuerzel FROM users WHERE kuerzel <> ''") as $ku) {
@@ -987,7 +1094,7 @@ class ZeiterfassungActions
 
                 if (!isset($projekte[$bId])) {
                     $counts['projektGeloescht']++;
-                    $befund = 'Projekt #' . $bId . ' existiert nicht mehr (hart gelÃ¶scht/archiviert)';
+                    $befund = 'Projekt #' . $bId . ' existiert nicht mehr (hart gelöscht/archiviert)';
                 } else {
                     $p = $projekte[$bId];
                     if ($p['archiviert']) $counts['projektArchiviert']++;
@@ -1014,10 +1121,10 @@ class ZeiterfassungActions
                         if (!$p['archiviert'] && BuchungValidator::weichtAb($exact, $stunden, $datum)) {
                             $counts['abweichend']++;
                             $befund = 'Projektbuchung weicht ab (' . (float)($exact['stunden'] ?? 0) . ' h am '
-                                    . (string)($exact['datum'] ?? '') . ') â€“ ZE013';
+                                    . (string)($exact['datum'] ?? '') . ') – ZE013';
                         }
                     }
-                    elseif ($isBlocked)  { $counts['gesperrt']++;  $befund = 'Projektbuchung wurde archiviert/gelÃ¶scht (Sperrliste) â€“ korrekt, keine Fehlbuchung'; }
+                    elseif ($isBlocked)  { $counts['gesperrt']++;  $befund = 'Projektbuchung wurde archiviert/gelöscht (Sperrliste) – korrekt, keine Fehlbuchung'; }
                     elseif ($fuzzy)      { $counts['buchungVorhanden']++; $counts['ohneLink']++; }
                     else {
                         $counts['buchungFehlt']++;
@@ -1035,7 +1142,7 @@ class ZeiterfassungActions
                 }
             }
 
-            // entryId-Duplikate (RC-5): brechen die zeitEntryId-VerknÃ¼pfung.
+            // entryId-Duplikate (RC-5): brechen die zeitEntryId-Verknüpfung.
             $dups = Database::fetchAll(
                 $this->db,
                 "SELECT entryId, COUNT(*) AS c FROM zeiterfassung
@@ -1045,9 +1152,9 @@ class ZeiterfassungActions
             );
 
             // Gegenprobe aus Projektsicht: Existieren die Projektpositionen des
-            // Mitarbeiters Ã¼berhaupt? Unterscheidet "Buchung fehlt wirklich"
-            // (â†’ Reparatur) von "Buchung da, nur VerknÃ¼pfung kaputt" (â†’ Reparatur
-            // wÃ¼rde Dubletten anlegen).
+            // Mitarbeiters überhaupt? Unterscheidet "Buchung fehlt wirklich"
+            // (→ Reparatur) von "Buchung da, nur Verknüpfung kaputt" (→ Reparatur
+            // würde Dubletten anlegen).
             $eigeneEntryIds = [];
             foreach (Database::fetchAll($this->db, "SELECT entryId FROM zeiterfassung WHERE username = ? AND entryId IS NOT NULL", [$username]) as $r) {
                 $eigeneEntryIds[(int)$r['entryId']] = true;
@@ -1072,42 +1179,42 @@ class ZeiterfassungActions
 
             $verdacht = [];
             if (!$autoImport && $counts['buchungFehlt'] > 0) {
-                $verdacht[] = 'RC-1: Auto-Import ist deaktiviert â€“ ' . $counts['buchungFehlt']
-                            . ' EintrÃ¤ge werden fÃ¤lschlich als Fehlbuchung gemeldet.';
+                $verdacht[] = 'RC-1: Auto-Import ist deaktiviert – ' . $counts['buchungFehlt']
+                            . ' Einträge werden fälschlich als Fehlbuchung gemeldet.';
             }
             if ($kuerzel === '') {
-                $verdacht[] = 'RC-2: Benutzer hat KEIN KÃ¼rzel â€“ der Legacy-Abgleich kann nicht greifen.';
+                $verdacht[] = 'RC-2: Benutzer hat KEIN Kürzel – der Legacy-Abgleich kann nicht greifen.';
             } elseif (count($kuerzelMap[$kuerzel] ?? []) > 1) {
-                $verdacht[] = 'RC-2: KÃ¼rzel "' . $kuerzel . '" ist mehrfach vergeben ('
-                            . implode(', ', $kuerzelMap[$kuerzel]) . ') â€“ diese Benutzer lÃ¶schen sich '
+                $verdacht[] = 'RC-2: Kürzel "' . $kuerzel . '" ist mehrfach vergeben ('
+                            . implode(', ', $kuerzelMap[$kuerzel]) . ') – diese Benutzer löschen sich '
                             . 'gegenseitig Projektbuchungen.';
             } elseif ($counts['nurFuzzyTreffer'] > 0) {
                 $verdacht[] = 'RC-2: ' . $counts['nurFuzzyTreffer'] . ' Positionen tragen ein abweichendes '
-                            . 'KÃ¼rzel (erstelltVon != "' . $kuerzel . '") â€“ vermutlich KÃ¼rzel-Wechsel.';
+                            . 'Kürzel (erstelltVon != "' . $kuerzel . '") – vermutlich Kürzel-Wechsel.';
             }
             if ($counts['projektGeloescht'] > 0) {
-                $verdacht[] = 'RC-3: ' . $counts['projektGeloescht'] . ' EintrÃ¤ge zeigen auf ein nicht mehr '
-                            . 'existierendes Projekt (Archivierung lÃ¶schte die Zeile hart).';
+                $verdacht[] = 'RC-3: ' . $counts['projektGeloescht'] . ' Einträge zeigen auf ein nicht mehr '
+                            . 'existierendes Projekt (Archivierung löschte die Zeile hart).';
             }
             if ($counts['ohneLink'] > 0) {
                 $verdacht[] = 'Hinweis: ' . $counts['ohneLink'] . ' Positionen haben keine zeitEntryId '
-                            . '(Legacy) und hÃ¤ngen am unsicheren Fuzzy-Abgleich.';
+                            . '(Legacy) und hängen am unsicheren Fuzzy-Abgleich.';
             }
             if ($dups) {
-                $verdacht[] = 'RC-5: ' . count($dups) . ' doppelte entryId(s) â€“ VerknÃ¼pfungen kÃ¶nnen auf den '
+                $verdacht[] = 'RC-5: ' . count($dups) . ' doppelte entryId(s) – Verknüpfungen können auf den '
                             . 'falschen Eintrag zeigen.';
             }
 
-            // Handlungsempfehlung fÃ¼r fehlende Buchungen
+            // Handlungsempfehlung für fehlende Buchungen
             if ($counts['buchungFehlt'] > 0) {
                 if ($pos['mitZeitUser'] === 0 && $pos['mitKuerzel'] === 0) {
                     $verdacht[] = 'EMPFEHLUNG: Es existiert KEINE einzige Projektposition dieses Mitarbeiters. '
-                                . 'Die Buchungen fehlen tatsÃ¤chlich â€“ "Alle reparieren" ist sicher.';
+                                . 'Die Buchungen fehlen tatsächlich – "Alle reparieren" ist sicher.';
                 } elseif ($pos['linkVerwaist'] > 0 || $pos['ohneLink'] > 0) {
                     $verdacht[] = 'ACHTUNG: Es liegen ' . ($pos['mitZeitUser'] + $pos['mitKuerzel'])
                                 . ' Projektpositionen vor, davon ' . $pos['linkVerwaist'] . ' mit totem Link und '
-                                . $pos['ohneLink'] . ' ohne Link. Reparieren wÃ¼rde DUBLETTEN anlegen â€“ '
-                                . 'zuerst die VerknÃ¼pfung prÃ¼fen.';
+                                . $pos['ohneLink'] . ' ohne Link. Reparieren würde DUBLETTEN anlegen – '
+                                . 'zuerst die Verknüpfung prüfen.';
                 }
             }
 
@@ -1136,7 +1243,7 @@ class ZeiterfassungActions
     }
 
     /**
-     * repair_booking â€“ behebt eine Fehlbuchung (Admin/Master). Idempotent.
+     * repair_booking – behebt eine Fehlbuchung (Admin/Master). Idempotent.
      *
      * aktion (Standard "nachtragen"):
      *  - nachtragen:  fehlende Projektbuchung anlegen (ZE006)
@@ -1166,7 +1273,7 @@ class ZeiterfassungActions
         if (!$row) jsonOut(['error' => 'Zeiterfassungs-Eintrag nicht gefunden.'], 404);
         $bId = (int)($row['baustelleId'] ?? 0);
         if ($bId <= 0 || (float)$row['stunden'] <= 0) {
-            jsonOut(['error' => 'Eintrag hat keine gÃ¼ltige Baustelle oder Stunden.'], 400);
+            jsonOut(['error' => 'Eintrag hat keine gültige Baustelle oder Stunden.'], 400);
         }
 
         $u = Database::fetchOne($this->db, "SELECT kuerzel, stundenKategorie FROM users WHERE username = ?", [$username]);
@@ -1199,15 +1306,15 @@ class ZeiterfassungActions
         }
 
         if ($aktion !== 'nachtragen') {
-            if (!$changed) jsonOut(['error' => 'Keine verknÃ¼pfte Projektbuchung gefunden.'], 404);
+            if (!$changed) jsonOut(['error' => 'Keine verknüpfte Projektbuchung gefunden.'], 404);
             jsonOut(['ok' => true, 'repaired' => 1]);
         }
         jsonOut(['ok' => true, 'repaired' => $added ? 1 : 0, 'alreadyPresent' => !$added]);
     }
 
     /**
-     * Setzt eine abweichende, verknÃ¼pfte Projektbuchung auf den Zeiteintrag
-     * ("uebernehmen") oder vermerkt die Abweichung als bestÃ¤tigt ("bestaetigen").
+     * Setzt eine abweichende, verknüpfte Projektbuchung auf den Zeiteintrag
+     * ("uebernehmen") oder vermerkt die Abweichung als bestätigt ("bestaetigen").
      *
      * @return bool true, wenn die Buchung gefunden und gespeichert wurde
      */
@@ -1223,18 +1330,16 @@ class ZeiterfassungActions
 
             $booking = &$data['arbeitszeit'][$idx];
             if ($aktion === 'uebernehmen') {
+                // Stunden und Datum folgen der Zeiterfassung; Kategorie und Preis nur nach
+                // denselben Regeln wie beim Speichern (ein Handpreis bleibt erhalten).
                 [$catalogById, $catalogByName] = $this->loadStundenKatalog();
                 $sk = $this->katalogEintrag($entry, $kategorie, $catalogById, $catalogByName);
                 $booking['stunden'] = (float)$entry['stunden'];
                 $booking['datum']   = (string)$entry['datum'];
-                if ($sk) {
-                    $booking['stundenKatId'] = (int)$sk['id'];
-                    $booking['stundenpreis'] = money_from_cents($sk['preis']);
-                    $booking['fixkosten']    = money_from_cents($sk['fixkosten']);
-                }
-                $booking['zeitStunden']      = (float)$entry['stunden'];
-                $booking['zeitDatum']        = (string)$entry['datum'];
-                $booking['zeitStundenKatId'] = $sk ? (int)$sk['id'] : null;
+                $this->folgeKategorie($booking, $sk, self::hatEigeneKategorie($entry), $catalogById, $booking['zeitStundenKatId'] ?? ($booking['stundenKatId'] ?? null));
+                $booking['zeitStunden'] = (float)$entry['stunden'];
+                $booking['zeitDatum']   = (string)$entry['datum'];
+                $this->spiegleKategorie($booking, $sk, self::hatEigeneKategorie($entry));
                 unset($booking['abweichungBestaetigt']);
             } else {
                 $booking['abweichungBestaetigt'] = [
@@ -1254,7 +1359,7 @@ class ZeiterfassungActions
     }
 
     /**
-     * repair_bookings_bulk â€“ repariert mehrere verwaiste Buchungen in einer
+     * repair_bookings_bulk – repariert mehrere verwaiste Buchungen in einer
      * Transaktion (Admin/Master). Body: items = [{username, entryId}].
      */
     public function repairBookingsBulk(): void
@@ -1315,7 +1420,7 @@ class ZeiterfassungActions
         jsonOut(['ok' => true, 'repaired' => $repaired, 'skipped' => $skipped, 'failed' => $failed]);
     }
 
-    /** Erzeugt eine RFC-4122-v4-UUID fÃ¼r EintrÃ¤ge ohne clientseitige IdentitÃ¤t. */
+    /** Erzeugt eine RFC-4122-v4-UUID für Einträge ohne clientseitige Identität. */
     private static function newUuid(): string
     {
         $b = random_bytes(16);
@@ -1324,7 +1429,7 @@ class ZeiterfassungActions
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($b), 4));
     }
 
-    /** Herkunft des Requests fÃ¼r die Nachvollziehbarkeit (desktop|mobile|light|admin). */
+    /** Herkunft des Requests für die Nachvollziehbarkeit (desktop|mobile|light|admin). */
     private function requestQuelle(): string
     {
         $q = strtolower(trim((string)($this->body['quelle'] ?? '')));
@@ -1339,9 +1444,9 @@ class ZeiterfassungActions
     }
 
     /**
-     * ErhÃ¶ht die Zeiterfassungs-Revision eines Benutzers und liefert den neuen Wert.
-     * Ã–ffentlich, weil auch das Verschieben einer Projektbuchung (move_position) die
-     * Zeiterfassung Ã¤ndert und andere GerÃ¤te das erkennen mÃ¼ssen.
+     * Erhöht die Zeiterfassungs-Revision eines Benutzers und liefert den neuen Wert.
+     * Öffentlich, weil auch das Verschieben einer Projektbuchung (move_position) die
+     * Zeiterfassung ändert und andere Geräte das erkennen müssen.
      */
     public static function bumpZeitRev(\PDO $db, string $username): int
     {
@@ -1358,7 +1463,7 @@ class ZeiterfassungActions
     }
 
     /**
-     * Setzt status/errorCode/errorMessage der gerade geschriebenen EintrÃ¤ge Ã¼ber den
+     * Setzt status/errorCode/errorMessage der gerade geschriebenen Einträge über den
      * zentralen Fehlbuchungs-Katalog. Wird NACH dem Auto-Import aufgerufen.
      *
      * @param array $written Liste mit clientUuid, id, typ, datum, baustelleId, stunden
@@ -1390,7 +1495,7 @@ class ZeiterfassungActions
     }
 
     /**
-     * Schreibt Projektumbuchungen in den Audit-Trail (Anforderung: lÃ¼ckenlose
+     * Schreibt Projektumbuchungen in den Audit-Trail (Anforderung: lückenlose
      * Historie mit altem/neuem Projektbezug, Zeitstempel und Bearbeiter).
      */
     private function writeMoveLogs(string $targetUser, array $moves, string $bearbeiter, string $now): void
@@ -1412,9 +1517,9 @@ class ZeiterfassungActions
     }
 
     /**
-     * get_zeiterfassung_historie â€“ Audit-Trail eines Benutzers bzw. eines Eintrags.
+     * get_zeiterfassung_historie – Audit-Trail eines Benutzers bzw. eines Eintrags.
      * Eigene Historie ist immer einsehbar; fremde nur mit Auswertungs-Recht.
-     * Optional: ?entryId=â€¦ schrÃ¤nkt auf einen Eintrag ein.
+     * Optional: ?entryId=… schränkt auf einen Eintrag ein.
      */
     public function getHistorie(): void
     {
@@ -1514,7 +1619,7 @@ class ZeiterfassungActions
         Auth::requireRole('admin', 'master');
         $target      = trim($this->body['username'] ?? '');
         $sollstunden = (float)($this->body['sollstunden'] ?? 0);
-        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht Ã¤nderbar.'], 403);
+        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
         $cnt = $this->db->prepare("UPDATE users SET sollstunden = ? WHERE username = ?");
         $cnt->execute([$sollstunden, $target]);
         if ($cnt->rowCount() === 0) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
@@ -1552,14 +1657,14 @@ class ZeiterfassungActions
         if (array_key_exists('sollstundenTag', $this->body) || !$hasWeekdayInput) {
             $raw = $this->body['sollstundenTag'] ?? 8;
             if (!is_numeric($raw) || (float)$raw < 0 || (float)$raw > 24) {
-                jsonOut(['error' => 'Sollstunden mÃ¼ssen numerisch zwischen 0 und 24 liegen.'], 400);
+                jsonOut(['error' => 'Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
             }
             $fields[] = 'sollstundenTag = ?'; $params[] = (float)$raw;
         }
         if (array_key_exists('sollzeitJeWochentag', $this->body)) {
             $enabled = $this->body['sollzeitJeWochentag'];
             if (!in_array($enabled, [true, false, 0, 1, '0', '1'], true)) {
-                jsonOut(['error' => 'UngÃ¼ltiger Wert fÃ¼r Sollzeit je Wochentag.'], 400);
+                jsonOut(['error' => 'Ungültiger Wert für Sollzeit je Wochentag.'], 400);
             }
             $fields[] = 'sollzeitJeWochentag = ?'; $params[] = $enabled ? 1 : 0;
         }
@@ -1567,11 +1672,11 @@ class ZeiterfassungActions
             if (!array_key_exists($field, $this->body)) continue;
             $raw = $this->body[$field];
             if (!is_numeric($raw) || (float)$raw < 0 || (float)$raw > 24) {
-                jsonOut(['error' => 'Wochentags-Sollstunden mÃ¼ssen numerisch zwischen 0 und 24 liegen.'], 400);
+                jsonOut(['error' => 'Wochentags-Sollstunden müssen numerisch zwischen 0 und 24 liegen.'], 400);
             }
             $fields[] = $field . ' = ?'; $params[] = (float)$raw;
         }
-        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht Ã¤nderbar.'], 403);
+        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
         $params[] = $target;
         $cnt = $this->db->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE username = ?');
         $cnt->execute($params);
@@ -1587,7 +1692,7 @@ class ZeiterfassungActions
         $val    = (float)($this->body['sollTageWoche'] ?? 5);
         if ($val < 1) $val = 1;
         if ($val > 7) $val = 7;
-        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht Ã¤nderbar.'], 403);
+        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
         $cnt = $this->db->prepare("UPDATE users SET sollTageWoche = ? WHERE username = ?");
         $cnt->execute([$val, $target]);
         if ($cnt->rowCount() === 0) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
@@ -1601,7 +1706,7 @@ class ZeiterfassungActions
         $target     = trim($this->body['username'] ?? '');
         $year       = (int)($this->body['year'] ?? date('Y'));
         $urlaubstage = (int)($this->body['urlaubstage'] ?? 30);
-        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht Ã¤nderbar.'], 403);
+        if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
 
         $row = Database::fetchOne($this->db, "SELECT urlaubstageProJahr FROM users WHERE username = ?", [$target]);
         if (!$row) jsonOut(['error' => 'Benutzer nicht gefunden.'], 404);
@@ -1640,13 +1745,15 @@ class ZeiterfassungActions
     }
 
     /**
-     * auto_import_stunden â€“ â€žJetzt importierenâ€œ: bucht die Stunden aller Benutzer mit
-     * KÃ¼rzel nach denselben Regeln wie save_zeiterfassung ins Projekt (exakte VerknÃ¼pfung,
-     * Sperrliste, archivierte Projekte, HandÃ¤nderungen bleiben). Entfernt nichts.
+     * auto_import_stunden – „Jetzt importieren“: bucht die Stunden aller Benutzer mit
+     * Kürzel nach denselben Regeln wie save_zeiterfassung ins Projekt (exakte Verknüpfung,
+     * Sperrliste, archivierte Projekte, Handänderungen bleiben). Entfernt nichts.
      */
     public function autoImport(): void
     {
-        Auth::requireAuth();
+        // Wirkt auf die Projektbuchungen aller Mitarbeiter – wie der Knopf in
+        // „Allgemein“ nur für Administratoren.
+        Auth::requireRole('admin');
         $settings = Auth::loadSettings($this->db);
         if (empty($settings['auto_import_stunden'])) jsonOut(['error' => 'Auto-Import ist deaktiviert.'], 400);
 
@@ -1676,7 +1783,7 @@ class ZeiterfassungActions
         jsonOut(['ok' => true, 'imported' => $imported, 'dataRev' => $dataRev]);
     }
 
-    /** get_user_sollstunden â€“ eigene Sollstunden (fÃ¼r normalen User) */
+    /** get_user_sollstunden – eigene Sollstunden (für normalen User) */
     public function getUserSollstunden(): void
     {
         Auth::requireAuth();
@@ -1686,12 +1793,12 @@ class ZeiterfassungActions
         jsonOut(['ok' => true, 'sollstundenTag' => (float)($row['sollstundenTag'] ?? 8), 'sollTageWoche' => (float)($row['sollTageWoche'] ?? 5), 'arbeitstage' => $row['arbeitstage'] ?? '1,2,3,4,5', 'sollzeitJeWochentag' => (bool)($row['sollzeitJeWochentag'] ?? 0), 'sollstundenMo' => (float)($row['sollstundenMo'] ?? 0), 'sollstundenDi' => (float)($row['sollstundenDi'] ?? 0), 'sollstundenMi' => (float)($row['sollstundenMi'] ?? 0), 'sollstundenDo' => (float)($row['sollstundenDo'] ?? 0), 'sollstundenFr' => (float)($row['sollstundenFr'] ?? 0), 'sollstundenSa' => (float)($row['sollstundenSa'] ?? 0), 'sollstundenSo' => (float)($row['sollstundenSo'] ?? 0), 'sollstunden' => (float)($row['sollstunden'] ?? 0), 'urlaubstageProJahr' => json_decode($row['urlaubstageProJahr'] ?? '{}', true) ?? []]);
     }
 
-    /** get_gleitzeitkonto_buchungen â€“ Buchungen fÃ¼r einen User */
+    /** get_gleitzeitkonto_buchungen – Buchungen für einen User */
     public function getGleitzeitBuchungen(): void
     {
         Auth::requireAuth();
         $username = $_GET['username'] ?? $_SESSION['username'];
-        // Normale User dÃ¼rfen nur eigene sehen
+        // Normale User dürfen nur eigene sehen
         if ($username !== $_SESSION['username'] && !Auth::canDo($this->db, 'canSeeStundenauswertung')) {
             jsonOut(['error' => 'Keine Berechtigung.'], 403);
         }
@@ -1699,7 +1806,7 @@ class ZeiterfassungActions
         jsonOut(['ok' => true, 'buchungen' => $rows]);
     }
 
-    /** save_gleitzeitkonto_buchung â€“ Admin bucht Gleitzeit (z.B. Auszahlung) */
+    /** save_gleitzeitkonto_buchung – Admin bucht Gleitzeit (z.B. Auszahlung) */
     public function saveGleitzeitBuchung(): void
     {
         Auth::requireAuth();
@@ -1709,7 +1816,7 @@ class ZeiterfassungActions
         $target   = trim($this->body['username'] ?? '');
         $betrag   = (float)($this->body['betrag'] ?? 0);
         $kommentar = trim($this->body['kommentar'] ?? '');
-        // Optionales Datum (z.B. fÃ¼r Jahreswechsel-Ãœbertrag); Standardwert = heute
+        // Optionales Datum (z.B. für Jahreswechsel-Übertrag); Standardwert = heute
         $datumRaw  = trim($this->body['datum'] ?? '');
         $datum     = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $datumRaw) && strtotime($datumRaw)) ? $datumRaw : date('Y-m-d');
         if (!$target) jsonOut(['error' => 'Benutzername fehlt.'], 400);
@@ -1720,7 +1827,7 @@ class ZeiterfassungActions
         jsonOut(['ok' => true]);
     }
 
-    /** admin_edit_zeiterfassung â€“ Admin bearbeitet einen Eintrag eines Users */
+    /** admin_edit_zeiterfassung – Admin bearbeitet einen Eintrag eines Users */
     public function adminEditEntry(): void
     {
         Auth::requireAuth();
@@ -1729,13 +1836,13 @@ class ZeiterfassungActions
         }
         $target  = trim($this->body['username'] ?? '');
         $entryId = (int)($this->body['entryId'] ?? 0);
-        if (!$target || !$entryId) jsonOut(['error' => 'UngÃ¼ltige Parameter.'], 400);
+        if (!$target || !$entryId) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
         $old = Database::fetchOne($this->db, "SELECT datum, typ, stunden, baustelleId, baustelleName, bemerkung, von, bis, pause FROM zeiterfassung WHERE username = ? AND entryId = ?", [$target, $entryId]);
         if (!$old) jsonOut(['error' => 'Eintrag nicht gefunden.'], 404);
 
         // Nicht gesendete Felder behalten ihren Wert (die mobile Bearbeitung sendet z.B.
-        // weder Projekt noch Uhrzeiten â€“ diese dÃ¼rfen dabei nicht verloren gehen).
+        // weder Projekt noch Uhrzeiten – diese dürfen dabei nicht verloren gehen).
         $feld = fn(string $key, mixed $alt): mixed => array_key_exists($key, $this->body) ? $this->body[$key] : $alt;
         $datum   = trim((string)$feld('datum', $old['datum']));
         $typ     = trim((string)$feld('typ', $old['typ']));
@@ -1752,20 +1859,20 @@ class ZeiterfassungActions
         if (in_array($typ, self::CREDITED_ABSENCE_TYPEN, true)) {
             $stunden = $this->absenceStundenForDate($datum, $zeitCfg);
         }
-        // Urlaubslimit prÃ¼fen (dieser Eintrag ausgenommen)
+        // Urlaubslimit prüfen (dieser Eintrag ausgenommen)
         if ($typ === 'urlaub') {
             $year = substr($datum, 0, 4);
             $row  = Database::fetchOne($this->db, "SELECT COUNT(*) AS c FROM zeiterfassung WHERE username = ? AND typ = 'urlaub' AND entryId <> ? AND substr(datum,1,4) = ?", [$target, $entryId, $year]);
             $limit = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], $year);
             if ((int)($row['c'] ?? 0) + 1 > $limit) {
-                jsonOut(['error' => "Urlaubslimit fÃ¼r {$year} erreicht ({$limit} Tage). Buchung nicht mÃ¶glich."], 400);
+                jsonOut(['error' => "Urlaubslimit für {$year} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
             }
         }
 
         $settings = Auth::loadSettings($this->db);
         $now = date('Y-m-d H:i:s');
 
-        // Projektname denormalisieren, damit die Zuordnung ein Archivieren Ã¼berlebt.
+        // Projektname denormalisieren, damit die Zuordnung ein Archivieren überlebt.
         $neuName = '';
         if ($baustelleId !== null) {
             $bn = Database::fetchOne($this->db, "SELECT name FROM baustellen WHERE id = ?", [$baustelleId]);
@@ -1788,7 +1895,7 @@ class ZeiterfassungActions
                 ]);
             }
 
-            // Umbuchung immer protokollieren â€“ unabhÃ¤ngig von "erweiterte Zeiterfassung".
+            // Umbuchung immer protokollieren – unabhängig von "erweiterte Zeiterfassung".
             if ($altBId !== $baustelleId) {
                 $this->writeMoveLogs($target, [[
                     'entryId' => $entryId,
@@ -1816,8 +1923,8 @@ class ZeiterfassungActions
         jsonOut(['ok' => true, 'stunden' => $stunden, 'dataRev' => $dataRev]);
     }
 
-    /** admin_add_zeiterfassung â€“ Admin fÃ¼gt einen oder mehrere EintrÃ¤ge fÃ¼r einen User nach.
-     *  Optional: datumBis â†’ erzeugt einen Eintrag pro Werktag im Zeitraum datum..datumBis. */
+    /** admin_add_zeiterfassung – Admin fügt einen oder mehrere Einträge für einen User nach.
+     *  Optional: datumBis → erzeugt einen Eintrag pro Werktag im Zeitraum datum..datumBis. */
     public function adminAddEntry(): void
     {
         Auth::requireAuth();
@@ -1835,7 +1942,7 @@ class ZeiterfassungActions
         $bis         = trim($this->body['bis']  ?? '');
         $pause       = (float)($this->body['pause'] ?? 0);
 
-        if (!$target || !$datum) jsonOut(['error' => 'UngÃ¼ltige Parameter.'], 400);
+        if (!$target || !$datum) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
         // Arbeitszeit-Konfiguration laden (Soll/Tag, Arbeitstage, Urlaubslimit)
         $zeitCfg = $this->loadUserZeitConfig($target);
@@ -1865,9 +1972,9 @@ class ZeiterfassungActions
             $dates[] = $datum;
         }
 
-        if (empty($dates)) jsonOut(['error' => 'Keine Arbeitstage im gewÃ¤hlten Zeitraum.'], 400);
+        if (empty($dates)) jsonOut(['error' => 'Keine Arbeitstage im gewählten Zeitraum.'], 400);
 
-        // Urlaubslimit prÃ¼fen (bestehende + neue Tage pro Jahr)
+        // Urlaubslimit prüfen (bestehende + neue Tage pro Jahr)
         if ($typ === 'urlaub') {
             $newByYear = [];
             foreach ($dates as $d) { $y = substr($d, 0, 4); $newByYear[$y] = ($newByYear[$y] ?? 0) + 1; }
@@ -1875,12 +1982,12 @@ class ZeiterfassungActions
                 $row      = Database::fetchOne($this->db, "SELECT COUNT(*) AS c FROM zeiterfassung WHERE username = ? AND typ = 'urlaub' AND substr(datum,1,4) = ?", [$target, (string)$y]);
                 $limit    = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], (string)$y);
                 if ((int)($row['c'] ?? 0) + $cnt > $limit) {
-                    jsonOut(['error' => "Urlaubslimit fÃ¼r {$y} erreicht ({$limit} Tage). Buchung nicht mÃ¶glich."], 400);
+                    jsonOut(['error' => "Urlaubslimit für {$y} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
                 }
             }
         }
 
-        // NÃ¤chste freie entryId fÃ¼r diesen User ermitteln
+        // Nächste freie entryId für diesen User ermitteln
         $row    = Database::fetchOne($this->db, "SELECT COALESCE(MAX(entryId),0) AS m FROM zeiterfassung WHERE username = ?", [$target]);
         $nextId = (int)($row['m'] ?? 0) + 1;
 
@@ -1937,12 +2044,12 @@ class ZeiterfassungActions
         } catch (\Throwable $ex) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             error_log('[bk] admin_add_zeiterfassung fehlgeschlagen: ' . $ex->getMessage());
-            jsonOut(['error' => 'EintrÃ¤ge konnten nicht gespeichert werden.'], 500);
+            jsonOut(['error' => 'Einträge konnten nicht gespeichert werden.'], 500);
         }
         jsonOut(['ok' => true, 'inserted' => $inserted, 'dataRev' => $dataRev]);
     }
 
-    /** admin_delete_zeiterfassung â€“ Admin lÃ¶scht einen Eintrag eines Users */
+    /** admin_delete_zeiterfassung – Admin löscht einen Eintrag eines Users */
     public function adminDeleteEntry(): void
     {
         Auth::requireAuth();
@@ -1951,7 +2058,7 @@ class ZeiterfassungActions
         }
         $target  = trim($this->body['username'] ?? '');
         $entryId = (int)($this->body['entryId'] ?? 0);
-        if (!$target || !$entryId) jsonOut(['error' => 'UngÃ¼ltige Parameter.'], 400);
+        if (!$target || !$entryId) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
         $old = Database::fetchOne($this->db, "SELECT datum, typ, stunden, baustelleId, bemerkung, von, bis, pause FROM zeiterfassung WHERE username = ? AND entryId = ?", [$target, $entryId]);
         if (!$old) jsonOut(['error' => 'Eintrag nicht gefunden.'], 404);
@@ -1968,7 +2075,7 @@ class ZeiterfassungActions
 
             $this->db->prepare("DELETE FROM zeiterfassung WHERE username = ? AND entryId = ?")->execute([$target, $entryId]);
 
-            // Abgleich: zugehÃ¶rige Auto-Import-Buchung entfernen â€“ auch wenn es der letzte
+            // Abgleich: zugehörige Auto-Import-Buchung entfernen – auch wenn es der letzte
             // Eintrag des Benutzers auf diesem Projekt war.
             $sync = $this->syncNachAdminAenderung($target, $old['baustelleId'] !== null ? [(int)$old['baustelleId']] : []);
             if ($sync['changed']) {
@@ -1979,18 +2086,18 @@ class ZeiterfassungActions
         } catch (\Throwable $ex) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             error_log('[bk] admin_delete_zeiterfassung fehlgeschlagen: ' . $ex->getMessage());
-            jsonOut(['error' => 'Eintrag konnte nicht gelÃ¶scht werden.'], 500);
+            jsonOut(['error' => 'Eintrag konnte nicht gelöscht werden.'], 500);
         }
 
         jsonOut(['ok' => true, 'autoRemoved' => $sync['removed'], 'dataRev' => $dataRev]);
     }
 
-    /** Audit-Trail fÃ¼r bulk save (delete-all-reinsert pattern) */
+    /** Audit-Trail für bulk save (delete-all-reinsert pattern) */
     // -------------------------------------------------------
     // JAHRESWECHSEL-ASSISTENT
     // -------------------------------------------------------
 
-    /** get_jahreswechsel_data â€“ Daten fÃ¼r den Jahreswechsel-Assistenten */
+    /** get_jahreswechsel_data – Daten für den Jahreswechsel-Assistenten */
     public function getJahreswechselData(): void
     {
         Auth::requireRole('admin', 'master');
@@ -2079,10 +2186,10 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // WOCHENPRÃœFUNG â€“ Laden
+    // WOCHENPRÜFUNG – Laden
     // -------------------------------------------------------
 
-    /** load_wochenpruefung â€“ PrÃ¼fstatus aller User/KW als {username: {kw: {...}}} */
+    /** load_wochenpruefung – Prüfstatus aller User/KW als {username: {kw: {...}}} */
     public function loadWochenpruefung(): void
     {
         Auth::requireAuth();
@@ -2107,10 +2214,10 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // WOCHENPRÃœFUNG â€“ Speichern/Toggeln
+    // WOCHENPRÜFUNG – Speichern/Toggeln
     // -------------------------------------------------------
 
-    /** save_wochenpruefung â€“ PrÃ¼fstatus fÃ¼r username+kw setzen */
+    /** save_wochenpruefung – Prüfstatus für username+kw setzen */
     public function saveWochenpruefung(): void
     {
         Auth::requireAuth();
@@ -2132,7 +2239,7 @@ class ZeiterfassungActions
         // KW-Format validieren (YYYY-WNN)
         if (!preg_match('/^\d{4}-W\d{1,2}$/', $kw)) {
             http_response_code(400);
-            jsonOut(['ok' => false, 'error' => 'UngÃ¼ltiges KW-Format (erwartet: YYYY-WNN)']);
+            jsonOut(['ok' => false, 'error' => 'Ungültiges KW-Format (erwartet: YYYY-WNN)']);
             return;
         }
 
@@ -2150,17 +2257,17 @@ class ZeiterfassungActions
         ");
         $stmt->execute([$username, $kw, $geprueft ? 1 : 0, $supervisor, $geprueft ? $now : '', $kommentar]);
 
-        // Kopplung: WochenprÃ¼fung Ã¼bertrÃ¤gt sich auf alle Tage der KW (persistiert).
-        // Wird die Woche abgehakt, gelten alle erfassten Tage dieser Woche als geprÃ¼ft;
-        // wird sie zurÃ¼ckgesetzt, werden dieselben Tage wieder auf ungeprÃ¼ft gesetzt.
+        // Kopplung: Wochenprüfung überträgt sich auf alle Tage der KW (persistiert).
+        // Wird die Woche abgehakt, gelten alle erfassten Tage dieser Woche als geprüft;
+        // wird sie zurückgesetzt, werden dieselben Tage wieder auf ungeprüft gesetzt.
         $this->propagateWochenpruefungToTage($username, $kw, $geprueft, $supervisor, $now);
 
         jsonOut(['ok' => true]);
     }
 
     /**
-     * ÃœbertrÃ¤gt den PrÃ¼fstatus einer KW auf alle Tage mit Zeiterfassungs-EintrÃ¤gen
-     * in dieser Woche (Moâ€“So).
+     * Überträgt den Prüfstatus einer KW auf alle Tage mit Zeiterfassungs-Einträgen
+     * in dieser Woche (Mo–So).
      */
     private function propagateWochenpruefungToTage(string $username, string $kw, bool $geprueft, string $supervisor, string $now): void
     {
@@ -2202,10 +2309,10 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // TAGESPRÃœFUNG â€“ Laden
+    // TAGESPRÜFUNG – Laden
     // -------------------------------------------------------
 
-    /** load_tagespruefung â€“ PrÃ¼fstatus aller User/Tage als {username: {datum: {...}}} */
+    /** load_tagespruefung – Prüfstatus aller User/Tage als {username: {datum: {...}}} */
     public function loadTagespruefung(): void
     {
         Auth::requireAuth();
@@ -2230,10 +2337,10 @@ class ZeiterfassungActions
     }
 
     // -------------------------------------------------------
-    // TAGESPRÃœFUNG â€“ Speichern/Toggeln
+    // TAGESPRÜFUNG – Speichern/Toggeln
     // -------------------------------------------------------
 
-    /** save_tagespruefung â€“ PrÃ¼fstatus fÃ¼r username+datum setzen */
+    /** save_tagespruefung – Prüfstatus für username+datum setzen */
     public function saveTagespruefung(): void
     {
         Auth::requireAuth();
@@ -2255,7 +2362,7 @@ class ZeiterfassungActions
         // Datum-Format validieren (YYYY-MM-DD)
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) {
             http_response_code(400);
-            jsonOut(['ok' => false, 'error' => 'UngÃ¼ltiges Datum-Format (erwartet: YYYY-MM-DD)']);
+            jsonOut(['ok' => false, 'error' => 'Ungültiges Datum-Format (erwartet: YYYY-MM-DD)']);
             return;
         }
 
