@@ -72,6 +72,7 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | E-064 | PostgreSQL-Tests nur starten, wenn der eigene Wegwerf-Container läuft – bei belegtem Port abbrechen, nie gegen einen unbekannten Server testen | Tests leeren das Schema `public`; Port 55432 war von einem Rest-Container belegt | AP-20260929-sicherheit | nur hier |
 | E-065 | Befehle im Container als `www-data` ausführen (`docker compose exec -u www-data app …`) – in Doku und UI | Sonst root-eigene Dateien in `data/`, Webserver kann nicht mehr schreiben | AP-20261001-update | nur hier |
 | E-066 | Ist ein Custom Agent per Name nicht verfügbar, generischen Subagenten mit Verweis auf die `.agent.md` beauftragen | Agent-Registry lud die Rollen zeitweise nicht | AP-20261001-update | nur hier |
+| E-087 | Quelldateien nie mit Windows PowerShell 5.1 `Get-Content`/`Set-Content` bzw. `ReadAllText` ohne Kodierung lesen und zurückschreiben (liest UTF-8 ohne BOM als Windows-1252); Dateiinhalte per Edit-Werkzeug oder Node (`fs` mit `'utf8'`) ändern, Dateien vertauschen per `copyFileSync` | `ZeiterfassungActions.php` wurde doppelt kodiert und mit 263 verfälschten Zeichen (Fehlermeldungen) als 3.0.15 veröffentlicht; Tests prüften keine Texte – Wächtertest `tests/Unit/QuelltextKodierungTest.php` | AP-20261011-projektbuchung-abgleich | nur hier |
 
 ## Planung / Zusammenarbeit
 

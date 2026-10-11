@@ -6,7 +6,7 @@
 | Typ | Bugfix |
 | Testläufe rot | 0 |
 | Review-Runden | 3 |
-| Commit | Release v3.0.15 |
+| Commit | Release v3.0.15, Nachprüfung v3.0.16 |
 
 ## 1. Auftrag
 
@@ -319,3 +319,38 @@ keine neuen SQL-Konstrukte (SQLite/PostgreSQL), Ausgaben in neuem HTML über `es
   Schreibpfade inventarisieren und über eine zentrale Funktion führen.
 - Offen für ein eigenes AP (nicht Teil dieses Auftrags): `auto_import_stunden` („Jetzt importieren“) ist nur per
   `Auth::requireAuth()` geschützt – jeder angemeldete Benutzer kann den Abgleich für alle Mitarbeiter auslösen.
+  → in Runde 4 (3.0.16) behoben.
+
+## 7. Nachprüfung auf Datenverlust (3.0.16)
+
+Auftrag Nutzer (2026-10-11): „Was bewirkt ‚Jetzt importieren‘? Dies kann doch nur vom Admin gemacht werden? Bitte alle
+Änderungen nochmal prüfen, damit keine Daten verloren gehen oder falsch behandelt werden.“
+
+Vorgehen: Probetest mit 8 Szenarien gegen die API (temporär, gelöscht) und unabhängiges Datenverlust-Review über
+`573b256..HEAD`; Befunde an der Fundstelle geprüft (E-072).
+
+| Nr | Schwere | Befund | Behebung |
+|---|---|---|---|
+| D1 | Major | `ZeiterfassungActions.php` in 3.0.15 doppelt UTF-8-kodiert (263 Zeichen, Fehlermeldungen) | Rückwandlung cp1252→UTF-8, Zeilenvergleich mit `17eeda6`; Wächtertest `tests/Unit/QuelltextKodierungTest.php` (gegen HEAD rot) – E-087 |
+| D2 | Major | Geänderte Standard-Stundenkategorie preiste alle Altbuchungen um | Kategorie folgt nur ausdrücklicher Wahl (`hatEigeneKategorie`), Spiegel bleibt sonst unverändert |
+| D3 | Major | Handpreis im Projekt bei Kategoriewechsel/„übernehmen“ überschrieben | Preis-Spiegel `zeitStundenpreis/zeitFixkosten`, sonst Katalogvergleich (`preisHandGeaendert`) |
+| D4 | Major | Verschieben: Projekt-Speichern getrennt vom Umhängen → Doppelbuchung/verlorene Handänderung bei Teilfehler oder Konflikt | `move_position` mit `srcBaustelleId` verschiebt serverseitig atomar; Client lädt neu, verschiebt nur ohne ungespeicherte Änderungen |
+| D5 | Minor | „Jetzt importieren“ für alle Angemeldeten; verwarf ungespeicherte Änderungen | `requireRole('admin')`; `_projektstandNachZeitAbgleich` |
+| D6 | Minor | Sperre `id:<user>:<eid>` blockierte neuen Eintrag mit wiederverwendeter ID | Sperre wird beim Abgleich entfernt, sobald der Eintrag gelöscht ist |
+| D7 | Minor (Altproblem) | ID-Kollision beim Zusammenführen gleichzeitig angelegter Zeilen (auch nach serverseitigem Verschieben) | offen, eigenes AP |
+| D8 | Minor | Server entfernt Sperren; Desktop-Merge behandelte `azImportBlocked` als Ganzes → lokale Sperre konnte verloren gehen | 3-Wege-Mengen-Merge `_mergeStringSet` (Desktop; Mobil führt nur ganze Projekte zusammen) |
+| D9 | Minor | Verschieben einer verknüpften Buchung ohne `zeitUser` meldete Erfolg ohne Wirkung | Client verschiebt solche Altbuchungen lokal wie bisher; Server liefert mit `srcBaustelleId` 400 statt `ok` |
+| D10 | Minor | Katalog-Preisänderung (`setStundenKat`) ließ Preis-Spiegel alt → Kategorie folgte nie mehr | Spiegel wird mitgezogen |
+| D11 | Minor (Altproblem, nur PostgreSQL) | Keine exklusive Sperre der Revision bei gleichzeitigem Projekt-Speichern und Server-Abgleich/Verschieben (READ COMMITTED) | offen, eigenes AP (betrifft `DataService::saveAllData` und alle Abgleichspfade) |
+| D12 | Hinweis (Altverhalten) | Verknüpfte Altbuchungen ohne `zeitUser` werden nur lokal verschoben; der nächste Abgleich macht das rückgängig | offen (selten); Zuordnung über `zeitEntryId` + Benutzer des Eintrags denkbar |
+| D13 | Hinweis (Altverhalten) | Mobil führt Konflikte nur pro ganzer Baustelle zusammen; „Meine Version“ verwirft Server-Änderungen dieser Baustelle | offen, gemeinsam mit D7/D11 |
+
+Review der Nachprüfung: unabhängiges Datenverlust-Review, 3 Runden (Befunde → Korrekturen → **APPROVE**).
+
+Geprüft und unbedenklich (Probe + Review): Buchungen anderer Benutzer, manuelle Positionen, Altbuchungen bei mehrdeutigem
+Kürzel, archivierte Projekte, Mitarbeiter ohne Kürzel, R1 (kein Pfad schreibt Projektwerte in die Zeiterfassung),
+`adminEditEntry` (nicht gesendete Felder), Statusrücksetzung (kein weiterer Status außer valid/warning).
+
+Tests: 9 neue Regressionstests in `ZeiterfassungProjektbuchungTest` (8 gegen HEAD nachweislich rot) + Wächtertest.
+Gesamtläufe 3.0.16: SQLite 519 Tests / 3862 Assertions, PostgreSQL 519 / 3859 – jeweils 0 Fehler (2 bzw. 3 übersprungen wie bisher);
+PHPStan ohne Fehler, php-cs-fixer, `check-versions --strict`, `test:js` grün.
