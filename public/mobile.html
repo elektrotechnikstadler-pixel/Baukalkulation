@@ -6224,7 +6224,8 @@ async function compressImageForUpload(file, maxDim = 1600, quality = 0.82) {
 async function uploadFilesMobile(event) {
   const b = getBaustelle();
   if (!b) return;
-  const files = event.target.files;
+  const input = event.target;
+  const files = input.files;
   if (!files || files.length === 0) return;
   let category = (window._mDocCat && window._mDocCat[b.id] && window._mDocCat[b.id] !== 'Alle')
     ? window._mDocCat[b.id] : '';
@@ -6237,9 +6238,14 @@ async function uploadFilesMobile(event) {
       if (n>=1 && n<=order.length) category = order[n-1];
     }
   }
-  let okCount = 0, failCount = 0;
+  let okCount = 0;
+  const failures = [];
   for (const rawFile of files) {
     const file = await compressImageForUpload(rawFile);
+    if (file.size > 20 * 1024 * 1024) {
+      failures.push(`${rawFile.name}: auch nach Bildoptimierung größer als 20 MB`);
+      continue;
+    }
     const fd = new FormData();
     fd.append('file', file);
     fd.append('baustelleId', b.id);
@@ -6247,16 +6253,22 @@ async function uploadFilesMobile(event) {
     try {
       const r = await fetch('api.php?action=upload_file', { method: 'POST', body: fd });
       const j = await r.json().catch(() => ({}));
-      if (r.ok && j.ok) okCount++; else failCount++;
-    } catch(e) { failCount++; }
+      if (r.ok && j.ok) {
+        okCount++;
+      } else {
+        failures.push(`${rawFile.name}: ${j.error || `Serverfehler ${r.status}`}`);
+      }
+    } catch(e) {
+      failures.push(`${rawFile.name}: Verbindung unterbrochen`);
+    }
   }
-  event.target.value = '';
-  if (failCount === 0) {
+  input.value = '';
+  if (failures.length === 0) {
     showToast('✓ ' + okCount + (okCount === 1 ? ' Datei' : ' Dateien') + ' hochgeladen');
   } else if (okCount === 0) {
-    showToast('⚠ Upload fehlgeschlagen. Bei langsamer Verbindung bitte erneut versuchen.');
+    showToast('⚠ Upload fehlgeschlagen: ' + failures.join(' · '));
   } else {
-    showToast('⚠ ' + okCount + ' ok, ' + failCount + ' fehlgeschlagen');
+    showToast('⚠ ' + okCount + ' ok · ' + failures.join(' · '));
   }
   loadDateienMobile();
 }

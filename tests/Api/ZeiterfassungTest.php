@@ -45,6 +45,38 @@ final class ZeiterfassungTest extends ApiTestCase
         $this->assertSame('Neubau', $byUuid['uuid-1']['baustelleName']);
     }
 
+    public function testAutoImportBuchtMehrereEintraegeJeProjektOhneDuplikate(): void
+    {
+        $this->setupAdmin();
+        $this->assertOk($this->api->post('save_settings', ['auto_import_stunden' => true]));
+        $this->assertOk($this->api->post('add_user', [
+            'username' => 'monteur',
+            'password' => 'Start-Passwort-1',
+            'role' => 'normal',
+            'kuerzel' => 'MM',
+        ]));
+        $monteur = $this->server->client();
+        $this->assertOk($monteur->post('login', ['username' => 'monteur', 'password' => 'Start-Passwort-1']));
+        $this->assertOk($monteur->post('change_password', ['old' => 'Start-Passwort-1', 'new' => 'Monteur-Pass-1']));
+        $this->saveBaustellen([['id' => 1, 'name' => 'Neubau', 'arbeitszeit' => []]]);
+
+        $entries = [
+            $this->eintrag('uuid-1', '2026-03-02', 8, ['id' => 101]),
+            $this->eintrag('uuid-2', '2026-03-03', 6, ['id' => 102]),
+        ];
+        $saved = $this->assertOk($monteur->post('save_zeiterfassung', ['entries' => $entries]));
+        $this->assertSame(2, $saved['autoImported']);
+        $this->assertSame(0, $this->assertOk($monteur->post('save_zeiterfassung', [
+            'entries' => $entries,
+            'baseZeitRev' => $saved['zeitRev'],
+        ]))['autoImported']);
+
+        $data = $this->assertOk($this->api->get('load'))['data'];
+        $bookings = $data['baustellen'][0]['arbeitszeit'];
+        $this->assertCount(2, $bookings);
+        $this->assertSame([101, 102], array_column($bookings, 'zeitEntryId'));
+    }
+
     public function testUeberschneidendeZeitenWerdenAbgelehnt(): void
     {
         $this->setupAdmin();

@@ -41,6 +41,19 @@
 
 ---
 
+## v3.0.14 – Zeiterfassung und mobile Datei-Uploads
+
+### Behoben
+- Zeiterfassung: Der Stunden-Auto-Import lädt betroffene Projekte und den Stundenkatalog
+  gebündelt und schreibt jedes geänderte Projekt nur einmal.
+- Mobile Datei-Uploads: Dateigröße, Serverfehler und Verbindungsabbrüche werden je Datei
+  verständlich angezeigt.
+
+### Sonstiges
+- Große, vom mobilen Browser lesbare Bilder werden vor dem Upload weiterhin komprimiert.
+
+---
+
 ## v3.0.13 – Mobile Stundenerfassung: neue Einträge mit 0 h
 
 ### Behoben

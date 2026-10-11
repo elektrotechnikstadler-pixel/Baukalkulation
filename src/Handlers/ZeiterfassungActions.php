@@ -295,13 +295,57 @@ class ZeiterfassungActions
      */
     private function autoImportEntries(string $username, string $kuerzel, string $kategorie, array $entries): int
     {
+        $projectIds = [];
+        foreach ($entries as $entry) {
+            if (($entry['typ'] ?? '') !== 'arbeit') continue;
+            $bId = (int)($entry['baustelleId'] ?? 0);
+            if ($bId > 0 && (float)($entry['stunden'] ?? 0) > 0) $projectIds[$bId] = true;
+        }
+        if (!$projectIds) return 0;
+
+        $ids = array_keys($projectIds);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $projects = [];
+        foreach (Database::fetchAll(
+            $this->db,
+            "SELECT id, data, archiviert FROM baustellen WHERE id IN ($ph)",
+            $ids
+        ) as $row) {
+            $bId = (int)$row['id'];
+            $projects[$bId] = [
+                'archiviert' => (int)($row['archiviert'] ?? 0) === 1,
+                'data'       => json_decode((string)$row['data'], true) ?: [],
+                'changed'    => false,
+            ];
+        }
+
+        [$catalogById, $catalogByName] = $this->loadStundenKatalog();
+
         $count = 0;
         foreach ($entries as $entry) {
             if (($entry['typ'] ?? '') !== 'arbeit') continue;
             $bId = (int)($entry['baustelleId'] ?? 0);
-            if ($this->ensureProjectBooking($bId, $entry, $username, $kuerzel, $kategorie)) {
+            if (!isset($projects[$bId]) || $projects[$bId]['archiviert']) continue;
+            $changed = false;
+            if ($this->ensureProjectBookingInData(
+                $projects[$bId]['data'],
+                $entry,
+                $username,
+                $kuerzel,
+                $kategorie,
+                $catalogById,
+                $catalogByName,
+                $changed
+            )) {
                 $count++;
             }
+            $projects[$bId]['changed'] = $projects[$bId]['changed'] || $changed;
+        }
+
+        $update = $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?");
+        foreach ($projects as $bId => $project) {
+            if (!$project['changed']) continue;
+            $update->execute([json_encode($project['data'], JSON_UNESCAPED_UNICODE), $bId]);
         }
         return $count;
     }
@@ -316,18 +360,65 @@ class ZeiterfassungActions
      * @param array $entry Zeiteintrag mit Keys id, datum, stunden, bemerkung
      * @return bool true, wenn eine neue Buchung angelegt wurde
      */
-    private function ensureProjectBooking(int $bId, array $entry, string $username, string $kuerzel, string $kategorie): bool
+    private function ensureProjectBooking(
+        int $bId,
+        array $entry,
+        string $username,
+        string $kuerzel,
+        string $kategorie
+    ): bool {
+        $row = Database::fetchOne($this->db, "SELECT data, archiviert FROM baustellen WHERE id = ?", [$bId]);
+        if (!$row || (int)($row['archiviert'] ?? 0) === 1) return false;
+
+        [$catalogById, $catalogByName] = $this->loadStundenKatalog();
+
+        $data = json_decode((string)$row['data'], true) ?: [];
+        $changed = false;
+        $created = $this->ensureProjectBookingInData(
+            $data,
+            $entry,
+            $username,
+            $kuerzel,
+            $kategorie,
+            $catalogById,
+            $catalogByName,
+            $changed
+        );
+        if ($changed) {
+            $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?")
+                ->execute([json_encode($data, JSON_UNESCAPED_UNICODE), $bId]);
+        }
+        return $created;
+    }
+
+    /**
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
+     */
+    private function loadStundenKatalog(): array
     {
+        $byId = [];
+        $byName = [];
+        foreach (Database::fetchAll($this->db, "SELECT id, kategorie, preis, fixkosten FROM stunden_katalog") as $row) {
+            $byId[(int)$row['id']] = $row;
+            $byName[(string)$row['kategorie']] = $row;
+        }
+        return [$byId, $byName];
+    }
+
+    private function ensureProjectBookingInData(
+        array &$bData,
+        array $entry,
+        string $username,
+        string $kuerzel,
+        string $kategorie,
+        array $catalogById,
+        array $catalogByName,
+        bool &$changed
+    ): bool {
         $stunden = (float)($entry['stunden'] ?? 0);
         $datum   = (string)($entry['datum'] ?? '');
         $eid     = isset($entry['id']) && $entry['id'] !== null ? (int)$entry['id'] : 0;
-        if ($bId <= 0 || $stunden <= 0 || $datum === '') return false;
-
-        $bRow = Database::fetchOne($this->db, "SELECT id, data, archiviert FROM baustellen WHERE id = ?", [$bId]);
-        if (!$bRow) return false;
-        // In archivierte Projekte wird nicht mehr gebucht; der Zeiteintrag bleibt gültig.
-        if ((int)($bRow['archiviert'] ?? 0) === 1) return false;
-        $bData = json_decode($bRow['data'], true) ?: [];
+        if ($stunden <= 0 || $datum === '') return false;
         if (!isset($bData['arbeitszeit']) || !is_array($bData['arbeitszeit'])) $bData['arbeitszeit'] = [];
 
         // Sperrliste: Vom Nutzer archivierte/gelöschte Buchungen NICHT erneut anlegen.
@@ -360,8 +451,7 @@ class ZeiterfassungActions
                     // Nachträglich mit exaktem Link versehen (Migration).
                     $bData['arbeitszeit'][$idx]['zeitEntryId'] = $eid;
                     $bData['arbeitszeit'][$idx]['zeitUser']    = $username;
-                    $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?")
-                             ->execute([json_encode($bData, JSON_UNESCAPED_UNICODE), $bId]);
+                    $changed = true;
                 }
                 return false;
             }
@@ -374,9 +464,9 @@ class ZeiterfassungActions
         $entryKatId = (isset($entry['stundenKatId']) && $entry['stundenKatId'] !== '' && $entry['stundenKatId'] !== null)
             ? (int)$entry['stundenKatId'] : 0;
         if ($entryKatId > 0) {
-            $sk = Database::fetchOne($this->db, "SELECT id, kategorie, preis, fixkosten FROM stunden_katalog WHERE id = ?", [$entryKatId]);
+            $sk = $catalogById[$entryKatId] ?? null;
         } else {
-            $sk = Database::fetchOne($this->db, "SELECT id, kategorie, preis, fixkosten FROM stunden_katalog WHERE kategorie = ?", [$kategorie]);
+            $sk = $catalogByName[$kategorie] ?? null;
         }
         $stundenpreis = $sk ? money_from_cents($sk['preis']) : 0.0;
         $fixkosten    = $sk ? money_from_cents($sk['fixkosten']) : 0.0;
@@ -403,8 +493,7 @@ class ZeiterfassungActions
             $item['zeitUser']    = $username;
         }
         $bData['arbeitszeit'][] = $item;
-        $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?")
-                 ->execute([json_encode($bData, JSON_UNESCAPED_UNICODE), $bId]);
+        $changed = true;
         return true;
     }
 
