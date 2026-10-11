@@ -6224,8 +6224,7 @@ async function compressImageForUpload(file, maxDim = 1600, quality = 0.82) {
 async function uploadFilesMobile(event) {
   const b = getBaustelle();
   if (!b) return;
-  const input = event.target;
-  const files = input.files;
+  const files = event.target.files;
   if (!files || files.length === 0) return;
   let category = (window._mDocCat && window._mDocCat[b.id] && window._mDocCat[b.id] !== 'Alle')
     ? window._mDocCat[b.id] : '';
@@ -6262,7 +6261,7 @@ async function uploadFilesMobile(event) {
       failures.push(`${rawFile.name}: Verbindung unterbrochen`);
     }
   }
-  input.value = '';
+  event.target.value = '';
   if (failures.length === 0) {
     showToast('✓ ' + okCount + (okCount === 1 ? ' Datei' : ' Dateien') + ' hochgeladen');
   } else if (okCount === 0) {

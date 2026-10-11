@@ -326,7 +326,6 @@ class ZeiterfassungActions
             if (($entry['typ'] ?? '') !== 'arbeit') continue;
             $bId = (int)($entry['baustelleId'] ?? 0);
             if (!isset($projects[$bId]) || $projects[$bId]['archiviert']) continue;
-            $changed = false;
             if ($this->ensureProjectBookingInData(
                 $projects[$bId]['data'],
                 $entry,
@@ -335,11 +334,10 @@ class ZeiterfassungActions
                 $kategorie,
                 $catalogById,
                 $catalogByName,
-                $changed
+                $projects[$bId]['changed']
             )) {
                 $count++;
             }
-            $projects[$bId]['changed'] = $projects[$bId]['changed'] || $changed;
         }
 
         $update = $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?");
@@ -405,6 +403,9 @@ class ZeiterfassungActions
         return [$byId, $byName];
     }
 
+    /**
+     * @param bool $changed wird nur auf true gesetzt, nie zurückgesetzt
+     */
     private function ensureProjectBookingInData(
         array &$bData,
         array $entry,
