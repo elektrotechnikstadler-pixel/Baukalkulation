@@ -41,6 +41,42 @@
 
 ---
 
+## v3.0.15 – Zeiterfassung und Projektbuchung lückenlos abgleichen
+
+### Behoben
+- Admin-Nachtrag von Arbeitszeit (Stundenauswertung, Wochenplanung Jahr) bucht die Stunden sofort
+  ins Projekt; bisher erst beim nächsten Speichern des Mitarbeiters.
+- Geänderte Stunden, Datum oder Stundenkategorie eines bereits gebuchten Eintrags werden in die
+  Projektbuchung übernommen (inkl. Stundenpreis und Fixkosten); bisher behielt das Projekt die alten Werte.
+- Admin-Bearbeitung und -Löschung gleichen die Projektbuchung ab; nach einem Projektwechsel oder dem
+  Löschen des letzten Eintrags bleibt im alten Projekt keine Buchung mehr stehen (keine Doppelbuchung).
+- Mobile Admin-Bearbeitung behält Projektzuordnung und Uhrzeiten (gingen bisher verloren).
+- „Jetzt importieren“ nutzt denselben Abgleich wie das Speichern: keine Doppelbuchungen mehr bei
+  im Projekt geänderten Buchungen, gelöschte/archivierte Buchungen kommen nicht zurück.
+- Mobil im Projekt gelöschte Import-Buchungen werden nicht erneut angelegt.
+- Verschieben einer Import-Buchung in ein anderes Projekt: Fehler werden angezeigt und nichts wird
+  verschoben; andere Geräte erkennen die Umbuchung (Revision), der Admin-Cache wird nicht mehr
+  versehentlich verändert.
+- Nach „Reparieren“ verschwindet die Warnung sofort (Status wird neu bewertet); Admin-Löschen erhöht
+  die Zeiterfassungs-Revision.
+- Desktop und Mobil laden nach dem Speichern der Zeiterfassung den Projektstand neu, wenn der Server
+  Projektbuchungen geändert hat; ungespeicherte Projektänderungen werden dabei nicht verworfen (Konflikt
+  und automatisches Zusammenführen wie bisher). Die bisherige lokale Vorab-Kopie der Import-Buchung entfällt.
+
+### Neu
+- Im Projekt von Hand geänderte Import-Buchungen bleiben erhalten; die Zeiterfassung wird dadurch nie
+  verändert. Die Zelle „Import“ zeigt das Datum der Zeitbuchung, bei Abweichung zusätzlich deren Stunden.
+- Fehlercode **ZE013** (Projektbuchung weicht von der Zeiterfassung ab) mit „Zeiterfassung übernehmen“
+  und „Abweichung bestätigen“ in der Stundenauswertung; `reconcile_bookings` liefert `abweichungen`.
+
+### Hinweis zum Update
+- Beim ersten Speichern je Mitarbeiter werden verknüpfte Buchungen um den Spiegel der Zeiterfassung
+  ergänzt; Altbuchungen, die zum bisherigen Zeiteintrag passen, folgen Änderungen sofort. Altbuchungen, die
+  bereits abweichen, werden nicht überschrieben, sondern als ZE013 gemeldet.
+  Empfehlung: vor dem Update `reconcile_bookings` ausführen, um den Ausgangsstand festzuhalten.
+
+---
+
 ## v3.0.14 – Zeiterfassung und mobile Datei-Uploads
 
 ### Behoben

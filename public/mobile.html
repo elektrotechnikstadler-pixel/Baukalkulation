@@ -2381,6 +2381,18 @@ async function loadData() {
   } catch(e) { console.warn('Laden fehlgeschlagen:', e); }
 }
 
+// Der Server hat beim Abgleich mit der Zeiterfassung Projektbuchungen geändert
+// (dataRev gesetzt): Projektstand neu laden – aber nur ohne ungespeicherte lokale
+// Änderungen. Sonst bleibt die Revision alt; das nächste Speichern meldet einen
+// Konflikt und der Auto-Merge führt beide Stände zusammen.
+async function projektstandNachZeitAbgleichMobile(j) {
+  if (!j || typeof j.dataRev !== 'number') return;
+  if (_mobileSaveConflictActive || readOfflineQueue().save) return;
+  try { if (!appDataBaseline || JSON.stringify(appData) !== JSON.stringify(appDataBaseline)) return; }
+  catch (e) { return; }
+  await loadData();
+}
+
 let _saveMobileDebounceTimer = null;
 function saveDataDebounced(delay) {
   clearTimeout(_saveMobileDebounceTimer);
@@ -3813,6 +3825,29 @@ function showArbeitszeit() {
   renderArbeitszeit();
 }
 
+// Zusatzzeile bei Import-Buchungen: Datum der Zeitbuchung; weicht die Buchung ab
+// (im Projekt von Hand geändert), zusätzlich deren Stunden – hervorgehoben.
+function azZeitHinweisMobile(r) {
+  if (!r || !r.autoImport || !r.zeitDatum) return '';
+  const abweichung = Math.abs((Number(r.stunden) || 0) - (Number(r.zeitStunden) || 0)) >= 0.01 || r.datum !== r.zeitDatum;
+  const text = 'Zeiterfassung: ' + String(r.zeitDatum).split('-').reverse().join('.')
+    + (abweichung ? ' · ' + (Number(r.zeitStunden) || 0).toLocaleString('de-DE') + ' h' : '');
+  const style = abweichung ? 'color:#E65100;font-weight:600' : 'color:var(--text-secondary,#6E6E73)';
+  return `<div class="list-row-sub" style="${style}">${esc(text)}</div>`;
+}
+
+// Gleiche Schlüssel wie _azBookingKeys in script.js: Eine im Projekt gelöschte
+// Import-Buchung darf der Auto-Import nicht wieder anlegen.
+function blockAzImportMobile(b, pos) {
+  if (!pos || !pos.autoImport) return;
+  const key = pos.zeitEntryId
+    ? 'id:' + String(pos.zeitUser || '').toLowerCase() + ':' + pos.zeitEntryId
+    : (pos.erstelltVon ? 'fz:' + pos.erstelltVon + ':' + (pos.datum || '') + ':' + (Math.round((pos.stunden || 0) * 100) / 100) : '');
+  if (!key) return;
+  if (!Array.isArray(b.azImportBlocked)) b.azImportBlocked = [];
+  if (!b.azImportBlocked.includes(key)) b.azImportBlocked.push(key);
+}
+
 function renderArbeitszeit() {
   const b = getBaustelle();
   if (!b) return;
@@ -3831,6 +3866,7 @@ function renderArbeitszeit() {
       <div class="list-row-body">
         <div class="list-row-title">${esc(r.beschreibung) || '–'} ${r.erstelltVon ? '<span class="creator-badge">' + esc(r.erstelltVon) + '</span>' : ''}</div>
         <div class="list-row-sub">${r.datum ? r.datum + ' · ' : ''}${r.stunden} h <span class="price-sensitive">× ${fmt(r.stundenpreis)}</span></div>
+        ${azZeitHinweisMobile(r)}
       </div>
       <div class="list-row-right"><div class="list-row-amount price-sensitive">${fmt(g)}</div></div>
       ${canEditAz ? `<button onclick="showArbeitszeitSheet(${r.id})" style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px 2px;color:var(--blue)">${ico('edit')}</button>
@@ -3889,6 +3925,7 @@ function delArbeitszeit(id) {
   if (!confirm('Eintrag löschen?')) return;
   const b = getBaustelle();
   if (!b) return;
+  blockAzImportMobile(b, (b.arbeitszeit||[]).find(r => r.id === id));
   b.arbeitszeit = (b.arbeitszeit||[]).filter(r => r.id !== id);
   saveData();
   showToast('Eintrag gelöscht');
@@ -5298,10 +5335,9 @@ function persistMobileTimeEntries(rollbackState, successMessage) {
       }
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Zeiterfassung speichern fehlgeschlagen.');
       dequeueOffline('save_zeiterfassung');
-      // Optimistic Locking: serverseitiger Auto-Import erhöht ggf. die globale
-      // Revision. appDataRev nachziehen, damit der nächste Full-Replace-Save
-      // keinen Selbst-Konflikt auslöst.
-      if (typeof payload.dataRev === 'number') appDataRev = payload.dataRev;
+      // Der serverseitige Abgleich hat Projektbuchungen geändert (dataRev gesetzt):
+      // Projektstand neu laden, damit ein veralteter Stand sie nicht überschreibt.
+      await projektstandNachZeitAbgleichMobile(payload);
       if (typeof payload.zeitRev === 'number') zeitRev = payload.zeitRev;
       closeSheet('stundenerfassungSheet');
       const imported = Number(payload.autoImported || 0);
@@ -6994,6 +7030,8 @@ async function saMobileDeleteEntry(username, entryId) {
       if (saMobileAllZeit[username]) {
         saMobileAllZeit[username].entries = (saMobileAllZeit[username].entries||[]).filter(e => e.id !== entryId);
       }
+      // Projektbuchung wurde serverseitig mit entfernt -> Projektstand neu laden.
+      await projektstandNachZeitAbgleichMobile(j);
       renderStundenauswertungMobile();
     } else { showToast('Fehler: ' + (j.error||'Unbekannt')); }
   } catch(e) { showToast('Netzwerkfehler'); }
@@ -7014,6 +7052,8 @@ async function saMobileEditEntry(username, entryId) {
   const newBemerkung = prompt('Bemerkung:', entry.bemerkung || '') || '';
 
   try {
+    // Projekt und Uhrzeiten werden bewusst nicht gesendet: der Server behält dann
+    // die gespeicherten Werte (früher gingen sie bei dieser Bearbeitung verloren).
     const r = await fetch('api.php?action=admin_edit_zeiterfassung', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -7023,6 +7063,7 @@ async function saMobileEditEntry(username, entryId) {
     if (j.ok) {
       showToast('✓ Aktualisiert');
       if (entry) Object.assign(entry, { datum: newDatum, typ: newTyp, stunden: (j.stunden != null ? j.stunden : newStunden), bemerkung: newBemerkung });
+      await projektstandNachZeitAbgleichMobile(j);
       renderStundenauswertungMobile();
     } else { showToast('Fehler: ' + (j.error||'Unbekannt')); }
   } catch(e) { showToast('Netzwerkfehler'); }

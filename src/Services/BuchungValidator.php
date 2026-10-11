@@ -41,6 +41,7 @@ class BuchungValidator
         'ZE010' => [self::SEVERITY_BLOCKER, 'Das Datum fehlt oder ist ungültig.'],
         'ZE011' => [self::SEVERITY_BLOCKER, 'Dieser Eintrag existiert doppelt.'],
         'ZE012' => [self::SEVERITY_BLOCKER, 'Das Urlaubskontingent für dieses Jahr ist aufgebraucht.'],
+        'ZE013' => [self::SEVERITY_WARNING, 'Die Projektbuchung weicht von der Zeiterfassung ab (Stunden oder Datum). Zeiterfassung übernehmen oder Abweichung bestätigen.'],
     ];
 
     public static function severity(string $code): string
@@ -204,11 +205,54 @@ class BuchungValidator
             }
         }
 
+        $linked = self::findLinkedBooking($projekt['az'] ?? [], $eid, $username);
+        if ($linked !== null) {
+            return self::weichtAb($linked, $stunden, $datum)
+                ? [self::STATUS_WARNING, 'ZE013', self::message('ZE013')]
+                : [self::STATUS_VALID, '', ''];
+        }
+
         if (self::hasProjectBooking($projekt['az'] ?? [], $eid, $username, $kuerzel, $datum, $stunden)) {
             return [self::STATUS_VALID, '', ''];
         }
 
         return [self::STATUS_WARNING, 'ZE006', self::message('ZE006')];
+    }
+
+    /**
+     * Liefert die exakt verknüpfte Projektbuchung (zeitEntryId + zeitUser) oder null.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function findLinkedBooking(array $arbeitszeit, int $eid, string $username): ?array
+    {
+        if ($eid <= 0) return null;
+        foreach ($arbeitszeit as $a) {
+            if (!is_array($a) || !($a['autoImport'] ?? false)) continue;
+            if ((int)($a['zeitEntryId'] ?? 0) !== $eid) continue;
+            $zu = (string)($a['zeitUser'] ?? '');
+            if ($zu === '' || strcasecmp($zu, $username) === 0) return $a;
+        }
+        return null;
+    }
+
+    /**
+     * Weicht eine verknüpfte Projektbuchung in Stunden oder Datum vom Zeiteintrag ab
+     * (ZE013)? Eine bestätigte Abweichung zählt nicht, solange sich weder Buchung noch
+     * Zeiteintrag seit der Bestätigung geändert haben.
+     */
+    public static function weichtAb(array $booking, float $stunden, string $datum): bool
+    {
+        $bStunden = (float)($booking['stunden'] ?? 0);
+        $bDatum   = (string)($booking['datum'] ?? '');
+        if (abs($bStunden - $stunden) < 0.01 && $bDatum === $datum) return false;
+
+        $best = $booking['abweichungBestaetigt'] ?? null;
+        return !(is_array($best)
+            && abs((float)($best['stunden'] ?? -1) - $bStunden) < 0.01
+            && (string)($best['datum'] ?? '') === $bDatum
+            && abs((float)($best['zeitStunden'] ?? -1) - $stunden) < 0.01
+            && (string)($best['zeitDatum'] ?? '') === $datum);
     }
 
     /**

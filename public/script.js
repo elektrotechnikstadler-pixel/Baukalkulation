@@ -2051,6 +2051,41 @@ async function movePositionToBaustelle(drag, destId) {
     : (item.beschreibung || 'Arbeitszeit-Eintrag');
   if (!confirm(`„${label}" nach „${dest.name}" verschieben?`)) return;
 
+  // A.2: Zeiterfassungs-Kaskade für auto-importierte Arbeitszeit-Einträge – ZUERST,
+  // damit bei einem Fehler nichts verschoben ist (sonst liefen Projekt und
+  // Zeiterfassung auseinander und der nächste Abgleich buchte doppelt).
+  if (key === 'arbeitszeit' && item.autoImport && item.zeitEntryId) {
+    let j = null;
+    try {
+      const res = await fetch('api.php?action=move_position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zeitEntryId: item.zeitEntryId, zeitUser: item.zeitUser || null, destBaustelleId: destId })
+      });
+      j = await res.json().catch(() => null);
+    } catch (err) {
+      console.warn('move_position fehlgeschlagen:', err);
+    }
+    if (!j || !j.ok) {
+      showNotification('Verschieben fehlgeschlagen: ' + ((j && j.error) || 'Verbindung unterbrochen') + ' – nichts wurde geändert.', 'error');
+      return;
+    }
+    // Eigene Zeiterfassung: Cache und Revision mitziehen, damit ein nachfolgender
+    // Full-Replace-Save die Kaskade nicht überschreibt bzw. keinen Selbstkonflikt meldet.
+    // Die Revision nur bei lückenloser Folge übernehmen – sonst hat ein anderes Gerät
+    // zwischenzeitlich gespeichert und der Serverstand wird neu geladen.
+    const eigener = String(item.zeitUser || '').toLowerCase() === String(currentUser || '').toLowerCase();
+    if (eigener && Array.isArray(zeitEntriesDesktop)) {
+      if (typeof j.zeitRev === 'number' && typeof _zeitRev === 'number' && j.zeitRev === _zeitRev + 1) {
+        const ze = zeitEntriesDesktop.find(e => e.id === item.zeitEntryId);
+        if (ze) { ze.baustelleId = destId; ze.baustelleName = dest.name || ''; }
+        _zeitRev = j.zeitRev;
+      } else {
+        await _reloadZeitDesktop(false);
+      }
+    }
+  }
+
   // Aus Quelle entfernen, in Ziel mit neuer lokaler ID einfügen
   list.splice(idx, 1);
   if (key === 'arbeitszeit') {
@@ -2065,27 +2100,6 @@ async function movePositionToBaustelle(drag, destId) {
     dest.material.unshift(item);
   }
   saveData();
-
-  // A.2: Zeiterfassungs-Kaskade für auto-importierte Arbeitszeit-Einträge
-  if (key === 'arbeitszeit' && item.autoImport && item.zeitEntryId) {
-    try {
-      const res = await fetch('api.php?action=move_position', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ zeitEntryId: item.zeitEntryId, zeitUser: item.zeitUser || null, destBaustelleId: destId })
-      });
-      const j = await res.json();
-      if (!j || !j.ok) console.warn('move_position:', j && j.error);
-    } catch (err) {
-      console.warn('move_position fehlgeschlagen:', err);
-    }
-    // Lokalen Zeiterfassungs-Cache mitziehen, damit ein nachfolgender
-    // Full-Replace-Save die Kaskade nicht wieder überschreibt.
-    if (Array.isArray(zeitEntriesDesktop)) {
-      const ze = zeitEntriesDesktop.find(e => e.id === item.zeitEntryId);
-      if (ze) { ze.baustelleId = destId; ze.baustelleName = dest.name || ''; }
-    }
-  }
 
   showNotification(`„${label}" nach „${dest.name}" verschoben.`, 'success');
   renderSidebar();
@@ -4560,6 +4574,18 @@ function updateAzGroupTotals(b, mode) {
   });
 }
 
+// Zweite Zeile der Zelle „Import“: Datum der Zeitbuchung aus der Zeiterfassung. Weicht
+// die Projektbuchung davon ab (z.B. im Projekt von Hand geändert), zusätzlich die
+// Stunden der Zeiterfassung – hervorgehoben. Die Zeiterfassung selbst bleibt unverändert.
+function _azZeitHinweis(r) {
+  if (!r || !r.autoImport || !r.zeitDatum) return '';
+  const abweichung = Math.abs((Number(r.stunden) || 0) - (Number(r.zeitStunden) || 0)) >= 0.01 || r.datum !== r.zeitDatum;
+  const text = 'Zeiterfassung: ' + String(r.zeitDatum).split('-').reverse().join('.')
+    + (abweichung ? ' · ' + (Number(r.zeitStunden) || 0).toLocaleString('de-DE') + ' h' : '');
+  const style = abweichung ? 'color:#E65100;font-weight:600' : 'color:#6E6E73';
+  return `<div style="font-size:.68rem;margin-top:2px;${style}">${esc(text)}</div>`;
+}
+
 function renderAzRows() {
   const b = getBaustelle();
   if (!b) return;
@@ -4601,7 +4627,7 @@ function renderAzRows() {
     tr.innerHTML = `
       <td><input class="cell-input" value="${esc(r.beschreibung)}"
             oninput="setAz(${r.id},'beschreibung',this.value)" placeholder="Beschreibung" ${canEditAz ? '' : 'disabled'}></td>
-      <td>${(r.erstelltVon || r.zeitUser) ? `<span class="creator-badge">${esc(r.erstelltVon || r.zeitUser)}</span>` : '<span style="color:#bbb">—</span>'}${r.autoImport ? '<span style="background:#C8E6C9;color:#2E7D32;font-size:.65rem;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600">Import</span>' : ''}</td>
+      <td>${(r.erstelltVon || r.zeitUser) ? `<span class="creator-badge">${esc(r.erstelltVon || r.zeitUser)}</span>` : '<span style="color:#bbb">—</span>'}${r.autoImport ? '<span style="background:#C8E6C9;color:#2E7D32;font-size:.65rem;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600">Import</span>' : ''}${_azZeitHinweis(r)}</td>
       <td><input class="cell-input" type="date" value="${esc(r.datum || '')}"
             oninput="setAz(${r.id},'datum',this.value)" ${canEditAz ? '' : 'disabled'}></td>
       <td><input class="cell-input text-right" type="number" value="${r.stunden}" min="0" step="0.25"
@@ -12600,7 +12626,7 @@ async function runAutoImport() {
     const j = await r.json();
     if (j.ok) {
       if (resEl) resEl.textContent = `? ${j.imported} Einträge importiert`;
-      if (j.imported > 0) loadData();
+      if (j.imported > 0 || j.dataRev != null) loadData();
     } else {
       if (resEl) { resEl.style.color = '#e53935'; resEl.textContent = j.error || 'Fehler'; }
     }
@@ -16032,35 +16058,9 @@ function addStundenerfassungDesktop() {
       document.getElementById('seDesktopStundenKat').value = '';
       document.getElementById('seDesktopBaustelle').value = '';
       document.getElementById('seDesktopBaustelleSearch').value = '';
-      // Projektbuchung (autoImport) erfolgt jetzt ausschließlich serverseitig und atomar
-      // innerhalb von save_zeiterfassung (mit gewählter stundenKatId). Kein zweiter
-      // Client-Schreibpfad (saveDataDebounced) mehr → verhindert asynchrone Fehlbuchungen.
-      // Nur die aktuell geöffnete Baustelle wird optimistisch (ohne separates Speichern)
-      // aktualisiert, damit die Anzeige sofort stimmt.
-      if (typ === 'arbeit' && baustelleId && stundenKatId && appSettings.auto_import_stunden && baustelleId === selectedId) {
-        const bau = (appData.baustellen||[]).find(b => b.id === baustelleId);
-        if (bau) {
-          if (!Array.isArray(bau.arbeitszeit)) bau.arbeitszeit = [];
-          if (!bau.nextAzId) bau.nextAzId = 1;
-          const kat = (appData.stundenKatalog||[]).find(k => k.id === stundenKatId);
-          pendingEntries.forEach(pe => {
-            bau.arbeitszeit.unshift({
-              id: bau.nextAzId++,
-              beschreibung: pe.bemerkung || (kat?.kategorie || ''),
-              datum: pe.datum,
-              stunden: pe.stunden,
-              stundenKatId: stundenKatId,
-              stundenpreis: kat ? (kat.preis || 0) : 0,
-              fixkosten: kat ? (kat.fixkosten || 0) : 0,
-              erstelltVon: currentKuerzel || currentUser || '',
-              autoImport: true,
-              zeitEntryId: pe.id,           // Link auf zeiterfassung.entryId (für Kaskade)
-              zeitUser: currentUser || ''   // Besitzer des Zeiterfassungs-Eintrags
-            });
-          });
-          renderAzRows(); recalc();
-        }
-      }
+      // Projektbuchung (autoImport) erfolgt ausschließlich serverseitig und atomar
+      // innerhalb von save_zeiterfassung; der Projektstand wurde danach neu geladen.
+      if (selectedId && getBaustelle()) { renderAzRows(); recalc(); }
       showNotification(`${added} Eintr${added === 1 ? 'ag' : '—ge'} erfasst.`);
       renderSeDesktop();
     })
@@ -16132,12 +16132,9 @@ async function saveSeDesktopEntries(appendedEntries = [], force = false) {
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || 'Speichern fehlgeschlagen.');
     }
-    // Optimistic Locking: Der serverseitige Auto-Import verändert ggf. die
-    // Projektdaten und erhöht die globale Revision. appDataRev nachziehen,
-    // damit der nächste Full-Replace-Save keinen Selbst-Konflikt auslöst.
-    if (payload.dataRev != null && typeof payload.dataRev === 'number') {
-      appDataRev = payload.dataRev;
-    }
+    // Der serverseitige Abgleich hat Projektbuchungen geändert (dataRev gesetzt):
+    // Projektstand neu laden, damit ein veralteter Stand sie nicht überschreibt.
+    await _projektstandNachZeitAbgleich(payload);
     if (typeof payload.zeitRev === 'number') _zeitRev = payload.zeitRev;
     // Serverseitig vergebene clientUuids übernehmen, damit die Identität stabil bleibt.
     if (Array.isArray(payload.entries)) {
@@ -16155,14 +16152,14 @@ async function saveSeDesktopEntries(appendedEntries = [], force = false) {
 }
 
 // Lädt den Serverstand nach einem Sync-Konflikt neu.
-async function _reloadZeitDesktop() {
+async function _reloadZeitDesktop(render = true) {
   try {
     const r = await fetch('api.php?action=load_zeiterfassung');
     const j = await r.json();
     if (j.ok) {
       zeitEntriesDesktop = j.entries || [];
       _zeitRev = typeof j.zeitRev === 'number' ? j.zeitRev : null;
-      renderSeDesktop();
+      if (render) renderSeDesktop();
     }
   } catch (e) { console.warn('Neuladen fehlgeschlagen:', e); }
 }
@@ -16695,6 +16692,7 @@ const SA_FEHLER_KATALOG = {
   ZE007: 'Im Projekt existiert eine Buchung ohne passenden Zeiteintrag.',
   ZE008: 'Mehr als 10 Stunden an einem Tag (§ 3 ArbZG).',
   ZE009: 'Die gesetzliche Mindestpause ist nicht eingehalten (§ 4 ArbZG).',
+  ZE013: 'Die Projektbuchung weicht von der Zeiterfassung ab (Stunden oder Datum).',
 };
 
 // Prüft, ob eine Buchung durch eine archivierte/gelöschte Projektposition (Sperrliste
@@ -16741,8 +16739,8 @@ function _computeFehlbuchungen(entries, user) {
         bemerkung:   e.bemerkung || '',
         errorCode:   e.errorCode,
         message:     e.errorMessage || SA_FEHLER_KATALOG[e.errorCode] || 'Unbekannter Fehler.',
-        // Nur eine fehlende Projektbuchung ist per Knopfdruck reparierbar.
-        repairable:  e.errorCode === 'ZE006',
+        // Behebbar: fehlende Projektbuchung (nachtragen) und abweichende (übernehmen/bestätigen).
+        repairable:  e.errorCode === 'ZE006' || e.errorCode === 'ZE013',
       }))
       .sort((a, b) => (a.datum || '').localeCompare(b.datum || ''));
   }
@@ -16806,16 +16804,26 @@ function _renderFehlbuchungBox(fehl, username) {
     const code = f.errorCode || '';
     const msg  = f.message || SA_FEHLER_KATALOG[code] || '';
     const repairable = (f.repairable !== undefined) ? f.repairable : !f.deleted;
-    const repBtn = repairable
-      ? `<button class="btn btn-secondary btn-sm" style="font-size:.72rem;padding:2px 8px" onclick="repairFehlbuchung('${esc(username)}',${f.entryId})">Reparieren</button>`
-      : `<span style="font-size:.72rem;color:#B71C1C">nicht reparierbar</span>`;
+    const btnStyle = 'font-size:.72rem;padding:2px 8px';
+    let repBtn;
+    if (code === 'ZE013') {
+      // Beide Aktionen ändern nur die Projektbuchung, nie die Zeiterfassung.
+      repBtn = `<span style="display:flex;flex-direction:column;gap:3px">
+        <button class="btn btn-secondary btn-sm" style="${btnStyle}" onclick="repairFehlbuchung('${esc(username)}',${f.entryId},'uebernehmen')" title="Projektbuchung auf die Werte der Zeiterfassung setzen">Zeiterfassung übernehmen</button>
+        <button class="btn btn-secondary btn-sm" style="${btnStyle}" onclick="repairFehlbuchung('${esc(username)}',${f.entryId},'bestaetigen')" title="Abweichung im Projekt bewusst stehen lassen">Abweichung bestätigen</button>
+      </span>`;
+    } else {
+      repBtn = repairable
+        ? `<button class="btn btn-secondary btn-sm" style="${btnStyle}" onclick="repairFehlbuchung('${esc(username)}',${f.entryId})">Reparieren</button>`
+        : `<span style="font-size:.72rem;color:#B71C1C">nicht reparierbar</span>`;
+    }
     return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:.8rem;color:#B71C1C;padding:3px 0">
       <span>• <strong>${dStr}</strong> · ${esc(f.projektName)} · ${(f.stunden || 0).toFixed(2)} h${f.bemerkung ? ' · ' + esc(f.bemerkung) : ''}
         ${code ? `<br><span style="font-size:.72rem;opacity:.85"><strong>${esc(code)}</strong> – ${esc(msg)}</span>` : ''}</span>
       ${repBtn}
     </div>`;
   }).join('');
-  const anyRepairable = fehl.some(f => (f.repairable !== undefined) ? f.repairable : !f.deleted);
+  const anyRepairable = fehl.some(_saNachtragbar);
   return `<div style="background:#FFEBEE;border:1px solid #EF9A9A;border-radius:6px;padding:10px 14px;margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
       <div style="font-weight:700;font-size:.82rem;color:#C62828">⚠️ Auffällige Buchungen (${fehl.length})</div>
@@ -16825,26 +16833,38 @@ function _renderFehlbuchungBox(fehl, username) {
   </div>`;
 }
 
-// Trägt eine einzelne fehlende Projektbuchung serverseitig nach.
-async function repairFehlbuchung(username, entryId) {
+// „Alle reparieren“ trägt nur fehlende Projektbuchungen nach. Abweichungen (ZE013)
+// werden einzeln entschieden, damit bewusste Änderungen im Projekt nicht verloren gehen.
+function _saNachtragbar(f) {
+  if (f.errorCode === 'ZE013') return false;
+  return (f.repairable !== undefined) ? f.repairable : !f.deleted;
+}
+
+// Behebt eine einzelne Fehlbuchung serverseitig. aktion: nachtragen (Standard),
+// uebernehmen oder bestaetigen – alle ändern nur die Projektbuchung.
+async function repairFehlbuchung(username, entryId, aktion = 'nachtragen') {
   try {
     const r = await fetch('api.php?action=repair_booking', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, entryId })
+      body: JSON.stringify({ username, entryId, aktion })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) { showNotification(j.error || 'Reparatur fehlgeschlagen.'); return; }
-    showNotification(j.repaired ? 'Projektbuchung nachgetragen.' : 'Buchung war bereits vorhanden.');
+    const meldung = {
+      uebernehmen: 'Projektbuchung an die Zeiterfassung angeglichen.',
+      bestaetigen: 'Abweichung bestätigt.',
+    }[aktion] || (j.repaired ? 'Projektbuchung nachgetragen.' : 'Buchung war bereits vorhanden.');
+    showNotification(meldung);
     await reloadSaAfterRepair();
   } catch (e) { showNotification('Reparatur fehlgeschlagen.'); }
 }
 
-// Trägt alle reparierbaren Fehlbuchungen eines Benutzers in einem Rutsch nach.
+// Trägt alle fehlenden Projektbuchungen eines Benutzers in einem Rutsch nach.
 async function repairAllFehlbuchungen(username) {
   const entries = saAllZeit[username]?.entries || [];
   const user = saAllUsers.find(u => u.username === username);
   const items = _computeFehlbuchungen(entries, user)
-    .filter(f => (f.repairable !== undefined) ? f.repairable : !f.deleted)
+    .filter(_saNachtragbar)
     .map(f => ({ username, entryId: f.entryId }));
   if (!items.length) return;
   try {
@@ -17056,6 +17076,26 @@ function openGleitzeitBuchungDialog(username, currentSaldo) {
   }).catch(() => showNotification('Netzwerkfehler'));
 }
 
+// Änderungen an der Zeiterfassung (eigene und Admin) gleicht der Server mit den
+// Projektbuchungen ab (dataRev gesetzt). Dann den Projektstand neu laden – nur die
+// Revision zu übernehmen, würde einen veralteten Stand beim nächsten Speichern ohne
+// Konflikt über die neuen Projektbuchungen schreiben.
+// Gibt es ungespeicherte lokale Projektänderungen, wird NICHT neu geladen (sie gingen
+// verloren) und die Revision bleibt alt: das nächste Speichern meldet einen Konflikt,
+// und der bestehende Auto-Merge führt beide Stände zusammen.
+async function _projektstandNachZeitAbgleich(j) {
+  if (!j || j.dataRev == null) return;
+  if (_hatUngespeicherteProjektAenderungen()) return;
+  try { await loadData(); } catch (e) { console.warn(e); }
+}
+
+// Weicht der lokale Stand vom letzten Serverabgleich ab oder läuft/hängt ein Speichern?
+function _hatUngespeicherteProjektAenderungen() {
+  if (_saveInProgress || _saveConflictActive || localStorage.getItem('bk_syncPending')) return true;
+  try { return !appDataBaseline || JSON.stringify(appData) !== JSON.stringify(appDataBaseline); }
+  catch (e) { return true; }
+}
+
 async function saDeleteEntry(username, entryId) {
   if (!confirm('Eintrag löschen?')) return;
   try {
@@ -17071,6 +17111,7 @@ async function saDeleteEntry(username, entryId) {
       if (saAllZeit[username]) {
         saAllZeit[username].entries = saAllZeit[username].entries.filter(e => e.id !== entryId);
       }
+      await _projektstandNachZeitAbgleich(j);
       renderStundenauswertung();
     } else {
       showNotification('' + (j.error || 'Fehler'));
@@ -17265,6 +17306,7 @@ async function _saefSave(username, mode, entryId) {
           saAllZeit[username].entries.push({ id: ins.entryId, datum: ins.datum, typ, stunden: (ins.stunden != null ? ins.stunden : stunden), bemerkung, von, bis: bisZeit, pause, baustelleId });
         });
         document.getElementById('saEntryModal')?.remove();
+        await _projektstandNachZeitAbgleich(j);
         renderStundenauswertung();
       } else {
         showNotification('' + (j.error || 'Fehler'));
@@ -17278,6 +17320,7 @@ async function _saefSave(username, mode, entryId) {
         const entry = (saAllZeit[username]?.entries || []).find(x => x.id === entryId);
         if (entry) Object.assign(entry, { datum, typ, stunden: (j.stunden != null ? j.stunden : stunden), bemerkung, von, bis: bisZeit, pause, baustelleId });
         document.getElementById('saEntryModal')?.remove();
+        await _projektstandNachZeitAbgleich(j);
         renderStundenauswertung();
       } else {
         showNotification('' + (j.error || 'Fehler'));
@@ -19189,6 +19232,7 @@ async function wpYearBookSave(fallbackDate) {
     const j = await r.json();
     if (j.ok) {
       showNotification((j.inserted?.length || 1) + ' Eintrag/Einträge gespeichert.');
+      await _projektstandNachZeitAbgleich(j);
       // Zeiterfassung neu laden und Ansicht aktualisieren
       try { const zr = await fetch('api.php?action=load_all_zeiterfassung'); const zj = await zr.json(); if (zj.ok) wpAllZeit = zj.data || {}; } catch(_) {}
       document.getElementById('wpYearBookOverlay')?.remove();
@@ -19207,6 +19251,7 @@ async function wpYearDeleteEntry(username, entryId) {
     if (j.ok) {
       showNotification('Gelöscht.');
       if (wpAllZeit[username]) wpAllZeit[username].entries = (wpAllZeit[username].entries||[]).filter(e => e.id !== entryId);
+      await _projektstandNachZeitAbgleich(j);
       document.getElementById('wpYearBookOverlay')?.remove();
       renderWochenplanung();
     } else { showNotification(j.error || 'Fehler', 'error'); }

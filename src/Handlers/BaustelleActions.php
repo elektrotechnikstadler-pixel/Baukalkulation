@@ -964,10 +964,12 @@ class BaustelleActions
             jsonOut(['error' => 'Keine Berechtigung, fremde Zeiterfassung zu verschieben.'], 403);
         }
 
+        $zeitRev = null;
+        $this->db->beginTransaction();
         try {
             $old = \App\Database::fetchOne(
                 $this->db,
-                "SELECT datum, baustelleId, baustelleName FROM zeiterfassung
+                "SELECT username, datum, baustelleId, baustelleName FROM zeiterfassung
                   WHERE entryId = ? AND LOWER(username) = LOWER(?)",
                 [$zeitEntryId, $zeitUser]
             );
@@ -1005,10 +1007,18 @@ class BaustelleActions
                     $now,
                 ]);
             }
+            // Andere Geräte des Mitarbeiters müssen die Umbuchung erkennen, sonst
+            // speichern sie den alten Projektbezug ohne Konflikt zurück.
+            if ($old) {
+                $zeitRev = \App\Handlers\ZeiterfassungActions::bumpZeitRev($this->db, (string)$old['username']);
+            }
+            $this->db->commit();
         } catch (\Throwable $e) {
-            jsonOut(['error' => 'Zeiterfassung konnte nicht aktualisiert werden: ' . $e->getMessage()], 500);
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log('[bk] move_position fehlgeschlagen: ' . $e->getMessage());
+            jsonOut(['error' => 'Zeiterfassung konnte nicht aktualisiert werden.'], 500);
         }
 
-        jsonOut(['ok' => true, 'updated' => $stmt->rowCount()]);
+        jsonOut(['ok' => true, 'updated' => $stmt->rowCount(), 'zeitRev' => $zeitRev]);
     }
 }
