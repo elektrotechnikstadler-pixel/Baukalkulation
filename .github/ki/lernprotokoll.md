@@ -54,3 +54,7 @@ Kategorien: SQL · Sicherheit · Backup · Migration · Tests · Frontend · Str
 | 2026-10-07 | zeiterfassung-abgleich | Planung | Ungeplanter Benutzerfilter in der Erinnerung (Major) | Vertragsabweichung nicht gemeldet | 1 | E-084 |
 | 2026-10-07 | zeiterfassung-abgleich | Planung | Übernommene Doku-Cronzeit passte nicht zur Vortagslogik (Major) | Doku-Aussage nicht gegen aktiven Pfad geprüft | 2 | E-081 |
 | 2026-10-07 | zeiterfassung-abgleich | Tests | PHP↔JS-Parität ungetestet | fehlende JS-Testumgebung | 1 | E-036 |
+| 2026-10-11 | projektbuchung-abgleich | Planung | 8 Schreibpfade ohne gemeinsamen Abgleich Zeiterfassung ↔ Projekt (Admin, „Jetzt importieren“, Mobil-Löschen, Reparatur, Verschieben; Hoch) | Schreib-/Einstiegspunkte nicht inventarisiert | 2 | E-086 → Instructions |
+| 2026-10-11 | projektbuchung-abgleich | Frontend | Revision ohne zugehörige Daten übernommen (`dataRev`, `zeitRev`; 2× Major im Review) | blinde Übernahme serverseitiger Revisionen | 2 | E-085 → Instructions |
+| 2026-10-11 | projektbuchung-abgleich | Tests | Testaufbau: Projekt-Speichern ohne `baseRev` → 409 | – | 1 | – |
+| 2026-10-11 | projektbuchung-abgleich | Werkzeuge | Docker Desktop zwischen Läufen beendet, PG-Lauf neu gestartet | Umgebung | 1 | E-082 |

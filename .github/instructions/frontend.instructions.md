@@ -12,3 +12,4 @@ applyTo: "**/public/**/*.js, **/public/**/*.html, **/public/**/*.css"
 - Das Vue/TS-Frontend unter `src/frontend/` ist inaktiv; dort nichts Neues anlegen.
 - Nutzerdaten per `textContent` bzw. escaped einfügen, nie ungeprüft per `innerHTML`.
 - Zeiterfassung: Soll/Ist, Feiertage, Gleitzeit, Urlaubsanspruch nur über `public/sollzeit.js` (PHP-Gegenstück synchron, Fallliste `tests/fixtures/sollzeit/faelle.json`, `npm.cmd run test:js`) – E-041.
+- Antwortet der Server mit `dataRev`, nie nur `appDataRev` setzen: Projektstand nur ohne ungespeicherte lokale Änderungen neu laden (Muster `_projektstandNachZeitAbgleich`), sonst Revision alt lassen (409 → Auto-Merge) – E-085.

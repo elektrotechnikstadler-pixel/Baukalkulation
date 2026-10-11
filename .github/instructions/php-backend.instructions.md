@@ -16,3 +16,4 @@ applyTo: "**/src/**/*.php, **/modules/**/*.php, **/public/*.php, **/cron_*.php, 
 - Kein `@`-Operator; Fehlerfälle explizit prüfen.
 - Neuer Code ohne neue PHPStan-Baseline-Einträge (Level 5).
 - Zeiterfassung: Soll/Ist, Feiertage, Gleitzeit, Urlaubsanspruch nur über `Services\Sollzeit`, `Feiertage`, `Gleitzeit` (JS-Gegenstück `public/sollzeit.js` synchron halten) – E-041.
+- Ändert sich eine fachliche Regel oder Datenquelle, alle Schreib-/Einstiegspunkte per grep inventarisieren (Admin-Endpunkte, Altimporte, Reparatur, `cron_*`, `bin/console`, Desktop/Mobil) und über eine zentrale Funktion führen – E-083, E-086.
