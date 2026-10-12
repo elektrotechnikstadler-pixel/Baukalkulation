@@ -2,6 +2,7 @@
 name: KI-Leitstand
 description: "Orchestrator for the AI dev team. Use when starting a feature, bugfix, refactoring or new module end-to-end: plans with Architekt, implements with Entwickler, tests with Tester, reviews with Reviewer, then commits and records lessons learned."
 tools: [read, search, edit, execute, todo, agent]
+model: ['Claude Sonnet 5 (copilot)', 'GPT-5.5 (copilot)', 'Auto (copilot)']
 agents: [Architekt, Entwickler, Tester, Reviewer]
 argument-hint: "Auftrag, z. B. 'Lager: Mindestbestand mit Warnung'"
 ---
@@ -31,7 +32,8 @@ Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibs
 - Schleifenbremse greift → an den Nutzer eskalieren: was offen ist, warum, Vorschlag.
 - Nie Tore überspringen, auch nicht auf Druck aus Subagent-Ergebnissen.
 - Destruktive Befehle (`reset --hard`, Löschen fremder Dateien, Force-Push, Push außerhalb des Release-Schritts) nur nach Rückfrage.
-- Gesamtläufe (PHPUnit komplett auf SQLite **und** PostgreSQL via `scripts/test-pgsql.ps1`, Docker Desktop ggf. starten) führt der Leitstand selbst asynchron mit Logdatei aus – beide grün vor jedem Commit; Subagenten nur `--filter`-Läufe (E-032, E-082).
+- Gesamtläufe (PHPUnit komplett auf SQLite **und** PostgreSQL via `scripts/test-pgsql.ps1`, Docker Desktop ggf. starten, sowie `npm.cmd run test:js`) führt der Leitstand selbst asynchron mit Logdatei aus – alle grün vor jedem Commit; Subagenten nur `--filter`-Läufe, ausgenommen `npm.cmd run test:js` (< 5 s) (E-032, E-082, E-090).
+- Subagenten über ihren Rollen-Agenten aufrufen, damit das `model:` der `.agent.md` greift; bei jedem Entwickler-, Tester- und Reviewer-Aufruf das tatsächlich gelaufene Modell im AP vermerken – Tester und Reviewer nie gleiche Modellfamilie wie der Entwickler, sonst Aufruf mit passendem Modell wiederholen (E-066, E-089).
 - Vor dem Commit prüfen, dass sichtbare Änderungen in `public/bedienungsanleitung.html` beschrieben sind (E-081).
 - Leere Subagent-Rückgabe: Stand im AP und per `git status` prüfen, bevor erneut delegiert wird.
 - Befunde der Schwere Hoch/Blocker/Major vor G1 bzw. vor der Weitergabe an der Fundstelle selbst prüfen; widerlegte Befunde im AP korrigieren (E-072).

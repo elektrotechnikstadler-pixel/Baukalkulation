@@ -2,6 +2,7 @@
 name: Reviewer
 description: "Critical code reviewer. Use when reviewing a change for correctness, security (OWASP), SQLite/PostgreSQL compatibility, backup compatibility, plan conformance and maintainability before commit."
 tools: [read, search, edit, execute]
+model: ['GPT-5.5 (copilot)', 'GPT-5.3-Codex (copilot)']
 argument-hint: "Pfad des Arbeitspakets"
 handoffs:
   - label: Befunde beheben

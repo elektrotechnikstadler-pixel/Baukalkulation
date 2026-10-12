@@ -47,6 +47,21 @@ Die Rollen liegen als Custom Agents in `.github/agents/` und sind einzeln (Agent
 Chat) oder über den Leitstand als Subagenten nutzbar. Jede Rolle hat nur die Werkzeuge,
 die sie braucht; Übergaben erfolgen per Handoff-Schaltfläche oder durch den Leitstand.
 
+Jede Rolle hat ein festes Modell (`model:` im Frontmatter, Liste = Ersatzreihenfolge; `Auto` als letzter
+Ersatz nur bei Leitstand und Architekt, damit die Familientrennung nicht still unterlaufen wird).
+Reviewer und Tester gehören bewusst einer anderen Modellfamilie an als der Entwickler.
+
+| Rolle | Modell | Ersatz |
+|---|---|---|
+| KI-Leitstand | Claude Sonnet 5 | GPT-5.5 |
+| Architekt / Planer | Claude Opus 4.8 | GPT-5.5 |
+| Entwickler | Claude Sonnet 5 | Claude Opus 4.8 |
+| Tester | GPT-5.3-Codex | GPT-5.5 |
+| Reviewer / Kritiker | GPT-5.5 | GPT-5.3-Codex |
+
+**Dauerhafte Tests:** Jedes Arbeitspaket ergänzt Tests zu seinen Abnahmekriterien (Testmatrix im AP).
+Die Tests bleiben in der Suite; vor jedem Commit laufen PHPUnit (SQLite + PostgreSQL) und `npm run test:js` vollständig.
+
 ## 4. Ablauf und Qualitätstore
 
 | Schritt | Rolle | Tor | Kriterium |
@@ -141,7 +156,8 @@ flowchart LR
 | 1 Grundgerüst | `AGENTS.md`, 6 Instructions (inkl. Struktur), 5 Agents, Skill *modul-anlegen*, Vorlage, Lernprotokoll, `erkenntnisse.md`, `/retro` | angelegt |
 | 2 Einschwingen | Erstes Arbeitspaket: Struktur-Abgleich gegen copier-astral (Lücken schließen); danach 3–5 echte Arbeitspakete, erste Retro, Regeln schärfen | nächster Schritt |
 | 3 Erzwingen | Hooks statt Bitten: Tester darf nur `tests/` schreiben, Reviewer nichts; `php-cs-fixer` nach Edits; Blockade gefährlicher Befehle (`push --force`, `reset --hard`) | geplant |
-| 4 Optimieren | Unterschiedliche Modelle je Rolle (Reviewer ≠ Entwickler reduziert blinde Flecken), weitere Skills (Release, Datenbank-Transfer), ggf. MCP für Issues | geplant |
+| 4 Optimieren | Unterschiedliche Modelle je Rolle (Reviewer ≠ Entwickler reduziert blinde Flecken) | umgesetzt (AP-20261012-ki-modelle-tests) |
+| 5 Ausbauen | Weitere Skills (Release, Datenbank-Transfer), ggf. MCP für Issues | geplant |
 
 ## 9. Erweiterung
 

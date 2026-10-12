@@ -15,6 +15,8 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 ## Unverhandelbar
 
 - Jede Änderung läuft auf SQLite und PostgreSQL (SQL-Regeln in docs/entwicklung.md); vor jedem Commit lokal beide Gesamtläufe grün, PostgreSQL nicht an die CI abgeben (E-082).
+- Tests sind dauerhaft: jedes AP ergänzt Tests zu seinen Abnahmekriterien; vor jedem Commit laufen PHPUnit (SQLite + PostgreSQL) und `npm.cmd run test:js` komplett; Tests nur mit Begründung im AP ändern oder löschen (E-090).
+- Rollen laufen mit dem Modell aus ihrer `.agent.md`; Reviewer und Tester nie dieselbe Modellfamilie wie der Entwickler (E-089).
 - Jede für Nutzer sichtbare Änderung ergänzt `public/bedienungsanleitung.html` im selben Arbeitspaket (E-081).
 - Alte Sicherungen (`tests/fixtures/backups/`) bleiben importierbar.
 - Schema nur per neuer Phinx-Migration; `legacy_baseline` und `LegacySchema.php` nie ändern.

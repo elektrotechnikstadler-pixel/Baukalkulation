@@ -26,6 +26,9 @@
 
 <!-- Tester: GRÜN/ROT, neue Tests, Ergebnis SQLite/PostgreSQL (je Runde) -->
 
+| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+
 ## 5. Review
 
 <!-- Reviewer: Urteil, Befundtabelle, Lernpunkt-Kandidaten (je Runde) -->

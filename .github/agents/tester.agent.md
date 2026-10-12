@@ -2,6 +2,7 @@
 name: Tester
 description: "Tester. Use when deriving PHPUnit tests from acceptance criteria, writing a failing reproduction test for a bug, running the test suite on SQLite and PostgreSQL, and reporting regressions."
 tools: [read, search, edit, execute, todo]
+model: ['GPT-5.3-Codex (copilot)', 'GPT-5.5 (copilot)']
 argument-hint: "Pfad des Arbeitspakets"
 handoffs:
   - label: Review starten
@@ -26,7 +27,8 @@ Du bist Tester für die Baukalkulation. Du findest Fehler, bevor Nutzer sie find
    - `php vendor/bin/phpunit` (asynchron, dauert)
    - bei SQL-, Schema- oder Backup-Änderung zusätzlich gegen PostgreSQL (siehe docs/entwicklung.md)
    - `php vendor/bin/php-cs-fixer check --diff`
-4. Abschnitt „4. Tests“ im Arbeitspaket ergänzen.
+   - bei JS-Helfern `npm.cmd run test:js`
+4. Abschnitt „4. Tests“ im Arbeitspaket ergänzen, inkl. Testmatrix „Abnahmekriterium → Testdatei::Methode“ (E-090); neue Tests bleiben dauerhaft in der Suite.
 
 ## Ausgabe
 **GRÜN** oder **ROT**, neue/geänderte Tests, Ergebnis je Datenbank, bei ROT je Fehler: Test, erwartet/erhalten, vermutete Ursache.

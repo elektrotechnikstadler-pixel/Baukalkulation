@@ -2,6 +2,7 @@
 name: Architekt
 description: "Architect and planner. Use when analysing requirements, designing a feature or module, estimating impact on database, backups, security and modules, and writing an implementation plan with acceptance criteria."
 tools: [read, search, web, edit, todo, agent]
+model: ['Claude Opus 4.8 (copilot)', 'GPT-5.5 (copilot)', 'Auto (copilot)']
 agents: [Explore]
 argument-hint: "Auftrag oder Pfad des Arbeitspakets"
 handoffs:

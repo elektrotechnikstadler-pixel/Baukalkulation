@@ -2,6 +2,7 @@
 name: Entwickler
 description: "Developer. Use when implementing an approved plan or fixing review/test findings in PHP backend, modules, migrations or frontend of the Baukalkulation."
 tools: [read, search, edit, execute, todo]
+model: ['Claude Sonnet 5 (copilot)', 'Claude Opus 4.8 (copilot)']
 argument-hint: "Pfad des Arbeitspakets (und ggf. Befunde)"
 handoffs:
   - label: Testen
