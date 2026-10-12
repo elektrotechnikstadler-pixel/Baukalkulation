@@ -41,6 +41,31 @@
 
 ---
 
+## v3.0.17 – Projektbuchung: sicheres Update laufender Installationen
+
+### Behoben
+- Nach einem Update laufen Geräte mit noch geladenem altem Stand (offene Desktop-Tabs, mobile Ansicht)
+  weiter. Clients bis 3.0.15 übernahmen die beim Speichern der Zeiterfassung gemeldete Revision ungeprüft
+  und konnten so die gerade vom Server angepasste Projektbuchung mit ihrem alten Stand überschreiben –
+  nach einer Umbuchung stand die Buchung danach doppelt in zwei Projekten. Der Server meldet diese Revision
+  jetzt unter neuem Namen (`projektRev`); alte Clients erhalten beim nächsten Speichern einen Konflikt, den
+  das Zusammenführen ohne Verlust löst.
+- Selbstheilung im Abgleich: Verknüpfte Import-Buchungen eines Mitarbeiters werden in allen aktiven
+  Projekten gesucht. Eine Buchung im falschen Projekt wird mit allen Werten ins Projekt ihres Zeiteintrags
+  verschoben (statt neu angelegt), doppelte Buchungen desselben Eintrags werden bereinigt. Ist die Buchung im
+  Projekt des Eintrags bewusst gelöscht, bleiben Kopien in anderen Projekten unangetastet.
+- Neue Import-Buchungen erhalten ihre Positionsnummer nach derselben Regel wie die Clients (`nextAzId`), damit
+  eine parallel von einem älteren Desktop-Stand angelegte Kopie als Konflikt erkannt statt doppelt gespeichert wird.
+- Nach „Reparieren“ und nach dem Verschieben werden ungespeicherte Projektänderungen nicht mehr verworfen.
+
+### Hinweis zum Update
+- Keine Datenbank-Migration. Geräte sollten nach dem Update einmal neu geladen werden; bis dahin bleiben alte
+  Stände ohne Datenverlust bedienbar (Konflikt + Zusammenführen, Selbstheilung beim nächsten Speichern).
+- Alte Desktop-Stände, die eine eigene Import-Buchung verschieben, melden beim nächsten Speichern der
+  Stundenerfassung „auf einem anderen Gerät geändert“; der Eintrag muss dann erneut erfasst werden.
+
+---
+
 ## v3.0.16 – Projektbuchung: Nachprüfung auf Datenverlust
 
 ### Behoben

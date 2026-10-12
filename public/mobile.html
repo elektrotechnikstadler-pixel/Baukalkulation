@@ -2386,7 +2386,8 @@ async function loadData() {
 // Änderungen. Sonst bleibt die Revision alt; das nächste Speichern meldet einen
 // Konflikt und der Auto-Merge führt beide Stände zusammen.
 async function projektstandNachZeitAbgleichMobile(j) {
-  if (!j || typeof j.dataRev !== 'number') return;
+  // save_zeiterfassung meldet die Revision als projektRev (siehe Server), andere Aktionen als dataRev.
+  if (!j || (typeof j.dataRev !== 'number' && typeof j.projektRev !== 'number')) return;
   if (_mobileSaveConflictActive || readOfflineQueue().save) return;
   try { if (!appDataBaseline || JSON.stringify(appData) !== JSON.stringify(appDataBaseline)) return; }
   catch (e) { return; }

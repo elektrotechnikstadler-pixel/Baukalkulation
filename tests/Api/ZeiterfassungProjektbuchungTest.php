@@ -497,6 +497,149 @@ final class ZeiterfassungProjektbuchungTest extends ApiTestCase
         self::assertSame('', $this->zeiteintraege()[101]['errorCode']);
     }
 
+    public function testZeiterfassungSpeichernMeldetKeineDataRevFuerAlteClients(): void
+    {
+        $saved = $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);
+
+        self::assertArrayNotHasKey('dataRev', $saved);
+        self::assertIsInt($saved['projektRev']);
+    }
+
+    public function testAlterClientMitAlterRevisionBekommtKonfliktStattUeberschreiben(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        $alt = $this->ladeDaten();
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 2)]);
+
+        $this->assertStatus(409, $this->api->post('save', ['data' => ['baustellen' => $alt['baustellen']], 'baseRev' => (int) $alt['rev']]));
+        self::assertCount(0, $this->buchungen(1));
+        self::assertCount(1, $this->buchungen(2));
+    }
+
+    public function testUeberschriebeneUmbuchungWirdBeimNaechstenSpeichernGeheilt(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        $this->bucheImProjektUm(1, static fn(array $a): array => ['stunden' => 6] + $a);
+        $alt = $this->ladeDaten();
+        $saved = $this->speichern([$this->eintrag(101, '2026-03-02', 8, 2)]);
+        // Veralteter Client (≤ 3.0.15) übernahm die gemeldete Revision und überschrieb die Umbuchung.
+        $this->saveBaustellen($alt['baustellen'], $saved['projektRev']);
+        self::assertCount(1, $this->buchungen(1));
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 2), $this->eintrag(102, '2026-03-03', 2, 2)]);
+
+        self::assertCount(0, $this->buchungen(1));
+        $ziel = array_values(array_filter($this->buchungen(2), static fn(array $a): bool => $a['zeitEntryId'] === 101));
+        self::assertCount(1, $ziel);
+        self::assertEquals(6, $ziel[0]['stunden'], 'Handänderung bleibt beim Zurückverschieben erhalten');
+        self::assertSame(0, $this->assertOk($this->api->get('reconcile_bookings'))['counts']['ghosts']);
+    }
+
+    public function testDoppelteVerknuepfteBuchungWirdBereinigt(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        // Altes Desktop-Verhalten: zusätzliche lokale Kopie derselben Buchung (ohne Spiegel).
+        $daten = $this->ladeDaten();
+        $baustellen = $daten['baustellen'];
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] !== 1) {
+                continue;
+            }
+            $kopie = $b['arbeitszeit'][0];
+            unset($kopie['zeitStunden'], $kopie['zeitDatum'], $kopie['zeitStundenKatId'], $kopie['zeitStundenpreis'], $kopie['zeitFixkosten']);
+            $kopie['id'] = 99;
+            $b['arbeitszeit'][] = $kopie;
+        }
+        unset($b);
+        $this->saveBaustellen($baustellen, (int) $daten['rev']);
+        self::assertCount(2, $this->buchungen(1));
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+
+        $buchungen = $this->buchungen(1);
+        self::assertCount(1, $buchungen);
+        self::assertArrayHasKey('zeitStunden', $buchungen[0]);
+    }
+
+    public function testAlterClientVerschiebtOhneQuellprojektWieBisher(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        // Client ≤ 3.0.15: verschiebt die Buchung selbst und meldet danach nur die Zeiterfassung um.
+        $daten = $this->ladeDaten();
+        $baustellen = $daten['baustellen'];
+        $buchung = null;
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 1) {
+                $buchung = $b['arbeitszeit'][0];
+                $b['arbeitszeit'] = [];
+            }
+        }
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 2) {
+                $b['arbeitszeit'] = [['id' => 1] + $buchung];
+            }
+        }
+        unset($b);
+        $this->saveBaustellen($baustellen, (int) $daten['rev']);
+        $this->assertOk($this->api->post('move_position', ['zeitEntryId' => 101, 'zeitUser' => 'monteur', 'destBaustelleId' => 2]));
+
+        $this->speichern(array_values($this->zeiteintraege()));
+
+        self::assertCount(0, $this->buchungen(1));
+        self::assertCount(1, $this->buchungen(2));
+        self::assertSame(2, $this->zeiteintraege()[101]['baustelleId']);
+    }
+
+    public function testNeueServerbuchungNutztNextAzIdWieDieClients(): void
+    {
+        $daten = $this->ladeDaten();
+        $baustellen = $daten['baustellen'];
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 1) {
+                $b['nextAzId'] = 7;
+            }
+        }
+        unset($b);
+        $this->saveBaustellen($baustellen, (int) $daten['rev']);
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+
+        $projekt = array_column($this->ladeDaten()['baustellen'], null, 'id')[1];
+        self::assertSame(7, $projekt['arbeitszeit'][0]['id']);
+        self::assertSame(8, $projekt['nextAzId']);
+    }
+
+    public function testGesperrtesZielLaesstKopieInFremdemProjektStehen(): void
+    {
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+        // Altdaten: Buchung liegt in B (kein Eintrag dort), im Projekt des Eintrags (A) gesperrt.
+        $daten = $this->ladeDaten();
+        $baustellen = $daten['baustellen'];
+        $buchung = null;
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 1) {
+                $buchung = $b['arbeitszeit'][0];
+                $b['arbeitszeit'] = [];
+                $b['azImportBlocked'] = ['id:monteur:101'];
+            }
+        }
+        foreach ($baustellen as &$b) {
+            if ((int) $b['id'] === 2) {
+                $b['arbeitszeit'] = [['id' => 1, 'stunden' => 6] + $buchung];
+            }
+        }
+        unset($b);
+        $this->saveBaustellen($baustellen, (int) $daten['rev']);
+
+        $this->speichern([$this->eintrag(101, '2026-03-02', 8, 1)]);
+
+        self::assertCount(0, $this->buchungen(1));
+        $kopie = $this->buchungen(2);
+        self::assertCount(1, $kopie);
+        self::assertEquals(6, $kopie[0]['stunden']);
+    }
+
     public function testGesperrteBuchungWirdNichtNeuGebuchtUndNichtGemeldet(): void
     {
         $this->speichern([$this->eintrag(101, '2026-03-02', 8)]);

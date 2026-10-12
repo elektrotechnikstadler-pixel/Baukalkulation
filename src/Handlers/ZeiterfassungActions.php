@@ -278,7 +278,11 @@ class ZeiterfassungActions
             'autoImported' => $autoImported,
             'autoUpdated'  => $autoUpdated,
             'autoRemoved'  => $autoRemoved,
-            'dataRev'      => $newDataRev,
+            // Bewusst NICHT „dataRev“: Clients bis 3.0.15 übernehmen dataRev ungeprüft als
+            // Basis für das nächste Projekt-Speichern und würden die gerade serverseitig
+            // geänderten Projektbuchungen mit ihrem alten Stand überschreiben. Ohne dataRev
+            // bekommen sie einen Konflikt, den das Zusammenführen ohne Verlust löst.
+            'projektRev'   => $newDataRev,
             'zeitRev'      => $newZeitRev,
             'entries'      => $written,
         ]);
@@ -591,10 +595,15 @@ class ZeiterfassungActions
         $stundenKatId = $sk ? (int)$sk['id'] : null;
         $katName      = $sk ? (string)$sk['kategorie'] : $kategorie;
 
+        // Gleiche Regel wie die Clients (_ensureUniquePosIds): nie unter nextAzId. Legt ein
+        // älterer Client parallel eine lokale Kopie an, erhält sie dieselbe Nummer – das
+        // Zusammenführen meldet dann einen Konflikt statt zwei Buchungen zu behalten.
         $newId = 1;
         foreach ($bData['arbeitszeit'] as $a) {
             if (($a['id'] ?? 0) >= $newId) $newId = $a['id'] + 1;
         }
+        $newId = max($newId, (int)($bData['nextAzId'] ?? 1));
+        $bData['nextAzId'] = $newId + 1;
         $item = [
             'id'           => $newId,
             'beschreibung' => ((string)($entry['bemerkung'] ?? '')) ?: $katName,
@@ -802,6 +811,22 @@ class ZeiterfassungActions
             $desiredFuzzy[$bId][$key] = ($desiredFuzzy[$bId][$key] ?? 0) + 1;
         }
 
+        // Eintrag -> Projekt (für verknüpfte Buchungen im falschen Projekt). Steht dieselbe
+        // entryId in mehreren Projekten (Altdaten), ist die Zuordnung mehrdeutig.
+        $eintragProjekt = [];
+        $eintragWerte   = [];
+        $mehrdeutig     = [];
+        foreach ($desiredIds as $bId => $eids) {
+            foreach (array_keys($eids) as $eid) {
+                if (isset($eintragProjekt[$eid]) && $eintragProjekt[$eid] !== $bId) $mehrdeutig[$eid] = true;
+                $eintragProjekt[$eid] = $bId;
+            }
+        }
+        foreach ($entries as $entry) {
+            $eid = isset($entry['id']) ? (int)$entry['id'] : 0;
+            if ($eid > 0) $eintragWerte[$eid] = ['stunden' => (float)($entry['stunden'] ?? 0), 'datum' => (string)($entry['datum'] ?? '')];
+        }
+
         $removed = 0;
         $geschrieben = false;
         // Alle noch vorhandenen Eintrags-IDs des Benutzers (jeder Typ): Sperren für gelöschte
@@ -813,23 +838,47 @@ class ZeiterfassungActions
             if ($eid > 0) $vorhandeneIds[$eid] = true;
         }
         $sperrPrefix = 'id:' . strtolower($username) . ':';
-        // Nur betroffene Baustellen laden (Performance): aktuell referenzierte und die des
-        // Vorher-Stands – sonst bliebe nach einem Projektwechsel die alte Buchung stehen.
+
+        // Betroffene Baustellen: aktuell referenzierte und die des Vorher-Stands. Zusätzlich
+        // alle aktiven Baustellen mit verknüpften Buchungen dieses Benutzers – nur so werden
+        // Buchungen im falschen Projekt gefunden (z. B. nachdem ein veralteter Client eine
+        // Umbuchung überschrieben hat). Archivierte Projekte bleiben eingefroren.
         $affectedBIds = array_values(array_unique(array_merge(
             array_keys($desiredIds),
             array_keys($desiredFuzzy),
             array_filter($zusatzProjektIds, static fn(int $id): bool => $id > 0)
         )));
-        if (empty($affectedBIds)) return ['removed' => 0, 'written' => false];
-        $phB = implode(',', array_fill(0, count($affectedBIds), '?'));
-        // Archivierte Projekte werden nicht angefasst: dort ist der Buchungsstand
-        // eingefroren und darf nicht nachträglich bereinigt werden.
-        $rows = Database::fetchAll($this->db, "SELECT id, data FROM baustellen WHERE archiviert = 0 AND id IN ($phB)", $affectedBIds);
-        foreach ($rows as $bRow) {
-            $bId   = (int)$bRow['id'];
-            $bData = json_decode($bRow['data'], true) ?: [];
-            $changed = false;
+        $rows = [];
+        if ($affectedBIds) {
+            $phB = implode(',', array_fill(0, count($affectedBIds), '?'));
+            $rows = Database::fetchAll($this->db, "SELECT id, data FROM baustellen WHERE archiviert = 0 AND id IN ($phB)", $affectedBIds);
+        }
+        $needle = strtolower(substr((string)json_encode($username, JSON_UNESCAPED_UNICODE), 1, -1));
+        $muster = '%"zeituser":"' . strtr($needle, ['!' => '!!', '%' => '!%', '_' => '!_']) . '"%';
+        $weitere = Database::fetchAll(
+            $this->db,
+            "SELECT id, data FROM baustellen WHERE archiviert = 0 AND LOWER(data) LIKE ? ESCAPE '!'",
+            [$muster]
+        );
 
+        $projekte = [];
+        foreach (array_merge($rows, $weitere) as $bRow) {
+            $bId = (int)$bRow['id'];
+            if (isset($projekte[$bId])) continue;
+            $projekte[$bId] = [
+                'data'    => json_decode((string)$bRow['data'], true) ?: [],
+                // Nur über die Suche gefunden: Altbuchungen ohne Verknüpfung dort nicht anfassen.
+                'weit'    => !in_array($bId, $affectedBIds, true),
+                'plan'    => [],
+                'changed' => false,
+            ];
+        }
+        if (!$projekte) return ['removed' => 0, 'written' => false];
+
+        // Schritt 1: jede Buchung bewerten (behalten, entfernen oder je Eintrag entscheiden).
+        $kandidaten = []; // eid => list<[bId, pos]>
+        foreach ($projekte as $bId => &$p) {
+            $bData = &$p['data'];
             if (!empty($bData['azImportBlocked']) && is_array($bData['azImportBlocked'])) {
                 $sperren = array_values(array_filter(
                     $bData['azImportBlocked'],
@@ -838,15 +887,13 @@ class ZeiterfassungActions
                 ));
                 if (count($sperren) !== count($bData['azImportBlocked'])) {
                     $bData['azImportBlocked'] = $sperren;
-                    $changed = true;
+                    $p['changed'] = true;
                 }
             }
 
-            $arbeitszeit = (isset($bData['arbeitszeit']) && is_array($bData['arbeitszeit'])) ? $bData['arbeitszeit'] : [];
-            $ids     = $desiredIds[$bId] ?? [];
-            $fuzzy   = $desiredFuzzy[$bId] ?? [];
-            $kept    = [];
-            foreach ($arbeitszeit as $a) {
+            $ids   = $desiredIds[$bId] ?? [];
+            $fuzzy = $desiredFuzzy[$bId] ?? [];
+            foreach ((isset($bData['arbeitszeit']) && is_array($bData['arbeitszeit'])) ? $bData['arbeitszeit'] : [] as $pos => $a) {
                 $isAuto = is_array($a) && ($a['autoImport'] ?? false);
                 $zu     = $isAuto ? (string)($a['zeitUser'] ?? '') : '';
                 if ($zu !== '') {
@@ -856,28 +903,128 @@ class ZeiterfassungActions
                     // Legacy ohne Link: nur bei eindeutigem Kürzel zuordenbar.
                     $isAutoByUser = $isAuto && ($a['erstelltVon'] ?? '') === $kuerzel && !$ambiguous;
                 }
-                if (!$isAutoByUser) { $kept[] = $a; continue; }
+                $aktion = 'keep';
+                if ($isAutoByUser) {
+                    $eid = isset($a['zeitEntryId']) ? (int)$a['zeitEntryId'] : 0;
+                    if ($eid > 0) {
+                        if (isset($mehrdeutig[$eid])) {
+                            $aktion = ($p['weit'] || !empty($ids[$eid])) ? 'keep' : 'remove';
+                        } elseif (!isset($eintragProjekt[$eid])) {
+                            // Zeiteintrag gelöscht bzw. keine Arbeit auf einem Projekt mehr.
+                            $aktion = 'remove';
+                        } else {
+                            $aktion = 'defer';
+                            $kandidaten[$eid][] = [$bId, $pos];
+                        }
+                    } elseif (!$p['weit']) {
+                        // Legacy ohne Link: Fuzzy-Multiset-Abgleich.
+                        $key = ($a['datum'] ?? '') . '|' . number_format((float)($a['stunden'] ?? 0), 2, '.', '');
+                        if (($fuzzy[$key] ?? 0) > 0) { $fuzzy[$key]--; } else { $aktion = 'remove'; }
+                    }
+                }
+                $p['plan'][$pos] = ['a' => $a, 'aktion' => $aktion, 'ziel' => null];
+            }
+            unset($bData);
+        }
+        unset($p);
 
-                $eid = isset($a['zeitEntryId']) ? (int)$a['zeitEntryId'] : 0;
-                if ($eid > 0) {
-                    // Exakte Verknüpfung: behalten, solange der Zeiteintrag existiert.
-                    if (!empty($ids[$eid])) { $kept[] = $a; }
-                    else { $changed = true; $removed++; }
+        // Schritt 2: je Zeiteintrag genau eine Buchung – im Projekt des Eintrags. Eine Buchung
+        // im falschen Projekt wird mit allen Werten (auch Handänderungen) dorthin verschoben
+        // statt neu angelegt; überzählige Kopien werden entfernt.
+        foreach ($kandidaten as $eid => $liste) {
+            $ziel = $eintragProjekt[$eid];
+            if (!isset($projekte[$ziel])) {
+                // Projekt des Eintrags archiviert oder nicht mehr vorhanden: wie bisher – in
+                // betroffenen Projekten entfernen, nur über die Suche gefundene unverändert lassen.
+                foreach ($liste as [$bId, $pos]) {
+                    $projekte[$bId]['plan'][$pos]['aktion'] = $projekte[$bId]['weit'] ? 'keep' : 'remove';
+                }
+                continue;
+            }
+            $sperrenZiel = $projekte[$ziel]['data']['azImportBlocked'] ?? [];
+            if (is_array($sperrenZiel) && in_array($sperrPrefix . $eid, $sperrenZiel, true)) {
+                // Im Projekt des Eintrags bewusst gelöscht: dort nichts ändern. Kopien in bisher
+                // abgeglichenen Projekten entfernen; nur über die Suche gefundene bleiben
+                // unangetastet (im Zweifel nicht bereinigen statt löschen).
+                foreach ($liste as [$bId, $pos]) {
+                    $projekte[$bId]['plan'][$pos]['aktion'] = ($bId === $ziel || $projekte[$bId]['weit']) ? 'keep' : 'remove';
+                }
+                continue;
+            }
+            $imZiel   = array_values(array_filter($liste, static fn(array $k): bool => $k[0] === $ziel));
+            $gewinner = $this->besteKopie($imZiel ?: $liste, $projekte, $eintragWerte[$eid] ?? null);
+            foreach ($liste as $k) {
+                [$bId, $pos] = $k;
+                if ($k === $gewinner) {
+                    $projekte[$bId]['plan'][$pos]['aktion'] = $bId === $ziel ? 'keep' : 'move';
+                    $projekte[$bId]['plan'][$pos]['ziel']   = $ziel;
                 } else {
-                    // Legacy ohne Link: Fuzzy-Multiset-Abgleich.
-                    $key = ($a['datum'] ?? '') . '|' . number_format((float)($a['stunden'] ?? 0), 2, '.', '');
-                    if (($fuzzy[$key] ?? 0) > 0) { $fuzzy[$key]--; $kept[] = $a; }
-                    else { $changed = true; $removed++; }
+                    $projekte[$bId]['plan'][$pos]['aktion'] = 'remove';
                 }
             }
-            if ($changed) {
-                if ($arbeitszeit) $bData['arbeitszeit'] = array_values($kept);
-                $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?")
-                         ->execute([json_encode($bData, JSON_UNESCAPED_UNICODE), $bId]);
-                $geschrieben = true;
+        }
+
+        // Schritt 3: anwenden und geänderte Projekte schreiben.
+        $verschoben = []; // ziel => list<booking>
+        foreach ($projekte as $bId => &$p) {
+            if (!$p['plan']) continue;
+            $neu = [];
+            foreach ($p['plan'] as $e) {
+                if ($e['aktion'] === 'remove') { $removed++; $p['changed'] = true; continue; }
+                if ($e['aktion'] === 'move')   { $verschoben[$e['ziel']][] = $e['a']; $p['changed'] = true; continue; }
+                $neu[] = $e['a'];
             }
+            $p['data']['arbeitszeit'] = $neu;
+        }
+        unset($p);
+        foreach ($verschoben as $ziel => $buchungen) {
+            $zielData = &$projekte[$ziel]['data'];
+            if (!isset($zielData['arbeitszeit']) || !is_array($zielData['arbeitszeit'])) $zielData['arbeitszeit'] = [];
+            foreach ($buchungen as $a) {
+                $maxId = 0;
+                foreach ($zielData['arbeitszeit'] as $x) $maxId = max($maxId, (int)($x['id'] ?? 0));
+                $a['id'] = max($maxId + 1, (int)($zielData['nextAzId'] ?? 1));
+                $zielData['nextAzId'] = $a['id'] + 1;
+                array_unshift($zielData['arbeitszeit'], $a);
+            }
+            unset($zielData);
+            $projekte[$ziel]['changed'] = true;
+        }
+
+        $upd = $this->db->prepare("UPDATE baustellen SET data = ? WHERE id = ?");
+        foreach ($projekte as $bId => $p) {
+            if (!$p['changed']) continue;
+            $upd->execute([json_encode($p['data'], JSON_UNESCAPED_UNICODE), $bId]);
+            $geschrieben = true;
         }
         return ['removed' => $removed, 'written' => $geschrieben];
+    }
+
+    /**
+     * Wählt unter mehreren verknüpften Buchungen desselben Zeiteintrags die zu behaltende:
+     * bevorzugt eine im Projekt von Hand geänderte (weicht vom Eintrag ab), sonst eine mit
+     * Spiegelfeldern (vom aktuellen Abgleich angelegt), sonst die erste.
+     *
+     * @param list<array{0:int,1:int}>          $liste
+     * @param array<int, array<string, mixed>>   $projekte
+     * @param array{stunden: float, datum: string}|null $werte
+     * @return array{0:int,1:int}
+     */
+    private function besteKopie(array $liste, array $projekte, ?array $werte): array
+    {
+        $buchung = static fn(array $k): array => $projekte[$k[0]]['plan'][$k[1]]['a'];
+        if ($werte !== null) {
+            foreach ($liste as $k) {
+                $a = $buchung($k);
+                if (abs((float)($a['stunden'] ?? 0) - $werte['stunden']) >= 0.01 || (string)($a['datum'] ?? '') !== $werte['datum']) {
+                    return $k;
+                }
+            }
+        }
+        foreach ($liste as $k) {
+            if (array_key_exists('zeitStunden', $buchung($k))) return $k;
+        }
+        return $liste[0];
     }
 
     /** Prüft, ob ein Kürzel an mehr als einen Benutzer vergeben ist (Altbestand). */

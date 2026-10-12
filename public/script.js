@@ -2091,7 +2091,7 @@ async function movePositionToBaustelle(drag, destId) {
     }
     if (!j || !j.ok) {
       showNotification('Verschieben fehlgeschlagen: ' + ((j && j.error) || 'Verbindung unterbrochen') + ' – nichts wurde geändert.', 'error');
-      if (j && j.reload) { await loadData(); renderSidebar(); renderDetail(); }
+      if (j && j.reload) { await _projektstandNachZeitAbgleich({ dataRev: true }); renderSidebar(); renderDetail(); }
       return;
     }
     // Eigene Zeiterfassung: Cache und Revision mitziehen, damit ein nachfolgender
@@ -2108,7 +2108,9 @@ async function movePositionToBaustelle(drag, destId) {
         await _reloadZeitDesktop(false);
       }
     }
-    await loadData();
+    // Projektstand neu laden (nur ohne zwischenzeitliche lokale Änderungen – sonst
+    // führt das nächste Speichern per Konflikt + Zusammenführen den Serverstand ein).
+    await _projektstandNachZeitAbgleich(j);
     showNotification(`„${label}" nach „${dest.name}" verschoben.`, 'success');
     renderSidebar();
     renderDetail();
@@ -16910,9 +16912,10 @@ async function repairAllFehlbuchungen(username) {
 }
 
 // Lädt Projekt- und Zeitdaten nach einer Reparatur neu und rendert die Auswertung.
+// Ungespeicherte Projektänderungen werden nicht verworfen (dann Konflikt + Zusammenführen).
 async function reloadSaAfterRepair() {
   try {
-    await loadData();
+    await _projektstandNachZeitAbgleich({ dataRev: true });
     const zr = await fetch('api.php?action=load_all_zeiterfassung');
     const zj = await zr.json().catch(() => ({}));
     if (zj.ok) saAllZeit = zj.data || {};
@@ -17114,7 +17117,8 @@ function openGleitzeitBuchungDialog(username, currentSaldo) {
 // verloren) und die Revision bleibt alt: das nächste Speichern meldet einen Konflikt,
 // und der bestehende Auto-Merge führt beide Stände zusammen.
 async function _projektstandNachZeitAbgleich(j) {
-  if (!j || j.dataRev == null) return;
+  // save_zeiterfassung meldet die Revision als projektRev (siehe Server), andere Aktionen als dataRev.
+  if (!j || (j.dataRev == null && j.projektRev == null)) return;
   if (_hatUngespeicherteProjektAenderungen()) return;
   try { await loadData(); } catch (e) { console.warn(e); }
 }
