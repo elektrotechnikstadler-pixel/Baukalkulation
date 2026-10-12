@@ -6,7 +6,7 @@
 | Typ | Bugfix |
 | Testläufe rot | 0 |
 | Review-Runden | 3 |
-| Commit | Release v3.0.15, Nachprüfung v3.0.16 |
+| Commit | Release v3.0.15, Nachprüfung v3.0.16, Update-Sicherheit v3.0.17 |
 
 ## 1. Auftrag
 
@@ -346,6 +346,33 @@ Vorgehen: Probetest mit 8 Szenarien gegen die API (temporär, gelöscht) und una
 | D13 | Hinweis (Altverhalten) | Mobil führt Konflikte nur pro ganzer Baustelle zusammen; „Meine Version“ verwirft Server-Änderungen dieser Baustelle | offen, gemeinsam mit D7/D11 |
 
 Review der Nachprüfung: unabhängiges Datenverlust-Review, 3 Runden (Befunde → Korrekturen → **APPROVE**).
+
+## 8. Update laufender Installationen (3.0.17)
+
+Auftrag Nutzer (2026-10-12): „Letzte Änderungen nochmal prüfen, sodass bei einem Update einer laufenden App nichts
+verloren geht.“
+
+Ausgangslage: Nach einem Update laufen Geräte mit altem JavaScript weiter (Mobil ohne automatisches Neuladen, Service
+Worker liefert HTML zuerst aus dem Cache). Keine Datenbank-Migration, neue JSON-Felder sind optional.
+
+| Nr | Schwere | Befund | Behebung |
+|---|---|---|---|
+| U1 | Major | Clients ≤ 3.0.14 übernehmen `dataRev` aus `save_zeiterfassung` ungeprüft (`script.js:16139`, `mobile.html:5304`) und überschreiben die vom Server angepasste Projektbuchung; per Test nachgestellt: Buchung danach doppelt in zwei Projekten, ohne Selbstheilung (`ghosts: 1`) | Antwortschlüssel `projektRev` statt `dataRev` → alte Clients erhalten 409 und führen ohne Verlust zusammen |
+| U2 | Major | Überschriebene Umbuchungen, Doppelkopien (altes optimistisches Einfügen, Konfliktdialog „Meine Version“, PG-Wettlauf) blieben dauerhaft falsch | Selbstheilung in `reconcileAutoImport`: Suche aller aktiven Projekte mit Buchungen des Benutzers, Rückverschiebung mit allen Werten, Dubletten-Bereinigung (`besteKopie`) |
+| U3 | Minor | `reloadSaAfterRepair` und Verschieben luden ungeschützt neu | geschütztes Neuladen `_projektstandNachZeitAbgleich` |
+| U4 | Medium (Review) | Alter Desktop-Stand: optimistische lokale Kopie (id = `nextAzId`) ≠ Server-Buchung (id = max+1) → Merge behält beide | Server vergibt id = max(max+1, `nextAzId`) und zieht `nextAzId` nach → gleiche Nummer → Konflikt statt Dublette |
+| U5 | Medium (Review) | Selbstheilung löschte bei gesperrtem Zielprojekt die einzige Kopie in einem nur über die Suche gefundenen Projekt | solche Kopien bleiben unangetastet |
+
+Review: unabhängiges Update-Review, Runde 1 CHANGES_REQUESTED (U4, U5), Runde 2 **APPROVE**.
+
+Gesamtläufe 3.0.17: SQLite 526 Tests / 4077 Assertions, PostgreSQL 526 / 4074 – jeweils 0 Fehler (2 bzw. 3 übersprungen
+wie bisher); PHPStan ohne Fehler (ein überflüssiger Baseline-Eintrag entfernt), php-cs-fixer, `check-versions --strict`,
+`test:js` grün.
+
+Bekanntes Restverhalten: Alte Desktop-Stände, die eine eigene Import-Buchung verschieben, erhalten beim nächsten
+Speichern der Stundenerfassung den Konfliktdialog (Revision wird jetzt erhöht) – sichtbar, kein stiller Verlust.
+
+Tests: 5 neue Tests für alte Clients (3 gegen v3.0.16 nachweislich rot, 2 dokumentieren das richtige Altverhalten).
 
 Geprüft und unbedenklich (Probe + Review): Buchungen anderer Benutzer, manuelle Positionen, Altbuchungen bei mehrdeutigem
 Kürzel, archivierte Projekte, Mitarbeiter ohne Kürzel, R1 (kein Pfad schreibt Projektwerte in die Zeiterfassung),
