@@ -41,6 +41,32 @@
 
 ---
 
+## v3.0.18 – Belege: einheitliche PDFs, Einheiten im Projekt-PDF
+
+### Behoben
+- **Einheiten im Projekt und im PDF-Export stimmen überein:** Die Einheit-Auswahl (Material, Materialkatalog,
+  fehlendes Material, offenes Material) zeigte jede nicht in der Liste enthaltene Einheit – z. B. `m³`,
+  `Stück` oder `psch` aus Mobil, KI-Scan oder Import – fälschlich als „Stk.“ an, während der PDF-Export den
+  gespeicherten Wert druckte. Gespeicherte Einheiten werden jetzt unverändert angezeigt; die Liste enthielt
+  außerdem `m²` doppelt statt `m³`.
+- **Rechnungs-/Angebots-PDF einheitlich und sauber formatiert:** „📄 PDF“, „Vorschau / Drucken“,
+  „📎 In Dateien speichern“, ZUGFeRD-Download und E-Mail-Anhang (Rechnung und Angebot) nutzen jetzt alle den
+  serverseitigen `BelegPdfService`. Behoben: zu schmale Bezeichnungsspalte, Falz-/Lochmarken als graue Striche
+  im Inhaltsbereich, Fußzeile im Inhaltsbereich, abweichendes ZUGFeRD-Layout und gerastertes (Bild-)PDF beim
+  Speichern in „Dateien & Fotos“.
+- **ZUGFeRD-XML passend zum sichtbaren PDF:** Gruppen-Überschriften, Freitexte und Eventualpositionen gehen
+  nicht mehr als Rechnungszeilen in die E-Rechnung ein, Unterpositionen schon; Rabatte werden berücksichtigt.
+  Zeilensummen werden kaufmännisch auf Cent gerundet.
+- **Angebot per E-Mail:** Der Versand scheiterte immer mit „rechnungId fehlt“, weil der Client `angebotId`
+  sendet. Der Server akzeptiert jetzt beide Namen.
+
+### Geändert
+- `render_beleg_pdf` nimmt zusätzlich ungespeicherte Formulardaten (`beleg`) an – nur mit Bearbeitungsrecht
+  für den Belegtyp.
+- Der Hinweis „ZUGFeRD EN 16931“ erscheint nur noch auf echten ZUGFeRD-PDFs.
+
+---
+
 ## v3.0.17 – Projektbuchung: sicheres Update laufender Installationen
 
 ### Behoben

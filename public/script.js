@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // GLOBAL ERROR HANDLER  -  shows JS errors on screen for debugging
 // ============================================================
 function _showErrBanner(text) {
@@ -4445,10 +4445,19 @@ function matDrop(catId) {
   dragMatId = null;
 }
 
+const EINHEITEN = ['Stk.','m','m²','m³','kg','t','l','lfm','VE','Pkt.','Psch.','h'];
+
+// Eine gespeicherte Einheit außerhalb der Standardliste (z. B. aus Mobil, KI-Scan, Import)
+// wird als eigene Option angezeigt – sonst zeigt das Dropdown fälschlich „Stk.“,
+// während Exporte (PDF/Excel) den tatsächlich gespeicherten Wert ausgeben.
+function einheitOptionen(current) {
+  const cur = current == null ? '' : String(current);
+  const units = (cur === '' || EINHEITEN.includes(cur)) ? EINHEITEN : [cur, ...EINHEITEN];
+  return units.map(u => `<option value="${esc(u)}"${u === cur ? ' selected' : ''}>${esc(u)}</option>`).join('');
+}
+
 function einheitSelect(id, current) {
-  const units = ['Stk.','m','m²','m²','kg','t','l','lfm','VE','Pkt.','Psch.','h'];
-  const opts = units.map(u => `<option${u === current ? ' selected' : ''}>${u}</option>`).join('');
-  return `<select class="cell-select" onchange="setMat(${id},'einheit',this.value)">${opts}</select>`;
+  return `<select class="cell-select" onchange="setMat(${id},'einheit',this.value)">${einheitOptionen(current)}</select>`;
 }
 
 // ============================================================
@@ -5598,9 +5607,7 @@ function renderKatalogRows() {
 }
 
 function katalogEinheitSelect(id, current) {
-  const units = ['Stk.','m','m²','m²','kg','t','l','lfm','VE','Pkt.','Psch.','h'];
-  const opts = units.map(u => `<option${u === current ? ' selected' : ''}>${u}</option>`).join('');
-  return `<select class="cell-select" onchange="setKatalog(${id},'einheit',this.value)">${opts}</select>`;
+  return `<select class="cell-select" onchange="setKatalog(${id},'einheit',this.value)">${einheitOptionen(current)}</select>`;
 }
 
 // -- KATALOG CRUD ---------------------------------------------
@@ -8645,9 +8652,7 @@ function renderFehlendesMatRows() {
 }
 
 function fehlendesEinheitSelect(id, current) {
-  const units = ['Stk.','m','m²','m²','kg','t','l','lfm','VE','Pkt.','Psch.','h'];
-  const opts = units.map(u => `<option${u === current ? ' selected' : ''}>${u}</option>`).join('');
-  return `<select class="cell-select" onchange="setFehlendesMat(${id},'einheit',this.value)">${opts}</select>`;
+  return `<select class="cell-select" onchange="setFehlendesMat(${id},'einheit',this.value)">${einheitOptionen(current)}</select>`;
 }
 
 // ============================================================
@@ -8887,9 +8892,7 @@ async function lagerTakeForOffenesMaterial(baustelleId, matId, artikelId) {
 }
 
 function omEinheitSelect(bId, mId, current) {
-  const units = ['Stk.','m','m²','m²','kg','t','l','lfm','VE','Pkt.','Psch.','h'];
-  const opts = units.map(u => `<option${u === current ? ' selected' : ''}>${u}</option>`).join('');
-  return `<select class="cell-select" onchange="omSetField(${bId},${mId},'einheit',this.value)">${opts}</select>`;
+  return `<select class="cell-select" onchange="omSetField(${bId},${mId},'einheit',this.value)">${einheitOptionen(current)}</select>`;
 }
 
 function omSetField(baustelleId, matId, field, val) {
@@ -13172,6 +13175,7 @@ function openRechnungForm(typ, editId) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'rechnungFormOverlay';
+  if (existing) overlay.dataset.belegId = String(existing.id);
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
   overlay.innerHTML = `<div class="modal-box" style="max-width:940px;max-height:92vh;overflow-y:auto">
     <div class="modal-header"><h2>${title}</h2><button class="close-btn" onclick="document.getElementById('rechnungFormOverlay')?.remove()">✕</button></div>
@@ -13872,232 +13876,61 @@ function imgToBase64(url) {
   });
 }
 
-async function previewRechnung(typ, saveOnly = false) {
-  const fmtC = v => (v||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const s = appSettings;
-  const positionen = collectPositionen();
-  const kleinunternehmer = !!s.firma_kleinunternehmer;
-  const reverseCharge    = !!s.firma_reverse_charge;
-  // Kleinunternehmer/Reverse Charge → effektiv 0% MwSt
-  const effMwstSatz = (kleinunternehmer || reverseCharge) ? 0 : (parseFloat(s.firma_mwst_satz) || 19);
-  const mwstSatz = effMwstSatz; // für Abwärtskompatibilität im restlichen Code
-
-  // Positions-Netto inkl. Rabatt (Rabatt in % auf Menge × Einzelpreis)
-  const posNetto = p => (p.menge || 0) * (p.einzelpreis || 0) * (1 - (parseFloat(p.rabatt) || 0) / 100);
-
-  // Netto aus non-gruppe Positionen
-  const netto = positionen.filter(p => p.posTyp === 'normal' || p.posTyp === 'eventual').reduce((acc, p) => {
-    if (p.posTyp === 'eventual') return acc;
-    return acc + posNetto(p);
-  }, 0);
-  const mwst = netto * mwstSatz / 100;
-  const brutto = netto + mwst;
-
-  const kundeSelect = document.getElementById('reKunde');
-  const kundeText = kundeSelect?.options[kundeSelect.selectedIndex]?.text || '';
-  const kundeId = parseInt(kundeSelect?.value) || null;
-  const kundeObj = kundeId && typeof kundenData !== 'undefined' ? kundenData.find(k => k.id === kundeId) : null;
-  let kundeAddr = '';
-  if (kundeObj) {
-    kundeAddr = [kundeObj.firma, (kundeObj.vorname||'')+' '+(kundeObj.nachname||''), kundeObj.strasse, (kundeObj.plz||'')+' '+(kundeObj.ort||'')].filter(s=>s&&s.trim()).join('<br>');
-  } else {
-    kundeAddr = esc(kundeText);
-  }
-  const kundeNr = kundeObj?.kundennummer || '';
-
-  const reNummer = document.getElementById('reNummer')?.value || '';
-  const datum = document.getElementById('reDatum')?.value || '';
-  const datumDE = datum ? datum.split('-').reverse().join('.') : '';
-  const notizen = document.getElementById('reNotizen')?.value || '';
-  const title = typ === 'rechnung' ? 'Rechnung' : 'Angebot';
-  const _reBsSel = document.getElementById('reBaustelle');
-  const baustelleName = _reBsSel?.value ? (_reBsSel.options[_reBsSel.selectedIndex]?.text || '') : '';
-  const projektName = (baustelleName && baustelleName !== '-- Optional --') ? baustelleName : '';
-  const beschreibung = document.getElementById('reBeschreibung')?.value || '';
-
-  const logoUrl = s.firma_logo_url ? await imgToBase64(s.firma_logo_url) : '';
-
-  let html = `<!DOCTYPE html><html lang="de" style="color-scheme:light"><head><meta charset="UTF-8"><title>${title}</title>
-  <base href="${window.location.href.replace(/[^/]*$/, '')}">
-  <style>
-    @page { margin: 20mm 15mm 25mm 20mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 10pt; line-height: 1.4; margin: 0; padding: 0; }
-    .foldmark { position: fixed; left: 0; width: 4mm; border-top: 0.5pt solid #ccc; }
-    .foldmark-top { top: 105mm; }
-    .foldmark-bottom { top: 210mm; }
-    .punchmark { position: fixed; left: 0; top: 148.5mm; width: 6mm; border-top: 0.5pt solid #bbb; }
-    .print-wrap { width: 100%; border-collapse: collapse; }
-    .print-wrap > thead td, .print-wrap > tfoot td, .print-wrap > tbody td { border: none; padding: 0; }
-    .footer-space { height: 18mm; }
-    .page { max-width: 170mm; margin: 0 auto; padding: 6mm 0; }
-    /* Briefkopf */
-    .letterhead { text-align: right; margin-bottom: 6mm; min-height: 22mm; }
-    .letterhead strong { font-size: 12pt; display: block; margin-bottom: 1mm; }
-    .letterhead .lh-sub { font-size: 9pt; color: #444; line-height: 1.45; }
-    /* Anschriftfeld + Infoblock (DIN 5008) */
-    .addr-info { width: 100%; border-collapse: collapse; margin-bottom: 10mm; }
-    .addr-info td { vertical-align: top; border: none; padding: 0; }
-    .addr-cell { width: 55%; }
-    .info-cell { width: 45%; }
-    .sender-line { font-size: 7pt; color: #666; border-bottom: 0.5pt solid #999; padding-bottom: 1mm; margin-bottom: 5mm; display: block; width: 85mm; }
-    .recipient { font-size: 11pt; line-height: 1.55; min-height: 28mm; }
-    .info-block { border-collapse: collapse; margin-left: auto; }
-    .info-block td { font-size: 9pt; padding: 0.6mm 0; }
-    .info-block td.lbl { color: #555; padding-right: 6mm; white-space: nowrap; }
-    .info-block td.val { font-weight: 600; text-align: right; }
-    /* Betreff */
-    h1.doc-title { font-size: 15pt; margin: 0 0 2mm; border-bottom: none; }
-    .subject { font-weight: 700; font-size: 10.5pt; margin-bottom: 5mm; }
-    .doc-beschreibung { font-size: 9.5pt; color: #333; margin-bottom: 6mm; }
-    table.pos { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
-    table.pos th { background: #f5f5f5; border-top: 1.5pt solid #333; border-bottom: 1.5pt solid #333; padding: 2mm 3mm; font-size: 8.5pt; font-weight: 700; }
-    table.pos td { padding: 2mm 3mm; border-bottom: 0.5pt solid #ddd; font-size: 9pt; }
-    table.pos tr { page-break-inside: avoid; }
-    table.pos th:first-child, table.pos td:first-child { text-align: center; width: 10mm; }
-    table.pos th:nth-child(3), table.pos td:nth-child(3) { text-align: center; width: 18mm; }
-    table.pos th:nth-child(4), table.pos td:nth-child(4) { text-align: center; width: 18mm; }
-    table.pos th:nth-child(5), table.pos td:nth-child(5) { text-align: right; width: 22mm; }
-    table.pos th:nth-child(6), table.pos td:nth-child(6) { text-align: right; width: 22mm; }
-    tr.grp-header td { background: #dbeeff; font-weight: 700; color: #1565C0; border-bottom: none; }
-    tr.grp-total td { background: #edf4ff; font-weight: 700; color: #1565C0; border-top: 0.5pt solid #b3d4f5; border-bottom: 1pt solid #b3d4f5; }
-    .totals { width: 100%; margin-top: 2mm; page-break-inside: avoid; }
-    .totals td { padding: 1mm 3mm; font-size: 9pt; }
-    .totals td:last-child { text-align: right; width: 22mm; }
-    .totals .netto-row td { border-top: 1pt solid #333; }
-    .totals .brutto-row td { border-top: 1.5pt solid #333; font-weight: 700; font-size: 10pt; }
-    .payment { margin-top: 6mm; font-size: 9pt; color: #333; page-break-inside: avoid; }
-    .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 3mm 20mm; border-top: 1pt solid #ccc; display: flex; justify-content: space-between; font-size: 7.5pt; color: #666; }
-    .logo-img { max-height: 22mm; max-width: 60mm; object-fit: contain; }
-  </style></head><body>
-  <div class="foldmark foldmark-top"></div>
-  <div class="punchmark"></div>
-  <div class="foldmark foldmark-bottom"></div>
-  <table class="print-wrap"><tfoot><tr><td><div class="footer-space"></div></td></tr></tfoot>
-  <tbody><tr><td>
-  <div class="page">
-    <div class="letterhead">
-      ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo"><br>` : ''}
-      <strong>${esc(s.firma_name||'')}</strong>
-      <span class="lh-sub">${esc(s.firma_strasse||'')}<br>${esc(s.firma_plz||'')} ${esc(s.firma_ort||'')}</span>
-    </div>
-    <table class="addr-info"><tr>
-      <td class="addr-cell">
-        <div class="sender-line">${esc(s.firma_name||'')}, ${esc(s.firma_strasse||'')}, ${esc(s.firma_plz||'')} ${esc(s.firma_ort||'')}</div>
-        <div class="recipient">${kundeAddr}</div>
-      </td>
-      <td class="info-cell">
-        <table class="info-block">
-          <tr><td class="lbl">${title}-Nr.:</td><td class="val">${esc(reNummer||'—')}</td></tr>
-          <tr><td class="lbl">Datum:</td><td class="val">${datumDE||'—'}</td></tr>
-          ${kundeNr ? `<tr><td class="lbl">Kunden-Nr.:</td><td class="val">${esc(kundeNr)}</td></tr>` : ''}
-          ${projektName ? `<tr><td class="lbl">Projekt:</td><td class="val">${esc(projektName)}</td></tr>` : ''}
-        </table>
-      </td>
-    </tr></table>
-    <h1 class="doc-title">${title}</h1>
-    <div class="subject">${title} Nr. ${esc(reNummer||'—')}${datumDE?` vom ${datumDE}`:''}</div>
-    ${beschreibung ? `<div class="doc-beschreibung">${esc(beschreibung).replace(/\n/g,'<br>')}</div>` : ''}
-    <table class="pos"><thead><tr>
-      <th>Pos.</th><th>Bezeichnung</th><th>Menge</th><th>Einheit</th><th>Einzel €</th><th>Gesamt €</th>
-    </tr></thead><tbody>`;
-
-  // Pos-Nummern + Hierarchie-Rendering
-  const groupIds = new Set(positionen.filter(p => p.posTyp === 'gruppe').map(p => p.id).filter(Boolean));
-  const topLevel = positionen.filter(p => !p.parentId || !groupIds.has(p.parentId));
-  let topNr = 0;
-  // Rabatt-Hinweis für die Bezeichnungs-Zelle (Spaltenanzahl bleibt konstant)
-  const rabNote = p => {
-    const r = parseFloat(p.rabatt) || 0;
-    return r > 0 ? `<br><small style="color:#888">abzgl. ${r.toLocaleString('de-DE')}% Rabatt</small>` : '';
+// Formularstand eines Belegs (auch ungespeichert) für das Server-PDF.
+function _reFormularBeleg(typ) {
+  const overlay = document.getElementById('rechnungFormOverlay');
+  return {
+    id: overlay?.dataset.belegId || null,
+    typ,
+    kundeId: parseInt(document.getElementById('reKunde')?.value) || null,
+    baustelleId: parseInt(document.getElementById('reBaustelle')?.value) || null,
+    datum: document.getElementById('reDatum')?.value || new Date().toISOString().split('T')[0],
+    beschreibung: document.getElementById('reBeschreibung')?.value.trim() || '',
+    notizen: document.getElementById('reNotizen')?.value.trim() || '',
+    positionen: collectPositionen()
   };
-  topLevel.forEach(p => {
-    topNr++;
-    if (p.posTyp === 'gruppe') {
-      // Oberpositionen-Zeile (Gruppenüberschrift)
-      const subs = positionen.filter(s => s.parentId === p.id);
-      const grpSum = subs.filter(s => s.posTyp === 'normal').reduce((acc, s) => acc + posNetto(s), 0);
-      html += `<tr class="grp-header"><td>${topNr}.</td><td colspan="4">${esc(p.bezeichnung)}</td><td>${fmtC(grpSum)}</td></tr>`;
-      let subNr = 0;
-      subs.forEach(sub => {
-        subNr++;
-        const nr = topNr + '.' + subNr;
-        const pt = sub.posTyp || 'normal';
-        if (pt === 'freitext') {
-          html += `<tr><td style="padding-left:4mm">${nr}</td><td colspan="5" style="font-style:italic;color:#555;padding-left:4mm">${esc(sub.bezeichnung)}</td></tr>`;
-        } else if (pt === 'eventual') {
-          const ges = posNetto(sub);
-          html += `<tr style="color:#888;font-style:italic"><td style="padding-left:4mm">${nr}</td><td style="padding-left:4mm">${esc(sub.bezeichnung)} <small>(EP)</small>${rabNote(sub)}</td><td style="text-align:center">${fmtC(sub.menge)}</td><td style="text-align:center">${esc(sub.einheit)}</td><td style="text-align:right">${fmtC(sub.einzelpreis)}</td><td style="text-align:right">${fmtC(ges)}</td></tr>`;
-        } else {
-          const ges = posNetto(sub);
-          html += `<tr><td style="padding-left:4mm">${nr}</td><td style="padding-left:4mm">${esc(sub.bezeichnung)}${rabNote(sub)}</td><td style="text-align:center">${fmtC(sub.menge)}</td><td style="text-align:center">${esc(sub.einheit)}</td><td style="text-align:right">${fmtC(sub.einzelpreis)}</td><td style="text-align:right">${fmtC(ges)}</td></tr>`;
-        }
-      });
-    } else {
-      const pt = p.posTyp || 'normal';
-      if (pt === 'freitext') {
-        html += `<tr><td>${topNr}.</td><td colspan="5" style="font-style:italic;color:#555">${esc(p.bezeichnung)}</td></tr>`;
-      } else if (pt === 'eventual') {
-        const ges = posNetto(p);
-        html += `<tr style="color:#888;font-style:italic"><td>${topNr}.</td><td>${esc(p.bezeichnung)} <small>(Eventualposition)</small>${rabNote(p)}</td><td style="text-align:center">${fmtC(p.menge)}</td><td style="text-align:center">${esc(p.einheit)}</td><td style="text-align:right">${fmtC(p.einzelpreis)}</td><td style="text-align:right">${fmtC(ges)}</td></tr>`;
-      } else {
-        const ges = posNetto(p);
-        html += `<tr><td>${topNr}.</td><td>${esc(p.bezeichnung)}${rabNote(p)}</td><td style="text-align:center">${fmtC(p.menge)}</td><td style="text-align:center">${esc(p.einheit)}</td><td style="text-align:right">${fmtC(p.einzelpreis)}</td><td style="text-align:right">${fmtC(ges)}</td></tr>`;
-      }
-    }
+}
+
+// Rechnung/Angebot aus dem Formular serverseitig rendern – dasselbe Layout wie „📄 PDF“,
+// ZUGFeRD und E-Mail-Anhang (BelegPdfService).
+async function _renderBelegPdfBlob(typ) {
+  const r = await fetch('api.php?action=render_beleg_pdf', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ beleg: _reFormularBeleg(typ) })
   });
-
-  const eventualNetto = positionen.filter(p => p.posTyp === 'eventual').reduce((acc, p) => acc + posNetto(p), 0);
-
-  // MwSt-Zeile je nach Steuerregelung
-  let mwstZeile = '';
-  if (kleinunternehmer) {
-    // Keine MwSt-Zeile, nur §19-Hinweis nach Summe
-  } else if (reverseCharge) {
-    mwstZeile = `<tr><td colspan="5" style="text-align:right">Umsatzsteuer (Reverse Charge)</td><td>0,00</td></tr>`;
-  } else {
-    mwstZeile = `<tr><td colspan="5" style="text-align:right">Umsatzsteuer ${mwstSatz} %</td><td>${fmtC(mwst)}</td></tr>`;
+  const ct = r.headers.get('Content-Type') || '';
+  if (!r.ok || !ct.includes('application/pdf')) {
+    let msg = 'HTTP ' + r.status;
+    try { const j = await r.json(); if (j.error) msg = j.error; } catch (_) { /* keine JSON-Antwort */ }
+    throw new Error(msg);
   }
+  return r.blob();
+}
 
-  let steuerHinweis = '';
-  if (kleinunternehmer) {
-    steuerHinweis = `<p style="font-size:8.5pt;color:#555;margin-top:4mm;font-style:italic">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>`;
-  } else if (reverseCharge) {
-    const rcText = s.firma_reverse_charge_text || 'Steuerschuldnerschaft des Leistungsempfängers gemäß § 13b UStG (Reverse Charge).';
-    steuerHinweis = `<p style="font-size:8.5pt;color:#555;margin-top:4mm;font-style:italic">${esc(rcText)}</p>`;
+async function previewRechnung(typ, saveOnly = false) {
+  // Fenster sofort öffnen (vor dem await), sonst greift der Popup-Blocker.
+  const w = !saveOnly ? window.open('', '_blank') : null;
+  if (w) w.document.write('<p style="font-family:Arial,sans-serif;padding:20px">PDF wird erstellt …</p>');
+  let blob;
+  try {
+    blob = await _renderBelegPdfBlob(typ);
+  } catch (e) {
+    if (w) w.close();
+    showNotification('PDF konnte nicht erstellt werden: ' + e.message, 'error');
+    return;
   }
-
-  html += `</tbody></table>
-    <table class="totals">
-      <tr class="netto-row"><td colspan="5" style="text-align:right">Zwischensumme (netto)</td><td>${fmtC(netto)}</td></tr>
-      ${mwstZeile}
-      <tr class="brutto-row"><td colspan="5" style="text-align:right">Gesamtbetrag</td><td>${fmtC(brutto)}</td></tr>
-      ${eventualNetto > 0 ? `<tr style="color:#888;font-style:italic"><td colspan="5" style="text-align:right;padding-top:3mm">davon Eventualpositionen (netto, nicht in Summe enthalten)</td><td style="padding-top:3mm">${fmtC(eventualNetto)}</td></tr>` : ''}
-    </table>
-    ${steuerHinweis}
-    ${notizen ? `<div class="payment">${esc(notizen)}</div>` : ''}
-  </div>
-  </td></tr></tbody></table>
-  <div class="footer">
-    <div>${esc(s.firma_name||'')}<br>${esc(s.firma_strasse||'')}<br>${esc(s.firma_plz||'')} ${esc(s.firma_ort||'')}</div>
-    <div>${s.firma_steuernr?'Steuernummer: '+esc(s.firma_steuernr):''}${s.firma_ustid?'<br>USt-IdNr: '+esc(s.firma_ustid):''}</div>
-    <div>${s.firma_bankname?esc(s.firma_bankname)+'<br>':''}${s.firma_iban?'IBAN: '+esc(s.firma_iban)+'<br>':''}${s.firma_bic?'BIC: '+esc(s.firma_bic):''}</div>
-  </div>
-  <script>setTimeout(()=>window.print(),400)<\/script>
-  </body></html>`;
-
-  const w = !saveOnly ? window.open('','_blank') : null;
   if (w) {
-    w.document.write(html);
-    w.document.close();
+    const url = URL.createObjectURL(blob);
+    w.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   // Auto-Save als PDF in Dateien&Fotos (falls Baustelle verknüpft)
   const reSaveBsId = parseInt(document.getElementById('reBaustelle')?.value) || 0;
   if (reSaveBsId) {
-    _saveRechnungPdfBackground(html, typ, reSaveBsId, saveOnly);
+    await _saveRechnungPdfBackground(blob, typ, reSaveBsId, saveOnly);
   }
 }
-
 /**
  * Lädt html2pdf robust nach. Bei korruptem/fehlendem Service-Worker-Cache wird ab
  * dem 2. Versuch der Cache via Query-Param umgangen, damit frisch vom Server geladen
@@ -14125,54 +13958,9 @@ async function ensureHtml2Pdf() {
   if (!window.html2pdf) throw new Error('html2pdf nicht geladen');
 }
 
-/** Speichert eine Rechnung/Angebot-HTML als PDF in Dateien&Fotos der Baustelle */
-async function _saveRechnungPdfBackground(html, typ, baustelleId, showFeedback) {
+/** Speichert ein Rechnungs-/Angebots-PDF in Dateien&Fotos der Baustelle */
+async function _saveRechnungPdfBackground(pdfBlob, typ, baustelleId, showFeedback) {
   try {
-    await ensureHtml2Pdf();
-    // HTML parsen und Styles + Body extrahieren
-    const parser = new DOMParser();
-    const doc2 = parser.parseFromString(html, 'text/html');
-    const stylesEl = doc2.querySelector('style');
-    const stylesStr = stylesEl ? stylesEl.textContent : '';
-    const styleTag = document.createElement('style');
-    styleTag.textContent = stylesStr;
-    const container = document.createElement('div');
-    // html2canvas rendert off-screen positionierte Elemente (position:absolute/fixed mit
-    // left:-10000px) je nach Browser als leere (weiße) Fläche – das erzeugte/gespeicherte PDF
-    // ist dann komplett weiß. Deshalb – wie beim funktionierenden Tagesbericht-PDF – im
-    // normalen Layout-Fluss rendern (nur kurz sichtbar, danach sofort entfernt), mit
-    // explizit weißem Hintergrund, damit html2canvas den Inhalt zuverlässig erfasst.
-    container.style.cssText = 'width:210mm;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1a1a1a;background:#ffffff';
-    container.appendChild(styleTag);
-    // Body-Inhalt übernehmen (Script-Tags werden nicht ausgeführt)
-    const bodyDiv = document.createElement('div');
-    bodyDiv.innerHTML = doc2.body.innerHTML.replace(/<script[\s\S]*?<\/script>/gi, '');
-    container.appendChild(bodyDiv);
-    document.body.appendChild(container);
-
-    // D.1: Vor dem Rendern auf Bilder + Schriften warten. Sonst erfasst html2canvas
-    // je nach Timing noch nicht dekodierte Bilder/Fonts → gespeichertes PDF ist weiß/leer.
-    try {
-      const imgs = Array.from(container.querySelectorAll('img'));
-      await Promise.all(imgs.map(img => {
-        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-        return (typeof img.decode === 'function')
-          ? img.decode().catch(() => {})
-          : new Promise(res => { img.onload = res; img.onerror = res; });
-      }));
-      if (document.fonts && document.fonts.ready) {
-        await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
-      }
-    } catch (_) { /* best effort – Rendern trotzdem versuchen */ }
-
-    const pdfBlob = await html2pdf().set({
-      margin: [10, 10, 10, 10], image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    }).from(container).outputPdf('blob');
-    container.remove();
-
     const reader = new FileReader();
     const b64 = await new Promise(r => { reader.onload = () => r(reader.result.split(',')[1] || ''); reader.readAsDataURL(pdfBlob); });
 
@@ -14198,7 +13986,6 @@ async function _saveRechnungPdfBackground(html, typ, baustelleId, showFeedback) 
     else console.warn('Auto-save Rechnung PDF:', e);
   }
 }
-
 /** Explizit als PDF in Dateien&Fotos speichern (Button "In Dateien speichern") */
 async function saveRechnungAsPdf(typ) {
   const baustelleId = parseInt(document.getElementById('reBaustelle')?.value) || 0;

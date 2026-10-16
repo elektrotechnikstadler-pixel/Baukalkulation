@@ -3,10 +3,9 @@ namespace App\Handlers;
 
 use App\Auth;
 use App\Services\AuditService;
+use App\Services\BelegPdfService;
 use App\Services\MailService;
 use App\Services\ZugferdService;
-use Dompdf\Dompdf;
-use Dompdf\Options;
 
 /**
  * E-Mail-Versand für Dokumente (VDE-Protokolle, Rechnungen, Angebote, DIN 1090).
@@ -123,10 +122,9 @@ class EmailActions
         $rechnung = $stmt->fetch();
         if (!$rechnung) \jsonOut(['error' => 'Rechnung nicht gefunden.'], 404);
 
-        $absender   = json_decode($rechnung['absender']   ?? '{}', true) ?: [];
-        $positionen = json_decode($rechnung['positionen'] ?? '[]', true) ?: [];
-        $kunde      = $this->_loadKunde($rechnung['kundeId'] ?? null);
-        $settings   = Auth::loadSettings($this->db);
+        $daten    = BelegPdfService::belegDaten($this->db, $rechnung);
+        $kunde    = $daten['kunde'];
+        $settings = Auth::loadSettings($this->db);
 
         if (!$subject) {
             $subject = 'Rechnung ' . ($rechnung['nummer'] ?? '') . ' von ' . ($settings['firma_name'] ?? '');
@@ -135,7 +133,14 @@ class EmailActions
         $prevErr = error_reporting(E_ALL & ~E_DEPRECATED);
         try {
             $svc     = new ZugferdService();
-            $pdfData = $svc->generate($rechnung, $absender, $positionen, $kunde, $settings);
+            $pdfData = $svc->generate(
+                $rechnung,
+                $daten['beleg']['absender'],
+                $daten['positionen'],
+                $kunde,
+                $settings,
+                $daten['beleg']['baustelleName']
+            );
         } catch (\RuntimeException $e) {
             error_reporting($prevErr);
             \jsonOut(['error' => 'PDF konnte nicht erzeugt werden: ' . $e->getMessage()], 500);
@@ -170,18 +175,17 @@ class EmailActions
     {
         Auth::requireAuth();
         [$to, $subject] = $this->_params();
-        $rechnungId = (int)($this->body['rechnungId'] ?? 0);
-        if ($rechnungId <= 0) \jsonOut(['error' => 'rechnungId fehlt.'], 400);
+        // Der Client sendet `angebotId`; `rechnungId` bleibt für ältere Aufrufer gültig.
+        $rechnungId = (int)($this->body['angebotId'] ?? $this->body['rechnungId'] ?? 0);
+        if ($rechnungId <= 0) \jsonOut(['error' => 'angebotId fehlt.'], 400);
 
         $stmt = $this->db->prepare("SELECT * FROM rechnungen WHERE id = ? AND typ = 'angebot'");
         $stmt->execute([$rechnungId]);
         $angebot = $stmt->fetch();
         if (!$angebot) \jsonOut(['error' => 'Angebot nicht gefunden.'], 404);
 
-        $absender   = json_decode($angebot['absender']   ?? '{}', true) ?: [];
-        $positionen = json_decode($angebot['positionen'] ?? '[]', true) ?: [];
-        $kunde      = $this->_loadKunde($angebot['kundeId'] ?? null);
-        $settings   = Auth::loadSettings($this->db);
+        $kunde    = $this->_loadKunde(isset($angebot['kundeId']) ? (int)$angebot['kundeId'] : null);
+        $settings = Auth::loadSettings($this->db);
 
         if (!$subject) {
             $subject = 'Angebot ' . ($angebot['nummer'] ?? '') . ' von ' . ($settings['firma_name'] ?? '');
@@ -189,7 +193,7 @@ class EmailActions
 
         $prevErr = error_reporting(E_ALL & ~E_DEPRECATED);
         try {
-            $pdfData = $this->_generateAngebotPdf($angebot, $absender, $positionen, $kunde, $settings);
+            $pdfData = (new BelegPdfService())->pdfFuerBeleg($this->db, $angebot, $settings);
         } catch (\RuntimeException $e) {
             error_reporting($prevErr);
             \jsonOut(['error' => 'PDF konnte nicht erzeugt werden: ' . $e->getMessage()], 500);
@@ -276,220 +280,5 @@ class EmailActions
         }
 
         \jsonOut(['ok' => true, 'sentTo' => $to]);
-    }
-
-    // ── Interne PDF-Erzeugung (Angebot) ───────────────────────────────────
-
-    private function _generateAngebotPdf(array $angebot, array $absender, array $positionen, ?array $kunde, array $s): string
-    {
-        if (!class_exists(Dompdf::class)) {
-            throw new \RuntimeException('Dompdf nicht verfügbar.');
-        }
-
-        $h   = fn(string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $fmt = fn($v): string => $v !== null ? number_format((float)$v, 2, ',', '.') : '–';
-
-        $firmaName    = $h($absender['firma']   ?? $s['firma_name']    ?? '');
-        $firmaStrasse = $h($absender['strasse'] ?? $s['firma_strasse'] ?? '');
-        $firmaPlzOrt  = $h(trim(($absender['plz'] ?? $s['firma_plz'] ?? '') . ' ' . ($absender['ort'] ?? $s['firma_ort'] ?? '')));
-        $firmaTel     = $h($s['firma_telefon'] ?? '');
-        $firmaEmail   = $h($s['firma_email']   ?? '');
-        $firmaUstId   = $h($s['firma_ustid']   ?? '');
-
-        $kundeName    = '';
-        $kundeAdr     = '';
-        if ($kunde) {
-            $kundeName = $h(trim(($kunde['firma'] ?: '') ?: (($kunde['vorname'] ?? '') . ' ' . ($kunde['nachname'] ?? ''))));
-            $kundeAdr  = $h(trim(($kunde['strasse'] ?? '') . ', ' . ($kunde['plz'] ?? '') . ' ' . ($kunde['ort'] ?? '')));
-        }
-
-        $nummer     = $h($angebot['nummer']      ?? '');
-        $datum      = $angebot['datum']           ?? date('Y-m-d');
-        $datumFmt   = date('d.m.Y', strtotime($datum));
-        $beschr     = $h($angebot['beschreibung'] ?? '');
-        $notizen    = $h($angebot['notizen']      ?? '');
-
-        // Positionen-Tabelle – mit Hierarchie (posTyp='gruppe' → Oberpositionen)
-        $posHtml  = '';
-        $sumNetto = 0.0;
-        $groupIds = [];
-        foreach ($positionen as $pos) {
-            if (($pos['posTyp'] ?? '') === 'gruppe' && !empty($pos['id'])) {
-                $groupIds[$pos['id']] = true;
-            }
-        }
-
-        // Top-Level-Elemente (keine parentId oder parentId nicht in groupIds)
-        $topLevel = array_values(array_filter($positionen, function ($p) use ($groupIds) {
-            $pid = $p['parentId'] ?? null;
-            return !$pid || !isset($groupIds[$pid]);
-        }));
-
-        $topNr = 0;
-        foreach ($topLevel as $pos) {
-            $topNr++;
-            $posTyp = $pos['posTyp'] ?? 'normal';
-
-            if ($posTyp === 'gruppe') {
-                // Unterpositionen sammeln
-                $posId = $pos['id'] ?? '';
-                $subs  = array_values(array_filter($positionen, fn($p) => ($p['parentId'] ?? '') === $posId));
-                $grpSum = 0.0;
-                foreach ($subs as $sub) {
-                    if (($sub['posTyp'] ?? 'normal') === 'normal') {
-                        $grpSum += (float)($sub['menge'] ?? 0) * (float)($sub['einzelpreis'] ?? 0);
-                    }
-                }
-                $sumNetto += $grpSum;
-                // Gruppen-Kopfzeile
-                $posHtml .= '<tr style="background:#dbeeff;">'
-                    . '<td style="padding:4px 6px;font-weight:bold;color:#1565C0;">' . $topNr . '.</td>'
-                    . '<td colspan="3" style="padding:4px 6px;font-weight:bold;color:#1565C0;">' . $h($pos['bezeichnung'] ?? '') . '</td>'
-                    . '<td style="text-align:right;padding:4px 6px;font-weight:bold;color:#1565C0;">' . $fmt($grpSum) . ' €</td>'
-                    . '</tr>';
-                // Unterpositionen
-                $subNr = 0;
-                foreach ($subs as $sub) {
-                    $subNr++;
-                    $nr  = $topNr . '.' . $subNr;
-                    $st  = $sub['posTyp'] ?? 'normal';
-                    if ($st === 'freitext') {
-                        $posHtml .= '<tr>'
-                            . '<td style="padding:3px 6px 3px 16px;font-size:10px;color:#666;">' . $h($nr) . '</td>'
-                            . '<td colspan="3" style="padding:3px 6px;font-style:italic;color:#555;font-size:10px;">' . $h($sub['bezeichnung'] ?? '') . '</td>'
-                            . '<td></td></tr>';
-                    } else {
-                        $sm = (float)($sub['menge'] ?? 0);
-                        $se = (float)($sub['einzelpreis'] ?? 0);
-                        $sg = $sm * $se;
-                        $posHtml .= '<tr>'
-                            . '<td style="padding:3px 6px 3px 16px;font-size:10px;">' . $h($nr) . '</td>'
-                            . '<td style="padding:3px 6px;">' . $h($sub['bezeichnung'] ?? '') . '</td>'
-                            . '<td style="text-align:right;padding:3px 6px;">' . str_replace('.', ',', (string)$sm) . ' ' . $h($sub['einheit'] ?? '') . '</td>'
-                            . '<td style="text-align:right;padding:3px 6px;">' . $fmt($se) . ' €</td>'
-                            . '<td style="text-align:right;padding:3px 6px;">' . $fmt($sg) . ' €</td>'
-                            . '</tr>';
-                    }
-                }
-                continue;
-            }
-
-            // Standalone Positionen (normale Typen)
-            if ($posTyp === 'trennlinie') {
-                $posHtml .= '<tr><td colspan="5" style="border-top:2px solid #333;padding:2px 0;"></td></tr>';
-                continue;
-            }
-            if ($posTyp === 'zwischensumme') {
-                $posHtml .= '<tr><td colspan="4" style="text-align:right;font-weight:bold;padding:4px 6px;">Zwischensumme</td>'
-                    . '<td style="text-align:right;font-weight:bold;padding:4px 6px;">' . $fmt($pos['gesamt'] ?? null) . ' €</td></tr>';
-                continue;
-            }
-            if ($posTyp === 'freitext') {
-                $posHtml .= '<tr>'
-                    . '<td style="padding:4px 6px;">' . $topNr . '.</td>'
-                    . '<td colspan="3" style="padding:4px 6px;font-style:italic;color:#555;">' . $h($pos['bezeichnung'] ?? '') . '</td>'
-                    . '<td></td></tr>';
-                continue;
-            }
-            $menge  = (float)($pos['menge']       ?? 0);
-            $ep     = (float)($pos['einzelpreis']  ?? 0);
-            $gesamt = $menge * $ep;
-            if ($posTyp !== 'eventual') $sumNetto += $gesamt;
-            $posHtml .= '<tr>'
-                . '<td style="padding:4px 6px;">' . $topNr . '.</td>'
-                . '<td style="padding:4px 6px;">' . $h($pos['bezeichnung'] ?? '') . ($posTyp === 'eventual' ? ' <em>(EP)</em>' : '') . '</td>'
-                . '<td style="text-align:right;padding:4px 6px;">' . str_replace('.', ',', (string)$menge) . ' ' . $h($pos['einheit'] ?? '') . '</td>'
-                . '<td style="text-align:right;padding:4px 6px;">' . $fmt($ep) . ' €</td>'
-                . '<td style="text-align:right;padding:4px 6px;">' . $fmt($gesamt) . ' €</td>'
-                . '</tr>';
-        }
-
-        $kleinunternehmer = !empty($s['firma_kleinunternehmer']);
-        $reverseCharge    = !empty($s['firma_reverse_charge']);
-        $mwstSatz  = ($kleinunternehmer || $reverseCharge) ? 0.0 : (float)($s['firma_mwst_satz'] ?? 19);
-        $mwstBetrag = $sumNetto * $mwstSatz / 100;
-        $sumBrutto  = $sumNetto + $mwstBetrag;
-
-        $ustInfo = $firmaUstId ? '<p style="font-size:10px;color:#555;">USt-IdNr.: ' . $firmaUstId . '</p>' : '';
-
-        $html = <<<HTML
-<!DOCTYPE html>
-<html lang="de">
-<head><meta charset="UTF-8">
-<style>
-  body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:0;padding:20px;}
-  table{width:100%;border-collapse:collapse;}
-  th{background:#4A90D9;color:#fff;padding:6px 6px;text-align:left;}
-  tr:nth-child(even){background:#f5f7fa;}
-  .total-row td{font-weight:bold;border-top:2px solid #333;}
-  h2{color:#4A90D9;}
-</style>
-</head>
-<body>
-<table style="margin-bottom:20px;">
-  <tr>
-    <td style="width:60%;vertical-align:top;">
-      <strong style="font-size:16px;color:#4A90D9;">ANGEBOT</strong><br>
-      Angebots-Nr.: <strong>{$nummer}</strong><br>
-      Datum: {$datumFmt}
-    </td>
-    <td style="text-align:right;vertical-align:top;">
-      <strong>{$firmaName}</strong><br>
-      {$firmaStrasse}<br>{$firmaPlzOrt}<br>
-      {$firmaTel}<br>{$firmaEmail}
-    </td>
-  </tr>
-</table>
-
-HTML;
-        if ($kundeName) {
-            $html .= "<p><strong>An:</strong><br>{$kundeName}<br>{$kundeAdr}</p>";
-        }
-        if ($beschr) {
-            $html .= "<p><strong>Betreff:</strong> {$beschr}</p>";
-        }
-        $html .= <<<HTML
-<table>
-  <thead>
-    <tr>
-      <th style="width:8%;">Pos.</th>
-      <th style="width:50%;">Bezeichnung</th>
-      <th style="width:12%;text-align:right;">Menge</th>
-      <th style="width:15%;text-align:right;">Einzelpreis</th>
-      <th style="width:15%;text-align:right;">Gesamt</th>
-    </tr>
-  </thead>
-  <tbody>
-    {$posHtml}
-  </tbody>
-  <tfoot>
-    <tr class="total-row">
-      <td colspan="4" style="text-align:right;padding:6px;">Netto-Summe</td>
-      <td style="text-align:right;padding:6px;">{$fmt($sumNetto)} €</td>
-    </tr>
-    <tr>
-      <td colspan="4" style="text-align:right;padding:4px 6px;">MwSt. {$mwstSatz}%</td>
-      <td style="text-align:right;padding:4px 6px;">{$fmt($mwstBetrag)} €</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="4" style="text-align:right;padding:6px;font-size:13px;">Gesamt brutto</td>
-      <td style="text-align:right;padding:6px;font-size:13px;">{$fmt($sumBrutto)} €</td>
-    </tr>
-  </tfoot>
-</table>
-HTML;
-        if ($notizen) {
-            $html .= "<p style='margin-top:16px;'><strong>Anmerkungen:</strong><br>{$notizen}</p>";
-        }
-        $html .= $ustInfo . '</body></html>';
-
-        $opts = new Options();
-        $opts->setIsRemoteEnabled(false);
-        $opts->setIsHtml5ParserEnabled(true);
-        $pdf = new Dompdf($opts);
-        $pdf->loadHtml($html, 'UTF-8');
-        $pdf->setPaper('A4', 'portrait');
-        $pdf->render();
-        return $pdf->output();
     }
 }

@@ -220,25 +220,21 @@ class ExportActions
             jsonOut(['error' => 'ZUGFeRD ist nur für Rechnungen verfügbar, nicht für Angebote.'], 400);
         }
 
-        $absender    = json_decode($rechnung['absender'] ?? '{}', true) ?: [];
-        $positionen  = json_decode($rechnung['positionen'] ?? '[]', true) ?: [];
-
-        // Kunde laden
-        $kunde = null;
-        if ($rechnung['kundeId']) {
-            $kStmt = $this->db->prepare("SELECT * FROM kunden WHERE id = ?");
-            $kStmt->execute([$rechnung['kundeId']]);
-            $kunde = $kStmt->fetch();
-        }
-
-        // Settings für Firmendaten
+        $daten    = \App\Services\BelegPdfService::belegDaten($this->db, $rechnung);
         $settings = Auth::loadSettings($this->db);
 
         // Deprecation-Warnungen von Dompdf (PHP 8.4) unterdrücken
         $prevErrorLevel = error_reporting(E_ALL & ~E_DEPRECATED);
         try {
             $service = new \App\Services\ZugferdService();
-            $pdfData = $service->generate($rechnung, $absender, $positionen, $kunde, $settings);
+            $pdfData = $service->generate(
+                $rechnung,
+                $daten['beleg']['absender'],
+                $daten['positionen'],
+                $daten['kunde'],
+                $settings,
+                $daten['beleg']['baustelleName']
+            );
         } finally {
             error_reporting($prevErrorLevel);
         }
@@ -254,6 +250,8 @@ class ExportActions
     // ══════════════════════════════════════════════════════════
     // Plain-PDF (Rechnung ODER Angebot) – serverseitig via Dompdf.
     // Liefert ein sauberes PDF ohne Browser-Kopf-/Fußzeile.
+    // Entweder gespeicherter Beleg (rechnungId) oder – für Vorschau und
+    // „In Dateien speichern“ im Formular – ungespeicherte Formulardaten (beleg).
     // ══════════════════════════════════════════════════════════
     public function renderBelegPdf(): void
     {
@@ -261,57 +259,51 @@ class ExportActions
         if (!Auth::canDo($this->db, 'canSeePrices')) {
             jsonOut(['error' => 'Keine Berechtigung für Preisexport.'], 403);
         }
-        $rechnungId = trim($this->body['rechnungId'] ?? ($_GET['rechnungId'] ?? ''));
-        if (!$rechnungId) jsonOut(['error' => 'Keine Beleg-ID.'], 400);
 
-        $stmt = $this->db->prepare("SELECT * FROM rechnungen WHERE id = ?");
-        $stmt->execute([$rechnungId]);
-        $rechnung = $stmt->fetch();
-        if (!$rechnung) jsonOut(['error' => 'Beleg nicht gefunden.'], 404);
+        $formular = is_array($this->body['beleg'] ?? null) ? $this->body['beleg'] : null;
+        $rechnungId = trim((string)($formular['id'] ?? $this->body['rechnungId'] ?? ($_GET['rechnungId'] ?? '')));
+        if (!$rechnungId && $formular === null) jsonOut(['error' => 'Keine Beleg-ID.'], 400);
+
+        $rechnung = [];
+        if ($rechnungId) {
+            $stmt = $this->db->prepare("SELECT * FROM rechnungen WHERE id = ?");
+            $stmt->execute([$rechnungId]);
+            $rechnung = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$rechnung) jsonOut(['error' => 'Beleg nicht gefunden.'], 404);
+        }
+
+        if ($formular !== null) {
+            // Formularstand über den gespeicherten Beleg legen (nur bekannte Felder).
+            $typForm = ($formular['typ'] ?? ($rechnung['typ'] ?? 'rechnung')) === 'angebot' ? 'angebot' : 'rechnung';
+            if ($rechnungId && ($rechnung['typ'] ?? 'rechnung') !== $typForm) {
+                jsonOut(['error' => 'Belegtyp passt nicht zum gespeicherten Beleg.'], 400);
+            }
+            $rechnung['typ'] = $typForm;
+            foreach (['kundeId', 'baustelleId', 'datum', 'beschreibung', 'notizen'] as $feld) {
+                if (array_key_exists($feld, $formular)) $rechnung[$feld] = $formular[$feld];
+            }
+            $rechnung['positionen'] = is_array($formular['positionen'] ?? null) ? $formular['positionen'] : [];
+        }
 
         $typ = ($rechnung['typ'] ?? 'rechnung') === 'angebot' ? 'angebot' : 'rechnung';
-        // Berechtigung je Belegtyp prüfen.
-        if ($typ === 'rechnung' && !Auth::canDo($this->db, 'canManageRechnungen') && !Auth::canDo($this->db, 'canSeeRechnungen')) {
-            jsonOut(['error' => 'Keine Berechtigung für Rechnungen.'], 403);
-        }
-        if ($typ === 'angebot' && !Auth::canDo($this->db, 'canManageAngebote') && !Auth::canDo($this->db, 'canSeeAngebote')) {
-            jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
-        }
-
-        $absender   = json_decode($rechnung['absender'] ?? '{}', true) ?: [];
-        $positionen = json_decode($rechnung['positionen'] ?? '[]', true) ?: [];
-
-        $kunde = null;
-        if (!empty($rechnung['kundeId'])) {
-            $kStmt = $this->db->prepare("SELECT * FROM kunden WHERE id = ?");
-            $kStmt->execute([$rechnung['kundeId']]);
-            $kunde = $kStmt->fetch() ?: null;
-        }
-
-        $baustelleName = '';
-        if (!empty($rechnung['baustelleId'])) {
-            $bStmt = $this->db->prepare("SELECT name FROM baustellen WHERE id = ?");
-            $bStmt->execute([$rechnung['baustelleId']]);
-            $baustelleName = (string)($bStmt->fetchColumn() ?: '');
+        // Berechtigung je Belegtyp prüfen; Formulardaten nur mit Bearbeitungsrecht.
+        if ($typ === 'rechnung') {
+            $darf = $formular !== null
+                ? Auth::canDo($this->db, 'canManageRechnungen')
+                : (Auth::canDo($this->db, 'canManageRechnungen') || Auth::canDo($this->db, 'canSeeRechnungen'));
+            if (!$darf) jsonOut(['error' => 'Keine Berechtigung für Rechnungen.'], 403);
+        } else {
+            $darf = $formular !== null
+                ? Auth::canDo($this->db, 'canManageAngebote')
+                : (Auth::canDo($this->db, 'canManageAngebote') || Auth::canDo($this->db, 'canSeeAngebote'));
+            if (!$darf) jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
         }
 
         $settings = Auth::loadSettings($this->db);
 
-        $beleg = [
-            'nummer'        => $rechnung['nummer']       ?? '',
-            'datum'         => $rechnung['datum']        ?? date('Y-m-d'),
-            'faelligAm'     => $rechnung['faelligAm']    ?? '',
-            'beschreibung'  => $rechnung['beschreibung'] ?? '',
-            'notizen'       => $rechnung['notizen']      ?? '',
-            'baustelleName' => $baustelleName,
-            'absender'      => $absender,
-        ];
-
         $prevErrorLevel = error_reporting(E_ALL & ~E_DEPRECATED);
         try {
-            $svc  = new \App\Services\BelegPdfService();
-            $html = $svc->buildHtml($beleg, $positionen, $kunde, $settings, $typ);
-            $pdf  = $svc->generatePdf($html);
+            $pdf = (new \App\Services\BelegPdfService())->pdfFuerBeleg($this->db, $rechnung, $settings);
         } finally {
             error_reporting($prevErrorLevel);
         }

@@ -115,7 +115,14 @@ final class TestServer
     /** Leert das Datenverzeichnis; der nächste Request legt eine frische DB an. */
     public function resetData(): void
     {
+        // Windows: Der Built-in-Server kann die SQLite-Datei nach großen Antworten (z. B. PDF)
+        // noch einige Millisekunden geöffnet halten – kurz wiederholen statt Altdaten zu behalten.
+        $bis = microtime(true) + 2.0;
         self::removeDir($this->dataDir);
+        while (is_dir($this->dataDir) && microtime(true) < $bis) {
+            usleep(20000);
+            self::removeDir($this->dataDir);
+        }
         mkdir($this->dataDir, 0777, true);
         @file_put_contents($this->errorLog, '');
         $this->resetDatabase();
