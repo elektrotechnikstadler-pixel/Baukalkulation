@@ -8,6 +8,8 @@ use App\Console\Command\BackupImportCommand;
 use App\Console\Command\DbMigrateCommand;
 use App\Console\Command\DbStatusCommand;
 use App\Console\Command\DbTransferCommand;
+use App\Console\Command\SicherungErstellenCommand;
+use App\Console\Command\SystemPlanerCommand;
 use App\Console\Command\UserResetPasswordCommand;
 use App\Console\Command\ZeitErinnerungCommand;
 use Symfony\Component\Console\Application;
@@ -27,6 +29,8 @@ final class Kernel extends Application
             new AppInfoCommand(),
             new AppCheckUpdateCommand(),
             new ZeitErinnerungCommand(),
+            new SystemPlanerCommand(),
+            new SicherungErstellenCommand(),
         ]);
     }
 

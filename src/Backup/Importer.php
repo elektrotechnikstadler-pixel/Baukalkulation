@@ -23,6 +23,9 @@ final class Importer
     private const SKIP_TABLES = [
         'schema_migrations', 'sqlite_sequence', 'audit_log', 'login_attempts', 'cal_tokens',
         'oci_nonces', 'data_meta', 'baustellen', 'pauschalen', 'stunden_katalog', 'material_katalog',
+        // Job-Zustand/-Protokoll ist serverlokal (R12/AK 12) – system_einstellungen bleibt
+        // wie settings/erinnerung_settings Teil der Sicherung und wird daher NICHT übersprungen.
+        'job_status', 'job_laeufe', 'job_auftraege', 'meldungen_outbox',
     ];
     /** Zeiterfassungs-Historie nur bei "Komplett ersetzen". */
     private const REPLACE_ONLY_TABLES = ['zeiterfassung_log', 'zeiterfassung_meta'];

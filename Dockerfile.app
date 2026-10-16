@@ -116,6 +116,7 @@ RUN printf '%s\n' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_material_erinnerung.php >> /var/www/html/data/cron.log 2>&1' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console zeit:erinnerung >> /var/www/html/data/cron.log 2>&1' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_stundenauswertung_email.php >> /var/www/html/data/cron.log 2>&1' \
+    '* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console system:planer >> /var/www/html/data/cron.log 2>&1' \
     > /etc/cron.d/baukalkulation-cron \
     && chmod 0644 /etc/cron.d/baukalkulation-cron
 

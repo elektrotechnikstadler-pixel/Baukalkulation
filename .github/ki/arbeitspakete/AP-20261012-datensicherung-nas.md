@@ -2,10 +2,10 @@
 
 | Feld | Wert |
 |---|---|
-| Status | in Umsetzung (T1 abgeschlossen → 3.0.19; weiter mit T2) |
+| Status | in Umsetzung (T1 → 3.0.19, T2 → 3.0.20 abgeschlossen; T3–T5 offen, T3 auf Wunsch später) |
 | Typ | Feature |
-| Testläufe rot | 0 |
-| Review-Runden | T1: 1 |
+| Testläufe rot | T2: 1 (Sperre ≠ Erfolg, Leitstand-Befund) |
+| Review-Runden | T1: 1 · T2: 2 |
 | Commit | – |
 
 Voraussetzung: AP-20261012-ki-modelle-tests ist abgeschlossen (Modelle je Rolle, Gesamtlauf inkl. `test:js`).
@@ -384,7 +384,275 @@ visuelle/responsive Abnahme im Browser, `tests/js/verwaltung-nav.test.mjs`.
 - Gelaufene Modelle laut Laufzeit: Entwickler `claude-sonnet-5`, Tester `gpt-5.3-codex` (nennt sich selbst „GPT-5.5“), Reviewer `gpt-5.5`. Tester und Reviewer gehören damit einer anderen Familie an als der Entwickler (E-089).
 - Sichtprüfung im eingebetteten Chromium (Admin, Wegwerf-DB) bestanden: 10 Bereiche; keine Karte außerhalb von `#vwInhalt`; die Suche findet „smtp“, „personalnummer“ und „grosshandel“, bei Nichttreffer erscheint der Hinweis; Bereichswechsel und gemerkter Bereich funktionieren; Speichern liefert `save_settings` 200 mit „Gespeichert“; die Backup-Mail-Felder werden geladen; bei 390 px erscheint die Auswahlliste; nach Runde 2 wird das Suchfeld beim Bereichswechsel geleert. Rolle master/normal und Dark-Mode nicht geprüft (Review-Hinweis 2, Restrisiko gering: nur Ein-/Ausblenden).
 - Gesamtläufe: PHPUnit SQLite 537 Tests grün (2 übersprungen), PostgreSQL 537 Tests grün (3 übersprungen), `test:js` 18/18 grün, `check-versions --strict` OK.
-- Version 3.0.19.
+- Version 3.0.19 (Commits `6406362` und `6e7dc3f`, Tag `v3.0.19` gepusht).
+
+### T2 – Planer und zeitgesteuerte Serversicherung (Schnitt durch Leitstand, 2026-10-16)
+
+Vertrag T2 (bindend; zusätzliche Abweichungen im AP melden, E-084). Zeitstempel überall als `Y-m-d H:i:s` (Ortszeit, PHP `date()`), keine SQL-Datumsfunktionen; alle Uhrzeiten in den Services injizierbar (E-034).
+
+1. **Migration** (`php vendor/bin/phinx create CreateSystemJobTables`, DDL in SQLite-Syntax, Spalten camelCase, alle Textspalten `NOT NULL DEFAULT ''`):
+   `system_einstellungen(id INTEGER PRIMARY KEY, data TEXT DEFAULT '{}')` ·
+   `job_status(job TEXT PRIMARY KEY, letzterLaufAm, letzterErfolgAm, letzterFehlerAm, fehlerCode, stoerungSeit, laeuftSeit, tageslaufDatum, tageslaufStatus, versuche INTEGER DEFAULT 0, naechsterVersuchAm)` ·
+   `job_laeufe(id INTEGER PRIMARY KEY AUTOINCREMENT, job, ausloeser, gestartetAm, beendetAm, status, fehlerCode, meldung, kennzahlen DEFAULT '{}')` + Index `(job, gestartetAm)` ·
+   `job_auftraege(id TEXT PRIMARY KEY, job, status, erstelltAm, ablaufAm, aktualisiertAm, angefordertVon, payload, ergebnis DEFAULT '{}')` ·
+   `meldungen_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT, schluessel TEXT UNIQUE, job, typ, daten DEFAULT '{}', erstelltAm, gesendetAm, versuche INTEGER DEFAULT 0, naechsterVersuchAm)` (wird erst in T3 genutzt, eine Fixture-Erneuerung genügt).
+   Danach `php tests/bin/build-backup-fixture.php` ausführen und die neue Fixture einchecken (E-020). `Importer::SKIP_TABLES` += `job_status`, `job_laeufe`, `job_auftraege`, `meldungen_outbox`.
+2. **`App\Services\Jobs\SystemEinstellungen`**: `laden(PDO): array` (Standardwerte tief gemischt, `sicherung.uhrzeit = '02:00'`, `sicherung.aufbewahrungTage = 7`); `speichernSicherung(PDO, array): array` mit Prüfung (`HH:MM` 00:00–23:59, ganze Zahl 3–90); bei ungültigen Werten `\InvalidArgumentException` mit festem deutschem Text. Upsert `ON CONFLICT(id) DO UPDATE` (E-001).
+3. **`App\Services\Jobs\JobProtokoll`** (PDO, optionale Uhr):
+   - `start(job, ausloeser): int`, `erfolg(laufId, kennzahlen)`, `fehler(laufId, code, meldung)`, `herzschlag(job)`, `status(job): array`, `letzteLaeufe(limit, ?job)`, `aufraeumen(tage = 90)`.
+   - `fehler()` speichert nur feste Codes und Texte. Ausnahmedetails gehen ausschließlich per `error_log()` (E-014).
+4. **`App\Services\Jobs\Tagessicherung::erstelle(PDO, DateTimeImmutable, bool warten): string`**, Rückgabe `erstellt` | `vorhanden` | `gesperrt`; wirft eine `\RuntimeException` mit festem Text.
+   - Sperre über `flock` auf `DATA_DIR/run/sicherung.lock`: blockierend bei `warten`, sonst `LOCK_NB` und Rückgabe `gesperrt`.
+   - Ablauf: in `BACKUP_DIR/.tmp-<zufall>/` schreiben, mit `BackupArchive::fromDir()` prüfen, dann per `rename()` auf `JJJJ-MM-TT` umbenennen.
+   - Ein vorhandener Tagesordner gilt nur nach erfolgreicher Prüfung als `vorhanden`; ein ungültiger wird gelöscht und neu aufgebaut (`error_log`).
+   - `.tmp-*`-Reste, die älter als 6 h sind, werden entfernt.
+   - Danach `pruneBackupCategory('daily', aufbewahrungTage)`.
+   - **Abweichung 5:** Die Sperre gilt nur für die Tagessicherung. Manuelle Sicherungen und die Sicherung vor einer Wiederherstellung schreiben in eindeutige Ordnernamen und kollidieren nicht (R3 eingeschränkt).
+5. **`DataService::createDailyBackup()`** behält seine Signatur und ruft `Tagessicherung::erstelle(…, warten: false)` auf.
+   - Bei `erstellt` protokolliert sie Erfolg (Auslöser `speichern`), bei einer Ausnahme den Fehler (Code `SICHERUNG_FEHLER`).
+   - Jede Ausnahme, auch eine aus dem Protokoll selbst, wird abgefangen: Das Speichern der Projektdaten darf nie scheitern.
+6. **`App\Services\Jobs\Planer`**:
+   - Reine Funktion `faelligkeit(array status, string uhrzeit, DateTimeImmutable jetzt): ?string` mit den Ergebnissen `erstversuch` | `wiederholung` | `null`.
+   - Erster Versuch ab der Uhrzeit des Tages, auch nachgeholt. Bei Fehler bis zu 3 Wiederholungen im Abstand von 30 min; danach `tageslaufStatus = fehlgeschlagen`, bei Erfolg `ok` (F10).
+   - `lauf(PDO, DateTimeImmutable)` arbeitet in dieser Reihenfolge:
+     1. Herzschlag `planer` schreiben.
+     2. Ein `laeuftSeit` älter als 3 h als `abgebrochen` abschließen.
+     3. `wartend`-Aufträge, deren `ablaufAm` überschritten ist, auf `abgelaufen` setzen.
+     4. Aufträge annehmen, nur per `UPDATE … WHERE id = ? AND status = 'wartend'` mit Prüfung von `rowCount()` (E-003).
+     5. Den planmäßigen Job `sicherung` ausführen.
+     6. `aufraeumen()`.
+   - Ein erfolgreicher manueller Lauf setzt einen heute fehlgeschlagenen Tageslauf auf `ok`.
+7. **Console**: `system:planer` (Sperre auf `DATA_DIR/run/planer.lock` mit `LOCK_NB`; ist sie belegt, endet der Befehl mit Exit 0) und `sicherung:erstellen` (Auslöser `konsole`), beide in `Console\Kernel` registriert. **Crontab** in `Dockerfile.app`, exakt:
+   `* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console system:planer >> /var/www/html/data/cron.log 2>&1` (R1).
+8. **`cron_backup_email.php`** protokolliert den Job `backupmail`.
+   - Bei `deaktiviert`, `nicht fällig` und `bereits gesendet` entsteht kein Eintrag.
+   - `gesendet` = Erfolg, und zwar nur nach `MailService::send()` (R6).
+   - Fehlercodes: `BACKUPMAIL_EMPFAENGER`, `BACKUPMAIL_PASSWORT`, `BACKUPMAIL_ERSTELLEN`, `BACKUPMAIL_VERSAND`, jeweils mit festem Text. `--force` ergibt den Auslöser `manuell`.
+   - Derselbe Fehlercode im selben Zyklusschlüssel erzeugt keinen neuen Laufeintrag, sondern aktualisiert nur `letzterFehlerAm`. Grund: Das Skript läuft alle 15 min.
+   - Fehler im Protokoll brechen den Mailablauf nie ab.
+9. **API**: neuer Handler `App\Handlers\SystemJobActions`, Aktionen in `public/api.php` eintragen, nur Rolle `admin`.
+   - `system_jobs_status` (GET): Einstellung `sicherung`, Status `sicherung`, `backupmail` und `planer`, die letzten 20 Läufe, `planerAktiv` (Herzschlag < 15 min). Keine Pfade, keine Secrets.
+   - `system_einstellungen_speichern` (POST, `{sicherung:{uhrzeit, aufbewahrungTage}}`): bei ungültigen Werten 400.
+   - `job_anfordern` (POST, `{job:'sicherung'}` aus einer Positivliste): ist bereits ein offener Auftrag da, wird dessen ID zurückgegeben; Ablauf nach 30 min; Eintrag im Audit-Log.
+   - `job_auftrag_status` (GET `id`): liefert `status` und `ergebnis`, nie `payload`.
+   - Zustandsändernde Aktionen antworten nach der Rollenprüfung auf GET mit 405 (E-015).
+   - `check` bleibt unverändert.
+   - `listBackups`: Grenze statt `BACKUP_MAX` = `aufbewahrungTage + BACKUP_MAX * 2 + 7`.
+10. **Frontend** (Bereich `datensicherung`, nur admin): Karte „Serversicherung (zeitgesteuert)“ mit eigenem Platzhalter, geladen per `loadServersicherung()`.
+    - Felder: Uhrzeit und Aufbewahrung, gespeichert bei Änderung.
+    - Status: letzter Erfolg, letzter Fehler (Code + Text), Planer zuletzt aktiv. Ist der Planer seit mehr als 15 min nicht gelaufen oder ist kein Herzschlag vorhanden, erscheint ein roter Hinweis „Zeitplaner läuft nicht – automatische Sicherung inaktiv“.
+    - Laufprotokoll mit 20 Zeilen; Knopf „Tageslauf jetzt ausführen“ (Auftrag anlegen, Abfrage alle 3 s, höchstens 2 min).
+    - Alles über `textContent` bzw. `esc()`. Cache-Busting nach `frontend.instructions.md`.
+11. **Doku**:
+    - `public/bedienungsanleitung.html` (E-081).
+    - `docs/installation.md`: Planer-Cron für Installationen ohne Docker; unter Docker läuft er automatisch.
+    - `CHANGELOG.md` unter „Unveröffentlicht“.
+
+#### Umsetzung Runde 1 (Entwickler, Modell: Claude Sonnet 5 (copilot))
+
+Vertrag 1–11 vollständig umgesetzt; keine Abweichungen (E-084: keine zusätzlichen Einschränkungen über
+den Vertrag hinaus eingeführt).
+
+**Migration:**
+- `migrations/20261016000000_create_system_job_tables.php` (Klasse `CreateSystemJobTables`, SQLite-DDL
+  per `$this->getAdapter()->getConnection()->exec(...)` wie `CreatePruefungTables`): `system_einstellungen`,
+  `job_status`, `job_laeufe` (+ Index `(job, gestartetAm)`), `job_auftraege`, `meldungen_outbox` (Spalten exakt
+  laut Vertrag, Textspalten `NOT NULL DEFAULT ''`, `job_laeufe.kennzahlen`/`job_auftraege.ergebnis`/
+  `meldungen_outbox.daten` `DEFAULT '{}'`). Fixture neu erzeugt: `tests/fixtures/backups/v3.0.19.zip` +
+  `v3.0.19.expected.json` (gleiche Version wie bisher, da `VERSION` nicht geändert wurde). `Importer::SKIP_TABLES`
+  um `job_status`, `job_laeufe`, `job_auftraege`, `meldungen_outbox` ergänzt; `system_einstellungen` bewusst
+  **nicht** übersprungen (wie `settings`/`erinnerung_settings` Teil der Sicherung).
+
+**Neue Dateien (`src/Services/Jobs/`):**
+- `SystemEinstellungen::laden(PDO $db): array` – Standardwerte (`sicherung.uhrzeit='02:00'`,
+  `sicherung.aufbewahrungTage=7`) tief gemischt mit gespeicherten Werten (unbekannte Schlüssel für künftige
+  Bereiche `nas`/`ueberwachung` bleiben erhalten).
+  `SystemEinstellungen::speichernSicherung(PDO $db, array $eingabe): array` – prüft `HH:MM` (00:00–23:59) und
+  ganze Zahl 3–90, wirft `\InvalidArgumentException` mit festem deutschem Text, Upsert `ON CONFLICT(id) DO UPDATE`.
+- `JobProtokoll::__construct(PDO $db, ?callable $uhr = null)`,
+  `start(string $job, string $ausloeser, ?string $tageslaufSchluessel = null): int`,
+  `erfolg(int $laufId, array $kennzahlen = []): void`, `fehler(int $laufId, string $code, string $meldung): void`,
+  `herzschlag(string $job): void`, `status(string $job): array`, `letzteLaeufe(int $limit, ?string $job = null): array`,
+  `aufraeumen(int $tage = 90): void`.
+  **Zusatz gegenüber dem Vertrag (Erweiterung, keine Einschränkung):** `start()` hat einen optionalen dritten
+  Parameter `$tageslaufSchluessel` (Default `null`, bestehende Aufrufe mit 2 Argumenten unverändert gültig) und
+  es gibt zusätzlich `fehlerZeitAktualisieren(string $job): void`. Beides wird ausschließlich von
+  `cron_backup_email.php` genutzt, um Punkt 8 Satz 3 umzusetzen („Derselbe Fehlercode im selben Zyklusschlüssel
+  erzeugt keinen neuen Laufeintrag, sondern aktualisiert nur `letzterFehlerAm`“): der Zyklusschlüssel
+  (`taeglich`/`woechentlich`/`monatlich`) wird dafür in `job_status.tageslaufDatum` abgelegt (für `backupmail` als
+  generische „aktueller Zyklus“-Kennung, nicht als Kalendertag). Für `sicherung`/`planer` bleibt `tageslaufDatum`
+  unverändert der Kalendertag, da `Planer` es selbst direkt setzt.
+- `Tagessicherung::erstelle(PDO $db, DateTimeImmutable $jetzt, bool $warten = false): string` – Rückgabe
+  `Tagessicherung::ERSTELLT|VORHANDEN|GESPERRT` (Strings `'erstellt'|'vorhanden'|'gesperrt'`), `flock` auf
+  `DATA_DIR/run/sicherung.lock` (`LOCK_EX` blockierend bei `$warten`, sonst `LOCK_NB`), Staging in
+  `BACKUP_DIR/.tmp-<zufall>/` + `BackupArchive::fromDir()`-Prüfung + `rename()`, vorhandener Tagesordner wird vor
+  `vorhanden` geprüft und bei Ungültigkeit neu aufgebaut, `.tmp-*` älter 6 h werden entfernt, danach
+  `DataService::pruneBackupCategory('daily', aufbewahrungTage)`. Wirft `\RuntimeException` mit festem Text,
+  Ursache nur per `error_log()`.
+- `Planer::faelligkeit(array $status, string $uhrzeit, DateTimeImmutable $jetzt): ?string` (reine Funktion,
+  `'erstversuch'|'wiederholung'|null`) und `Planer::lauf(PDO $db, DateTimeImmutable $jetzt): array` (liefert
+  CLI-Ausgabezeilen) – Reihenfolge exakt laut Vertrag (Herzschlag → hängende Läufe > 3 h abbrechen → abgelaufene
+  `job_auftraege` markieren → Auftrag für `sicherung` per `UPDATE … WHERE status='wartend'` + `rowCount()`
+  annehmen (E-003) → Job `sicherung` ausführen → `aufraeumen()`). `tageslaufStatus` zusätzlich zu `laufend`/`ok`/
+  `fehlgeschlagen` mit Zwischenwert `fehler` (Fehlschlag, Wiederholung folgt) – intern, nicht Teil des Vertrags.
+  Ein erfolgreicher manueller Lauf (`job_auftraege`) setzt einen heute fehlgeschlagenen Tageslauf auf `ok`; ein
+  fehlgeschlagener manueller Lauf verändert `tageslaufStatus`/`versuche` nicht (Admin-Knopf beeinflusst die
+  automatische Wiederholungslogik nicht).
+
+**Geänderte Dateien:**
+- `src/DataService.php` – `createDailyBackup(PDO $db, array $data): void` behält die Signatur, ruft
+  `Tagessicherung::erstelle($db, new DateTimeImmutable(), false)` auf; protokolliert nur bei tatsächlichem
+  `ERSTELLT` einen Erfolg bzw. bei einer Ausnahme den Fehler `SICHERUNG_FEHLER` (Auslöser `speichern`) – sonst
+  (`vorhanden`/`gesperrt`) kein Laufeintrag, damit das Protokoll nicht von jedem Speichervorgang des Tages
+  zugemüllt wird; jede Ausnahme inkl. der aus dem Protokoll selbst ist abgefangen.
+- `src/Backup/Importer.php` – `SKIP_TABLES` erweitert (s. o.).
+- `src/Handlers/DataActions.php` – `listBackups()`: Grenze `BACKUP_MAX` → `aufbewahrungTage + BACKUP_MAX*2 + 7`
+  (`SystemEinstellungen::laden()`).
+- `src/Console/Kernel.php` – zwei neue Befehle registriert.
+- `Dockerfile.app` – Crontab-Zeile ergänzt: `* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console system:planer >> /var/www/html/data/cron.log 2>&1` (R1, exakt wie im Vertrag).
+- `cron_backup_email.php` – protokolliert Job `backupmail` über `JobProtokoll`: `BACKUPMAIL_EMPFAENGER`
+  (ungültiger Empfänger), `BACKUPMAIL_PASSWORT` (Entschlüsselung scheitert), `BACKUPMAIL_ERSTELLEN`
+  (Sicherung/ZIP scheitert), `BACKUPMAIL_VERSAND` (`MailService::send()` wirft); Erfolg erst nach
+  `MailService::send()` protokolliert (R6). „Deaktiviert“, „nicht fällig“ (Uhrzeit) und „bereits gesendet“
+  bleiben ohne Protokolleintrag (Punkt 8 Satz 2). Zyklusschlüssel-Berechnung einmalig vorgezogen (vorher doppelt
+  im Code), wird auch für die Entdopplung gleicher Fehlercodes verwendet (s. o.).
+- `public/api.php` – neue Routen `system_jobs_status` (GET), `system_einstellungen_speichern` (POST),
+  `job_anfordern` (POST), `job_auftrag_status` (GET); `check` unverändert.
+- `public/script.js` – neue, nur für `admin` sichtbare Karte „Serversicherung (zeitgesteuert)“ im Bereich
+  `datensicherung` (`id="servSicherungCard"`, vor der bestehenden Backup-E-Mail-Karte), neue Funktionen
+  `loadServersicherung()`, `renderServersicherung()`, `servFormatZeitpunkt()`, `servLaufZeile()`,
+  `speichereServersicherung()`, `servTageslaufJetzt()`, `servJetztPollen()`; `showAllgemeinSettings()` ruft
+  `loadServersicherung()` zusätzlich für `admin` auf. Alles über Template-Strings mit `esc(...)` für dynamische
+  Werte (keine ungeprüften Nutzerdaten).
+- `public/script.min.js` – neu erzeugt (`npm run minify`).
+- `public/index.html` – `script.min.js?v=238`.
+- `public/sw.js` – `CACHE_VERSION` `bk-es-v240` → `bk-es-v241`; Precache `script.min.js?v=238`.
+- `public/bedienungsanleitung.html` – Abschnitt 12 „Datensicherung“ um die zeitgesteuerte Serversicherung ergänzt.
+- `docs/installation.md` – Abschnitt 5: `system:planer`-Cron für Installationen ohne Docker.
+- `CHANGELOG.md` – neuer Abschnitt „Unveröffentlicht“ (noch kein Release in dieser Runde).
+
+**Neue API-Aktionen (nur Rolle `admin`; `SystemJobActions`):**
+- `system_jobs_status` (GET) → `{ok:true, einstellungen:{sicherung:{uhrzeit,aufbewahrungTage}}, status:{sicherung:{...job_status-Felder...}, backupmail:{...}, planer:{letzterLaufAm, aktiv:bool}}, laeufe:[{job,ausloeser,gestartetAm,beendetAm,status,fehlerCode,meldung,kennzahlen:{}}, …20]}` – keine Pfade/Secrets.
+- `system_einstellungen_speichern` (POST, Body `{sicherung:{uhrzeit:"HH:MM", aufbewahrungTage:int}}`) →
+  `{ok:true, sicherung:{...}}`; 400 mit festem Text bei ungültigen Werten; 405 bei GET.
+- `job_anfordern` (POST, Body `{job:"sicherung"}`) → `{ok:true, id:"<hex>"}` (bestehender offener Auftrag wird
+  wiederverwendet); 400 bei unbekanntem Job; 405 bei GET; Audit-Log `job_angefordert`.
+- `job_auftrag_status` (GET, Query `id`) → `{ok:true, status:"wartend|laufend|fertig|fehlgeschlagen|abgelaufen", ergebnis:{...}}` – nie `payload`.
+
+**Ausgeführte Prüfungen (Ergebnis):**
+- `php -l` auf allen 12 neuen/geänderten PHP-Dateien → alle ok.
+- Migration auf Wegwerf-SQLite (`BK_DATA_DIR`): `db:migrate` lief ohne Fehler; `system:planer` zweimal
+  hintereinander → 1. Lauf `sicherung: erstellt` (Tagesordner angelegt, `job_status`/`job_laeufe` korrekt: Erfolg,
+  `tageslaufStatus=ok`, `versuche=0`), 2. Lauf `Kein fälliger Job.` (kein weiterer Eintrag); `sicherung:erstellen`
+  → `Tagessicherung: vorhanden` (dritter protokollierter Lauf, Auslöser `konsole`). Stichprobe der Tabellen per
+  eigenem Prüfskript bestätigt die erwarteten Werte. Wegwerf-Verzeichnisse danach gelöscht.
+- `php tests/bin/build-backup-fixture.php` → `tests/fixtures/backups/v3.0.19.zip` neu geschrieben.
+- `php vendor/bin/phpunit --filter "Backup|Migration|ConsoleBackup|Console"` (SQLite) → **37 Tests grün, 1
+  übersprungen** (bestehende Tests, keine neuen – die schreibt der Tester).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **keine Fehler** (ein Zwischenbefund
+  `property.onlyWritten` zu `Planer::$db` wurde behoben, indem der ungenutzte Konstruktor/die Property entfernt
+  wurden – `lauf()` bekommt `PDO` bereits als Parameter).
+- `node --check public/script.js` und `node --check public/script.min.js` → ok.
+- `node scripts/check-versions.mjs --strict` → `OK – alle ?v=-Versionen sind konsistent.` (`CACHE_VERSION = bk-es-v241`).
+- `npm.cmd run test:js` → **18/18 grün** (bestehende Tests inkl. T1-Wächtertest; keine neuen JS-Tests – Karte
+  nutzt nur die bereits erlaubte `data-bereich="datensicherung"`-ID).
+
+**Nicht geprüft (liegt außerhalb der Entwickler-Rolle bzw. macht der Tester/Reviewer/Leitstand):**
+PHPUnit/`test:js` als Gesamtlauf (SQLite **und** PostgreSQL), neue Testfälle zu `JobProtokoll`/`Planer`/
+`SystemEinstellungen`/`Tagessicherung`/`SystemJobActions`/`cron_backup_email.php` laut Testplan (2.11),
+visuelle Abnahme der neuen Karte im Browser, Commit/Release.
+
+**Abweichungen vom Vertrag:** keine inhaltlichen; zwei rückwärtskompatible technische Ergänzungen an
+`JobProtokoll` (optionaler dritter `start()`-Parameter, zusätzliche Methode `fehlerZeitAktualisieren()`) wurden
+oben begründet dokumentiert (E-084).
+
+#### Umsetzung Runde 2 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-/Test-Befunde behoben
+
+Vier bestätigte Befunde (1 Blocker, 2 Major, 1 Minor) behoben, keine Tests geändert.
+
+**1. Blocker – Sperre zählte als Erfolg:**
+- `src/Services/Jobs/Tagessicherung.php` – Signatur geändert zu
+  `erstelle(\PDO $db, \DateTimeImmutable $jetzt, int $warteSekunden = 0): string`. `0` = weiterhin sofort per
+  `LOCK_NB` (kein Blockieren, Speichern-Rückfall in `DataService` unverändert). `>0`: Schleife mit `LOCK_NB` im
+  Abstand von 250 ms (`usleep`), bis die Sperre frei ist oder `$warteSekunden` verstrichen ist – danach
+  `self::GESPERRT`. Kein unbegrenztes Blockieren mehr (vorher `LOCK_EX` ohne `LOCK_NB`, konnte theoretisch ewig
+  warten).
+- `src/Services/Jobs/Planer.php` – `sicherungAusfuehren()`: Aufruf jetzt mit neuer Konstante
+  `SPERR_WARTE_SEKUNDEN = 30`. `Tagessicherung::GESPERRT` wird nicht mehr wie Erfolg behandelt, sondern über die
+  neue private Methode `sicherungFehlschlagBehandeln()` (gemeinsam mit dem Ausnahme-Zweig genutzt) wie ein
+  Fehlversuch: `protokoll->fehler(laufId, 'SICHERUNG_GESPERRT', 'Tagessicherung war durch einen anderen Vorgang
+  gesperrt.')`, Tageslauf-Zähler/Wiederholung alle 30 min bzw. `fehlgeschlagen` nach 4 Versuchen (identisch zum
+  bisherigen Fehlerpfad), manueller Auftrag → `fehlgeschlagen` mit `ergebnis.fehlerCode`.
+- `src/Console/Command/SicherungErstellenCommand.php` – ruft `Tagessicherung::erstelle(..., 30)` auf; bei
+  `GESPERRT` protokolliert `fehler(..., 'SICHERUNG_GESPERRT', ...)`, Ausgabe „Tagessicherung war durch einen
+  anderen Vorgang gesperrt.“, `Command::FAILURE` (vorher wäre `GESPERRT` als Erfolg ausgegeben worden).
+- `src/DataService.php` – Aufruf `Tagessicherung::erstelle(..., false)` → `Tagessicherung::erstelle(..., 0)`
+  (gleiches Verhalten, nur an die neue `int`-Signatur angepasst).
+- Geprüft: `tests/Api/SystemPlanerApiTest.php::testBekannterBefundSicherungsSperreDarfNichtAlsErfolgZaehlen` jetzt
+  **grün** (Laufzeit durch die 30 s Wartezeit beim Planer-Aufruf, wie im Befund akzeptiert).
+
+**2. Major – Protokollfehler konnten den Mailablauf abbrechen:**
+- `cron_backup_email.php` – Versand-`try` enthält jetzt ausschließlich ZIP lesen (`file_get_contents`) und
+  `MailService::send()`. `JobProtokoll`-Konstruktion (`$protokoll` jetzt nullable, Konstruktion in eigenem
+  `try/catch(\Throwable)` mit `error_log`, bei Fehlschlag bleibt `$protokoll = null`), der Erfolgs-Eintrag nach
+  gesendeter Mail und alle Aufrufe des Fehler-Helfers `protokolliereBackupmailFehler()` sind jeweils in einem
+  eigenen `try/catch(\Throwable)` mit nur `error_log()` gekapselt (die Funktion selbst kapselt ihren Rumpf und
+  ignoriert `$protokoll === null`). Dadurch kann eine `PDOException` (die als `RuntimeException` sonst in den
+  Versand-`catch` gelaufen wäre) den bereits erfolgreichen Versand nicht mehr als Fehlschlag erscheinen lassen.
+  Das Lock-File (`backup_email_sent.txt`) wird jetzt immer direkt nach erfolgreichem Versand geschrieben,
+  unabhängig vom Ausgang der Protokollierung – verhindert den gemeldeten Doppelversand.
+
+**3. Major – laufende manuelle Aufträge konnten hängen:**
+- `src/Services/Jobs/Planer.php` – `haengendeLaeufeAbschliessen()`: Beim Abschließen eines hängenden Jobs
+  (`laeuftSeit` > 3 h) werden jetzt zusätzlich dessen `job_auftraege` mit `status = 'laufend'` auf
+  `'fehlgeschlagen'` mit `ergebnis = {"fehlerCode":"AUFTRAG_ABGEBROCHEN"}` gesetzt. Zusätzliches Sicherheitsnetz
+  (unabhängig von `job_status`): alle Aufträge mit `status = 'laufend'` und `aktualisiertAm` älter als 3 h werden
+  ebenso abgeschlossen.
+- `src/Handlers/SystemJobActions.php` – `auftragAnfordern()`: neue Konstante
+  `AUFTRAG_LAUFEND_MAX_STUNDEN = 3` (muss zu `Planer::HAENGENDER_LAUF_STUNDEN` passen, dort dokumentiert). Die
+  Abfrage nach einem bestehenden Auftrag liefert eine ID jetzt nur noch für `'wartend'` (nicht abgelaufen:
+  `ablaufAm = '' OR ablaufAm >= jetzt`) oder `'laufend'` (nicht älter als 3 h: `aktualisiertAm >= jetzt-3h`);
+  andernfalls wird wie zuvor ein neuer Auftrag angelegt.
+
+**4. Minor – Migration:**
+- `migrations/20261016000000_create_system_job_tables.php` – `job_status.job` (Z. 25) und `job_auftraege.id`
+  (Z. 56) von `TEXT PRIMARY KEY` auf `TEXT NOT NULL PRIMARY KEY` geändert (SQLite impliziert bei
+  Nicht-`INTEGER`-Primärschlüsseln kein `NOT NULL`). Geprüft: `PgsqlDialect::translateDdl()` hat keine eigene
+  Regel für einfaches `TEXT ... PRIMARY KEY` – die Zeile wird unverändert durchgereicht und ist in PostgreSQL
+  gültiges DDL (`PRIMARY KEY` impliziert dort ohnehin `NOT NULL`); per Testskript bestätigt (`translate()`
+  liefert `TEXT NOT NULL PRIMARY KEY` unverändert zurück). Migration noch unveröffentlicht (VERSION unverändert),
+  daher direkt geändert statt neuer Migration.
+- `php tests/bin/build-backup-fixture.php` ausgeführt → `tests/fixtures/backups/v3.0.19.zip` +
+  `v3.0.19.expected.json` neu geschrieben. **Meldung:** `VERSION` enthält weiterhin `3.0.19` (wie angewiesen
+  nicht geändert), das Skript leitet den Dateinamen aus der `check`-Antwort (letztlich `VERSION`) ab – der
+  Dateiname bleibt deshalb `v3.0.19.*` und wurde **nicht** auf `v3.0.20` umbenannt; kein Namenskonflikt, da die
+  im Auftrag erwähnte Versionsanhebung auf 3.0.20 in dieser Runde nicht stattgefunden hat.
+
+**Ausgeführte Prüfungen (Ergebnis):**
+- `php -l` auf allen 7 geänderten Dateien → alle ok.
+- `php tests/bin/build-backup-fixture.php` → Fixture `v3.0.19.*` neu geschrieben (s. o.).
+- `php vendor/bin/phpunit --filter "PlanerFaelligkeitTest|SystemPlanerApiTest|Backup|Console"` (SQLite) →
+  **48 Tests, 47 grün, 1 übersprungen** (keine roten Tests mehr; Laufzeit ~58 s wegen der 30 s Wartezeit im
+  Sperre-Test, wie im Befund akzeptiert).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **[OK] No errors** (keine neuen Befunde).
+
+**Nicht geprüft (liegt außerhalb der Entwickler-Rolle):** PostgreSQL-Lauf der Testsuite, neue Testfälle,
+visuelle Abnahme, Commit/Release.
+
+**Abweichungen vom Vertrag:** keine; alle vier Befunde wie vom Leitstand beschrieben behoben.
+
+#### T2 – Abnahme Leitstand (2026-10-16)
+
+- Gelaufene Modelle laut Laufzeit: Entwickler `claude-sonnet-5`, Tester `gpt-5.3-codex`, Reviewer `gpt-5.5` (E-089 eingehalten).
+- Fixture: Das Skript benennt die Datei nach der laufenden Version. Deshalb hat der Leitstand sie mit VERSION 3.0.20 erzeugt (`tests/fixtures/backups/v3.0.20.*`), `v3.0.19.*` entfernt und VERSION bis zum Release-Commit auf 3.0.19 zurückgesetzt.
+- Doku korrigiert (E-081): „Datensicherung & NAS“ → „Datensicherung“ in Anleitung, `docs/installation.md` und CHANGELOG, denn der Menüpunkt heißt bis T4 „Datensicherung“.
+- Sichtprüfung (Admin, Wegwerf-DB auf 20261016000000 migriert):
+  - Die Karte „Serversicherung (zeitgesteuert)“ zeigt ohne Herzschlag den roten Hinweis.
+  - „Tageslauf jetzt ausführen“ liefert `job_anfordern` 200; danach erstellt `system:planer` per CLI die Tagessicherung `backups/2026-10-16`.
+  - Die Karte zeigt anschließend Erfolg, Herzschlag und einen Laufeintrag „manuell ✔“; der Hinweis verschwindet.
+- Zeitzone: Lokales Windows-PHP läuft in UTC. Im Container gilt `date.timezone = Europe/Berlin` (Dockerfile.app) für CLI und Apache, der Cron erhält zusätzlich `TZ` → kein Befund.
+- Gesamtläufe: PHPUnit SQLite 557 grün (2 übersprungen), PostgreSQL 557 grün (3 übersprungen); `test:js`, PHPStan (No errors) und `php-cs-fixer` grün.
+- Version 3.0.20.
 
 ## 4. Tests
 
@@ -406,6 +674,59 @@ visuelle/responsive Abnahme im Browser, `tests/js/verwaltung-nav.test.mjs`.
 | AK 1 (statischer Wächter: `data-bereich` nur Vertrags-IDs + Pflicht-Element-IDs vorhanden) | `tests/js/verwaltung-nav.test.mjs::Wächter: renderAllgemeinSettings nutzt nur bekannte data-bereich-IDs und behält Pflicht-Element-IDs` | n/a – reines Frontend | n/a – reines Frontend | grün |
 | AK 1 + AK 15 (statisch: Einbindung/Precache-Version konsistent) | `tests/js/verwaltung-nav.test.mjs::Statisch: index lädt verwaltung-nav.js vor script.min.js, sw.js precacht dieselbe Version` | n/a – reines Frontend | n/a – reines Frontend | grün |
 
+### T2 – Runde 1 (Tester, Modell: GPT-5 (copilot))
+
+**ROT** (1 bekannter Produktivcode-Befund bleibt offen, Test absichtlich nicht abgeschwächt)
+
+- Neu:
+  - `tests/Unit/PlanerFaelligkeitTest.php`
+  - `tests/Api/SystemPlanerApiTest.php`
+- Ausgeführt:
+  - `php vendor/bin/phpunit --filter "PlanerFaelligkeitTest|SystemPlanerApiTest"` (SQLite) → **15 Tests, 14 grün, 1 rot**
+  - PostgreSQL gezielt für dieselben Klassen via Wegwerf-Container (entspricht `scripts/test-pgsql.ps1`, wegen lokaler ExecutionPolicy manuell äquivalent gestartet) → **15 Tests, 14 grün, 1 rot**
+  - `php vendor/bin/php-cs-fixer check --diff tests/` → **grün**
+
+**ROT-Befund (bekannt, nicht abgeschwächt):**
+- `tests/Api/SystemPlanerApiTest.php::testBekannterBefundSicherungsSperreDarfNichtAlsErfolgZaehlen`
+  - Erwartet: Bei gehaltenem `data/run/sicherung.lock` darf der Tageslauf nicht als `tageslaufStatus = ok` zählen.
+  - Erhalten: `tageslaufStatus = ok` (Lauf wird trotz Sperre als Erfolg gewertet).
+  - Vermutete Ursache: `Planer::sicherungAusfuehren()` behandelt `Tagessicherung::erstelle(...)=gesperrt` derzeit wie Erfolg.
+
+| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| AK 2 (zeitgesteuerte Tagessicherung; kein zweiter Tagesversuch am selben Tag) | `tests/Api/SystemPlanerApiTest.php::testPlanerErstelltTaeglicheSicherungNurEinmalUndSetztStatus` | grün | grün | n/a |
+| AK 2 + AK 14 (ungültiger Tagesordner wird ersetzt; `.tmp-*` nicht gelistet) | `tests/Api/SystemPlanerApiTest.php::testUngueltigerTagesordnerWirdErsetztUndTmpOrdnerNichtGelistet` | grün | grün | n/a |
+| AK 2 (Aufbewahrung 3–90 betrifft nur Tagessicherungen) | `tests/Api/SystemPlanerApiTest.php::testAufbewahrungBehaeltNurDreiNeuesteTagessicherungenUndLaesstAndereKategorienStehen` | grün | grün | n/a |
+| AK 2 (Speichern-Rückfall bleibt funktionsfähig) | `tests/Api/SystemPlanerApiTest.php::testSpeichernErstelltTagessicherungAlsRueckfallOhneBestehendeSicherung` | grün | grün | n/a |
+| AK 3 + R6 (Backup-Mail-Status: deaktiviert ohne Eintrag, Fehler dedupliziert je Zyklus) | `tests/Api/SystemPlanerApiTest.php::testCronBackupEmailProtokolliertDeaktiviertNichtUndDedupliziertFehlerImSelbenZyklus` | grün | grün | n/a |
+| AK 11 (Rechte, POST-Pflicht, Validierung, kein Payload-Leak, keine Pfad-Strings, `check` unverändert) | `tests/Api/SystemPlanerApiTest.php::testSystemJobsApiRechteMethodenUndValidierung` | grün | grün | n/a |
+| AK 11 (Auftragsfluss) | `tests/Api/SystemPlanerApiTest.php::testAuftragWirdNachPlanerLaufAlsFertigGemeldet` | grün | grün | n/a |
+| AK 12 (Restore importiert keine Job-Tabellen; Fixture v3.0.19 in Fixture-Suite enthalten) | `tests/Api/SystemPlanerApiTest.php::testRestoreImportiertKeineJobTabellenUndFixtureV3019IstImFixtureTestEnthalten` | grün | grün | n/a |
+| AK 13 (Planer-Cron/CLI nutzt dieselbe DB wie Webprozess im PG-Lauf) | `tests/Api/SystemPlanerApiTest.php::testPlanerErstelltTaeglicheSicherungNurEinmalUndSetztStatus`, `tests/Api/SystemPlanerApiTest.php::testAuftragWirdNachPlanerLaufAlsFertigGemeldet` | grün | grün | n/a |
+| Vertrag 6 (Planer-Fälligkeit: Erstversuch/Wiederholung/Stop-Regeln) | `tests/Unit/PlanerFaelligkeitTest.php::*` | grün | grün | n/a |
+| Leitstand-Befund (Sperre darf nicht als Erfolg zählen) | `tests/Api/SystemPlanerApiTest.php::testBekannterBefundSicherungsSperreDarfNichtAlsErfolgZaehlen` | **rot** | **rot** | n/a |
+
+### T2 – Runde 2 (Tester, Modell: GPT-5 (copilot))
+
+**GRÜN**
+
+- Geändert/neu:
+  - `tests/Api/SystemPlanerApiTest.php`
+- Ausgeführt:
+  - `php vendor/bin/phpunit --filter "PlanerFaelligkeitTest|SystemPlanerApiTest|BackupFixture"` (SQLite) → **22 Tests, 22 grün**
+  - derselbe Filter auf PostgreSQL im Wegwerf-Container (E-064, manuell äquivalent zu `scripts/test-pgsql.ps1`) → **22 Tests, 22 grün**
+  - `php vendor/bin/php-cs-fixer check --diff` → **grün**
+
+| Abnahmekriterium / Befund | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| Leitstand-Befund 1 (Sperre zählt nicht als Erfolg) | `tests/Api/SystemPlanerApiTest.php::testBekannterBefundSicherungsSperreDarfNichtAlsErfolgZaehlen` | grün | grün | n/a |
+| Leitstand-Befund 1 (CLI `sicherung:erstellen` bei gehaltener Sperre: Exit-Code ≠ 0, kein neuer Tagesordner) | `tests/Api/SystemPlanerApiTest.php::testSicherungErstellenCommandScheitertBeiGehaltenerSperreOhneNeuenTagesordner` | grün | grün | n/a |
+| Leitstand-Befund 2 (hängender manueller Auftrag >3 h wird auf `fehlgeschlagen` mit `AUFTRAG_ABGEBROCHEN` gesetzt; neue Anforderung liefert neue ID) | `tests/Api/SystemPlanerApiTest.php::testHaengenderLaufenderAuftragWirdAbgebrochenUndNeueAnforderungErhaeltNeueId` | grün | grün | n/a |
+| Leitstand-Befund 2 (frischer `laufend`-Auftrag <3 h wird wiederverwendet) | `tests/Api/SystemPlanerApiTest.php::testFrischerLaufenderAuftragWirdBeiNeuerAnforderungWiederverwendet` | grün | grün | n/a |
+| Leitstand-Befund 3 (Protokollfehler bricht fachlichen Backup-Mail-Fehlerpfad nicht ab) | `tests/Api/SystemPlanerApiTest.php::testCronBackupEmailMitProtokollfehlerBleibtBeimFachlichenEmpfaengerFehler` | grün | grün | n/a |
+| AK 12 (Restore importiert keine Job-Tabellen; Fixture-Suite enthält jetzt `v3.0.20`) | `tests/Api/SystemPlanerApiTest.php::testRestoreImportiertKeineJobTabellenUndFixtureV3020IstImFixtureTestEnthalten` | grün | grün | n/a |
+| Fixture-Regression (v3.0.20 importierbar) | `tests/Api/BackupFixtureImportTest.php::testFixtureLaesstSichEinspielen` (Datensatz `v3.0.20.zip`) | grün | grün | n/a |
+
 ## 5. Review
 
 ### T1 – Runde 1 (Reviewer, Modell: GPT-5.5 (copilot))
@@ -425,4 +746,21 @@ visuelle/responsive Abnahme im Browser, `tests/js/verwaltung-nav.test.mjs`.
 
 **Lernpunkt-Kandidaten:** Keine.
 
+### T2 – Runde 1 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen (Reviewer schrieb wegen paralleler Tester-Arbeit nicht ins AP)
+
+**Urteil:** CHANGES_REQUESTED
+
+| Nr | Schwere | Datei:Zeile | Befund | Ergebnis |
+|---|---|---|---|---|
+| 1 | Blocker | `Planer.php:108-111`, `Tagessicherung.php:42`, `SicherungErstellenCommand.php:23-24` | `gesperrt` zählte als Erfolg, Tageslauf `ok` ohne Sicherung (Leitstand-Befund bestätigt, Tester-Test rot) | behoben: Wartezeit 30 s, `SICHERUNG_GESPERRT` als Fehlversuch |
+| 2 | Major | `cron_backup_email.php:206-230` | Protokollfehler (PDOException ⊂ RuntimeException) nach dem Versand → `exit(1)`, keine Sperrdatei → doppelter Versand (vom Leitstand an der Fundstelle bestätigt) | behoben: Protokoll in eigenem try/catch |
+| 3 | Major | `Planer.php:65-66,145-147`, `SystemJobActions.php:77` | laufende manuelle Aufträge konnten dauerhaft hängen | behoben: `AUFTRAG_ABGEBROCHEN`, neue ID |
+| 4 | Minor | Migration Z. 25, 56 | Text-PKs ohne `NOT NULL` | behoben |
+
+### T2 – Runde 2 (Reviewer, Modell: gpt-5.5)
+
+**Urteil:** APPROVE – alle 4 Vorbefunde behoben, keine neuen Befunde (`php -l`, PHPStan, 52 gezielte Tests grün).
+
 ## 6. Lernpunkte
+
+- E-021, E-022 (Backup/Migration) aus Review T2 in `erkenntnisse.md`, erstes Auftreten → nur dort.

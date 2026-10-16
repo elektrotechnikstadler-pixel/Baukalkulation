@@ -19,6 +19,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use App\Backup\BackupArchive;
 use App\Backup\BackupWriter;
+use App\Services\Jobs\JobProtokoll;
 use App\Services\MailService;
 use App\Services\SecretBox;
 
@@ -56,6 +57,42 @@ try {
     exit(1);
 }
 
+// -- Job-Protokoll (AP-20261012-datensicherung-nas, T2) --
+// Konstruktion defensiv abgesichert: Eine fehlschlagende Protokollierung darf den
+// Mailablauf nie unterbrechen (Befund Runde 2) – $protokoll bleibt dann null.
+$protokoll = null;
+try {
+    $protokoll = new JobProtokoll($db);
+} catch (\Throwable $e) {
+    error_log('[cron_backup_email] Protokoll-Erstellung fehlgeschlagen: ' . $e->getMessage());
+}
+
+/**
+ * Protokolliert einen Fehlschlag des Jobs "backupmail". Läuft das Skript alle 15 min
+ * mit demselben Fehlercode im selben Zyklus weiter, entsteht kein weiterer
+ * Laufeintrag – nur letzterFehlerAm wird aktualisiert.
+ * Nur per error_log(): eine fehlschlagende Protokollierung darf den Mailablauf nie
+ * abbrechen (Befund Runde 2 – auch PDOException ist eine RuntimeException).
+ */
+function protokolliereBackupmailFehler(?JobProtokoll $protokoll, bool $force, string $zyklusKey, string $code, string $meldung): void {
+    if ($protokoll === null) {
+        return;
+    }
+    try {
+        if (!$force) {
+            $status = $protokoll->status('backupmail');
+            if (($status['fehlerCode'] ?? '') === $code && ($status['tageslaufDatum'] ?? '') === $zyklusKey) {
+                $protokoll->fehlerZeitAktualisieren('backupmail');
+                return;
+            }
+        }
+        $laufId = $protokoll->start('backupmail', $force ? 'manuell' : 'planer', $zyklusKey);
+        $protokoll->fehler($laufId, $code, $meldung);
+    } catch (\Throwable $e) {
+        error_log('[cron_backup_email] Protokollierung (Fehler-Helfer) fehlgeschlagen: ' . $e->getMessage());
+    }
+}
+
 // -- Einstellungen laden --
 $settingsRow = $db->query("SELECT data FROM settings WHERE id = 1")->fetch();
 $settings    = $settingsRow ? (json_decode($settingsRow['data'], true) ?? []) : [];
@@ -79,6 +116,13 @@ $empfaenger = trim($erData['backup_email_empfaenger']  ?? '');
 $zyklus    = $erData['backup_email_zyklus']            ?? 'woechentlich';
 $uhrzeit   = $erData['backup_email_uhrzeit']           ?? '07:00';
 
+// Zyklusschluessel (R6: "nicht faellig" bleibt ohne Protokolleintrag und zaehlt nie als Erfolg)
+$zyklusKey = match ($zyklus) {
+    'taeglich'  => date('Y-m-d'),
+    'monatlich' => date('Y-m'),
+    default     => date('Y-W'),
+};
+
 // Fallback: Absende-E-Mail als Empfaenger
 if ($empfaenger === '') {
     $empfaenger = $smtpCfg['smtp_from_email'];
@@ -92,6 +136,7 @@ if (!$aktiv && !$force) {
 
 if (!$empfaenger || !filter_var($empfaenger, FILTER_VALIDATE_EMAIL)) {
     logMsg("FEHLER: Keine gueltige Empfaenger-E-Mail konfiguriert ($empfaenger).");
+    protokolliereBackupmailFehler($protokoll, $force, $zyklusKey, 'BACKUPMAIL_EMPFAENGER', 'Kein gültiger Backup-Empfänger konfiguriert.');
     exit(1);
 }
 
@@ -99,14 +144,6 @@ if (!$empfaenger || !filter_var($empfaenger, FILTER_VALIDATE_EMAIL)) {
 $lockFile = DATA_DIR . 'backup_email_sent.txt';
 
 if (!$force) {
-    // Zyklus-Schluessel berechnen
-    switch ($zyklus) {
-        case 'taeglich':     $zyklusKey = date('Y-m-d'); break;
-        case 'monatlich':    $zyklusKey = date('Y-m'); break;
-        case 'woechentlich':
-        default:             $zyklusKey = date('Y-W'); break;
-    }
-
     if (file_exists($lockFile) && trim(file_get_contents($lockFile)) === $zyklusKey) {
         logMsg("Backup-E-Mail fuer diesen Zyklus ($zyklusKey) bereits gesendet.");
         exit(0);
@@ -133,6 +170,7 @@ try {
 } catch (Throwable $e) {
     // Niemals unverschlüsselt senden, wenn eine Verschlüsselung eingerichtet ist.
     logMsg("FEHLER: Backup-Passwort nicht lesbar (" . $e->getMessage() . "). Bitte in den Einstellungen neu setzen.");
+    protokolliereBackupmailFehler($protokoll, $force, $zyklusKey, 'BACKUPMAIL_PASSWORT', 'Backup-Passwort kann nicht entschlüsselt werden.');
     exit(1);
 }
 
@@ -143,6 +181,7 @@ try {
     logMsg("FEHLER: Sicherung konnte nicht erstellt werden: " . $e->getMessage());
     BackupArchive::removeDir($tmpDir);
     if (is_file($zipPath)) unlink($zipPath);
+    protokolliereBackupmailFehler($protokoll, $force, $zyklusKey, 'BACKUPMAIL_ERSTELLEN', 'Sicherung für den Versand konnte nicht erstellt werden.');
     exit(1);
 }
 BackupArchive::removeDir($tmpDir);
@@ -190,21 +229,31 @@ try {
         $tooLarge ? null : $zipName,
         'application/zip'
     );
-    logMsg("E-Mail erfolgreich gesendet an: $empfaenger" . ($tooLarge ? ' (ohne Anhang, zu gross)' : ''));
 } catch (RuntimeException $e) {
     logMsg("FEHLER beim E-Mail-Versand: " . $e->getMessage());
+    protokolliereBackupmailFehler($protokoll, $force, $zyklusKey, 'BACKUPMAIL_VERSAND', 'Backup-E-Mail konnte nicht gesendet werden.');
     exit(1);
 } finally {
     if (is_file($zipPath)) unlink($zipPath);
 }
 
+logMsg("E-Mail erfolgreich gesendet an: $empfaenger" . ($tooLarge ? ' (ohne Anhang, zu gross)' : ''));
+
+// Protokollierung getrennt vom Versand-try: Ein Protokollfehler (z. B. PDOException,
+// die ebenfalls eine RuntimeException ist) darf den bereits erfolgreichen Versand
+// nicht mehr als Fehlschlag erscheinen lassen (Befund Runde 2 – sonst Doppelversand,
+// da das Lock-File dann nicht geschrieben würde).
+if ($protokoll !== null) {
+    try {
+        $laufId = $protokoll->start('backupmail', $force ? 'manuell' : 'planer', $zyklusKey);
+        $protokoll->erfolg($laufId, ['groesseBytes' => $zipSize, 'verschluesselt' => $password !== '', 'ohneAnhang' => $tooLarge]);
+    } catch (\Throwable $e) {
+        error_log('[cron_backup_email] Protokollierung (Erfolg) fehlgeschlagen: ' . $e->getMessage());
+    }
+}
+
 // -- Lock-File schreiben (ausser bei --force) --
 if (!$force) {
-    switch ($zyklus) {
-        case 'taeglich':  $zyklusKey = date('Y-m-d'); break;
-        case 'monatlich': $zyklusKey = date('Y-m');   break;
-        default:          $zyklusKey = date('Y-W');   break;
-    }
     file_put_contents($lockFile, $zyklusKey);
     logMsg("Lock-File geschrieben: $zyklusKey");
 }

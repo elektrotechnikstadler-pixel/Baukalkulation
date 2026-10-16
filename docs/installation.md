@@ -271,6 +271,18 @@ docker compose exec -u www-data app php bin/console zeit:erinnerung [--datum=JJJ
 `cron_stunden_erinnerung.php` bleibt als Weiterleitung vorhanden; neue Cron-Einträge sollten den Console-Befehl
 verwenden.
 
+Die zeitgesteuerte Serversicherung läuft bei Docker-Installationen automatisch im App-Container
+(Crontab in `Dockerfile.app`, Takt 1 Minute; der Befehl prüft selbst, ob ein Lauf fällig ist, und
+sperrt sich gegen Überlappung). Nur bei Installation ohne Docker muss der Planer eingeplant werden:
+
+```bash
+# Zeitplaner (Serversicherung, Laufprotokoll) ohne Docker
+* * * * * php /pfad/zur/app/bin/console system:planer
+```
+
+Die Uhrzeit und Aufbewahrung der Serversicherung selbst stellt man in der App unter
+„Verwaltung → Allgemein → Datensicherung“ ein (nur Administratoren).
+
 ---
 
 ## 6. WhatsApp-Bridge einrichten (optional)

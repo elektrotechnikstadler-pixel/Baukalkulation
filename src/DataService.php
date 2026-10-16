@@ -308,25 +308,36 @@ class DataService
         ")->execute([$id, $name, $kundeId, json_encode($nested, JSON_UNESCAPED_UNICODE)]);
     }
 
-    /** Tägliches Backup erstellen (Format 2, konsistenter DB-Snapshot). */
+    /**
+     * Tägliches Backup erstellen (Rückfall, falls der Planer noch nicht lief).
+     * Darf das Speichern der Projektdaten unter keinen Umständen zum Scheitern
+     * bringen – jede Ausnahme, auch eine aus dem Protokoll selbst, wird abgefangen.
+     */
     public static function createDailyBackup(\PDO $db, array $data): void
     {
-        $today      = date('Y-m-d');
-        $backupDir  = BACKUP_DIR . $today . '/';
-        if (is_dir($backupDir)) return; // Backup existiert schon
-
+        $protokoll = new \App\Services\Jobs\JobProtokoll($db);
         try {
-            \App\Backup\BackupWriter::writeDir($db, $backupDir);
+            $ergebnis = \App\Services\Jobs\Tagessicherung::erstelle($db, new \DateTimeImmutable(), 0);
         } catch (\Throwable $e) {
-            error_log("Tagessicherung fehlgeschlagen ($backupDir): " . $e->getMessage());
-            \App\Backup\BackupArchive::removeDir($backupDir);
+            error_log('[DataService] Tagessicherung fehlgeschlagen: ' . $e->getMessage());
+            try {
+                $laufId = $protokoll->start('sicherung', 'speichern');
+                $protokoll->fehler($laufId, 'SICHERUNG_FEHLER', 'Tagessicherung fehlgeschlagen.');
+            } catch (\Throwable $e2) {
+                error_log('[DataService] Protokoll (Fehler) fehlgeschlagen: ' . $e2->getMessage());
+            }
             return;
         }
-
-        // Alte TAGES-Sicherungen aufräumen. Wichtig: manuelle und Pre-Restore-
-        // Sicherungen werden NICHT angetastet, damit bewusst angelegte
-        // Wiederherstellungspunkte nicht durch ein Routine-Backup verloren gehen.
-        self::pruneBackupCategory('daily', BACKUP_MAX);
+        // Nur ein tatsächlich neu angelegtes Backup ist protokollwürdig – sonst würde
+        // jeder Speichervorgang des Tages einen weiteren Eintrag im Laufprotokoll erzeugen.
+        if ($ergebnis === \App\Services\Jobs\Tagessicherung::ERSTELLT) {
+            try {
+                $laufId = $protokoll->start('sicherung', 'speichern');
+                $protokoll->erfolg($laufId, ['ergebnis' => $ergebnis]);
+            } catch (\Throwable $e) {
+                error_log('[DataService] Protokoll (Erfolg) fehlgeschlagen: ' . $e->getMessage());
+            }
+        }
     }
 
     /**

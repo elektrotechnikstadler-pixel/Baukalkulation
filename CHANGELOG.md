@@ -37,6 +37,20 @@
 
 ---
 
+## v3.0.20 – Zeitgesteuerte Serversicherung mit Laufprotokoll
+
+### Neu
+- **Serversicherung zeitgesteuert:** Die tägliche Serversicherung läuft jetzt zusätzlich zu einer
+  einstellbaren Uhrzeit (Standard 02:00 Uhr, Aufbewahrung 3–90 Tage einstellbar) über einen neuen
+  Zeitplaner im Container; das bisherige Backup beim ersten Speichern des Tages bleibt als Rückfall
+  bestehen. Bei Fehlschlag folgen bis zu drei Wiederholungen im 30-Minuten-Abstand. Verwaltung →
+  Allgemein → Datensicherung zeigt Uhrzeit/Aufbewahrung, letzten Erfolg/Fehler, einen Hinweis
+  bei ausgefallenem Zeitplaner, die letzten Läufe sowie einen Knopf „Tageslauf jetzt ausführen“.
+  Eine Sicherung wird erst nach erfolgreicher Prüfung als Tagessicherung abgelegt; die Backup-Mail
+  wird protokolliert. (T2 von AP-20261012-datensicherung-nas)
+
+---
+
 ## v3.0.19 – Verwaltung allgemein in Bereiche gegliedert
 
 ### Geändert

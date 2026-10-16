@@ -294,8 +294,12 @@ class DataActions
         Auth::requireRole('admin', 'master');
         $dirs = glob(BACKUP_DIR . '????-??-??*', GLOB_ONLYDIR) ?: [];
         rsort($dirs);
+        $aufbewahrungTage = (int)(\App\Services\Jobs\SystemEinstellungen::laden($this->db)['sicherung']['aufbewahrungTage'] ?? BACKUP_MAX);
+        // Einstellbare Tagessicherung-Aufbewahrung (3–90) + manuelle/Pre-Restore-Sicherungen,
+        // damit die Liste nach einer Erhöhung der Aufbewahrung nicht vorzeitig abgeschnitten wird.
+        $grenze = $aufbewahrungTage + BACKUP_MAX * 2 + 7;
         $result = [];
-        foreach (array_slice($dirs, 0, BACKUP_MAX) as $d) {
+        foreach (array_slice($dirs, 0, $grenze) as $d) {
             $mainFile = $d . '/baukalkulation.json';
             if (!file_exists($mainFile)) continue;
             $snap = json_decode(file_get_contents($mainFile), true);

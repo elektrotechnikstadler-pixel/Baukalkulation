@@ -11196,6 +11196,9 @@ async function showAllgemeinSettings() {
       loadOciLieferanten();
       loadErinnerungSettings();
     }
+    if (currentRole === 'admin') {
+      loadServersicherung();
+    }
   } catch(e) {
     view.innerHTML = '<p style="color:red">Netzwerkfehler.</p>';
   }
@@ -11574,6 +11577,13 @@ function renderAllgemeinSettings(view, s) {
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
       <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Update &amp; Systeminfo</h3>
       <button class="btn btn-secondary btn-sm" onclick="openUpdateModal()">⬇ Update & Systeminfo öffnen</button>
+    </div>
+  </div>` : ''}
+
+  ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
+    <h2 style="font-size:1rem;margin-bottom:16px">🗄️ Serversicherung (zeitgesteuert)</h2>
+    <div id="servSicherungCard" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <em>Laden…</em>
     </div>
   </div>` : ''}
 
@@ -20352,6 +20362,129 @@ async function openWaSettings() {
 }
 
 function closeWaSettings() { hide('waSettingsModal'); }
+
+// -- Serversicherung (zeitgesteuert, AP-20261012-datensicherung-nas T2) -----
+function servFormatZeitpunkt(wert) {
+  return wert ? String(wert) : '–';
+}
+
+function servLaufZeile(lauf) {
+  const icon = lauf.status === 'erfolg' ? '✔' : (lauf.status === 'fehler' ? '✘' : (lauf.status === 'abgebrochen' ? '⚠' : '…'));
+  const hinweis = lauf.status === 'fehler' ? (lauf.meldung || lauf.fehlerCode || 'Fehler') : (lauf.ausloeser || '');
+  return `<tr><td style="padding:3px 8px">${esc(servFormatZeitpunkt(lauf.gestartetAm))}</td>`
+       + `<td style="padding:3px 8px">${icon}</td>`
+       + `<td style="padding:3px 8px">${esc(hinweis)}</td></tr>`;
+}
+
+function renderServersicherung(card, j) {
+  const sicherung = (j.einstellungen && j.einstellungen.sicherung) || {};
+  const statusSicherung = (j.status && j.status.sicherung) || {};
+  const statusPlaner = (j.status && j.status.planer) || {};
+  const laeufe = (j.laeufe || []).filter(l => l.job === 'sicherung');
+
+  const planerWarnung = !statusPlaner.aktiv
+    ? '<p style="color:#c62828;font-weight:600;margin:8px 0">⚠ Zeitplaner läuft nicht – automatische Sicherung inaktiv.</p>'
+    : '';
+  const fehlerZeile = statusSicherung.fehlerCode
+    ? `<p style="color:#c62828;margin:4px 0">Letzter Fehler: ${esc(statusSicherung.fehlerCode)} (${esc(servFormatZeitpunkt(statusSicherung.letzterFehlerAm))})</p>`
+    : '';
+
+  card.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:12px">
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Uhrzeit</label>
+        <input type="time" id="servUhrzeit" class="form-control" style="font-size:.85rem;width:100%" value="${esc(sicherung.uhrzeit || '02:00')}" onchange="speichereServersicherung()"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Aufbewahrung (Tage)</label>
+        <input type="number" id="servAufbewahrung" class="form-control" style="font-size:.85rem;width:100%" min="3" max="90" value="${esc(String(sicherung.aufbewahrungTage != null ? sicherung.aufbewahrungTage : 7))}" onchange="speichereServersicherung()"></div>
+    </div>
+    <p style="font-size:.82rem;color:#555;margin:4px 0">Letzter Erfolg: ${esc(servFormatZeitpunkt(statusSicherung.letzterErfolgAm))} · Planer zuletzt aktiv: ${esc(servFormatZeitpunkt(statusPlaner.letzterLaufAm))}</p>
+    ${fehlerZeile}
+    ${planerWarnung}
+    <button class="btn btn-secondary btn-sm" id="servJetztBtn" onclick="servTageslaufJetzt()">▶ Tageslauf jetzt ausführen</button>
+    <p id="servJetztStatus" style="font-size:.78rem;color:#888;margin-top:6px"></p>
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-top:10px">
+      <thead><tr style="text-align:left;color:#666"><th style="padding:3px 8px">Gestartet</th><th style="padding:3px 8px">Status</th><th style="padding:3px 8px">Auslöser/Hinweis</th></tr></thead>
+      <tbody>${laeufe.length ? laeufe.map(servLaufZeile).join('') : '<tr><td colspan="3" style="padding:6px 8px;color:#888">Noch keine Läufe.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+async function loadServersicherung() {
+  const card = document.getElementById('servSicherungCard');
+  if (!card) return;
+  try {
+    const r = await fetch('api.php?action=system_jobs_status');
+    const j = await r.json();
+    if (!j.ok) { card.innerHTML = '<p style="color:#c62828">Fehler beim Laden.</p>'; return; }
+    renderServersicherung(card, j);
+  } catch (e) {
+    card.innerHTML = '<p style="color:#c62828">Netzwerkfehler.</p>';
+  }
+}
+
+async function speichereServersicherung() {
+  const uhrzeit = document.getElementById('servUhrzeit')?.value || '02:00';
+  const aufbewahrungTage = parseInt(document.getElementById('servAufbewahrung')?.value, 10) || 7;
+  try {
+    const r = await fetch('api.php?action=system_einstellungen_speichern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sicherung: { uhrzeit, aufbewahrungTage } }),
+    });
+    const j = await r.json();
+    if (j.error) { showNotification(j.error, 'error'); return; }
+    showNotification('Serversicherung-Einstellungen gespeichert');
+    loadServersicherung();
+  } catch (e) {
+    showNotification('Fehler beim Speichern', 'error');
+  }
+}
+
+let servJetztTimer = null;
+async function servTageslaufJetzt() {
+  clearTimeout(servJetztTimer);
+  const btn = document.getElementById('servJetztBtn');
+  const status = document.getElementById('servJetztStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Wird angefordert…';
+  try {
+    const r = await fetch('api.php?action=job_anfordern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job: 'sicherung' }),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      if (status) status.textContent = j.error || 'Fehler.';
+      if (btn) btn.disabled = false;
+      return;
+    }
+    servJetztPollen(j.id, Date.now());
+  } catch (e) {
+    if (status) status.textContent = 'Netzwerkfehler.';
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function servJetztPollen(id, startZeit) {
+  const btn = document.getElementById('servJetztBtn');
+  const status = document.getElementById('servJetztStatus');
+  if (Date.now() - startZeit > 120000) {
+    if (status) status.textContent = 'Zeitüberschreitung – bitte Laufprotokoll prüfen.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+  try {
+    const r = await fetch('api.php?action=job_auftrag_status&id=' + encodeURIComponent(id));
+    const j = await r.json();
+    if (j.ok && (j.status === 'fertig' || j.status === 'fehlgeschlagen' || j.status === 'abgelaufen')) {
+      if (status) status.textContent = j.status === 'fertig' ? 'Tageslauf abgeschlossen.' : 'Tageslauf fehlgeschlagen.';
+      if (btn) btn.disabled = false;
+      loadServersicherung();
+      return;
+    }
+  } catch (e) { /* nächster Versuch folgt per Timer */ }
+  servJetztTimer = setTimeout(() => servJetztPollen(id, startZeit), 3000);
+}
 
 // -- Erinnerung-Einstellungen ---------------------------------
 async function loadErinnerungSettings() {
