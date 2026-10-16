@@ -11206,13 +11206,21 @@ function renderAllgemeinSettings(view, s) {
     <input type="checkbox" ${s[key] ? 'checked' : ''} onchange="updateSetting('${key}',this.checked)" style="width:17px;height:17px;accent-color:var(--primary,#00B4D8)">
     <span style="font-size:.9rem">${label}</span></label>`;
 
-  view.innerHTML = `<div style="max-width:900px;margin:0 auto;">
-    <h2 data-ico="settings" style="margin-bottom:20px">Allgemein - Einstellungen</h2>
+  view.innerHTML = `<div style="max-width:1140px;margin:0 auto;">
+    <h2 data-ico="settings" style="margin-bottom:12px">Allgemein - Einstellungen</h2>
+    <div class="vw-kopf">
+      <input type="search" id="vwSuche" class="form-control vw-suche" placeholder="Suchen… (z.B. SMTP, Personalnummer)" autocomplete="off" oninput="vwSucheEingabe(this.value)">
+    </div>
+    <select id="vwNavSelect" class="form-control vw-nav-select" onchange="vwBereichWaehlen(this.value)"></select>
+    <div class="vw-layout">
+      <nav class="vw-nav" id="vwNav"></nav>
+      <div class="vw-inhalt" id="vwInhalt">
+        <p id="vwKeineTreffer" class="vw-keine-treffer vw-hidden">Keine Treffer.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;">
 
       <!-- Module -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="module" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Module ein-/ausschalten</h3>
         ${chk('modul_pauschalen','Pauschalen verwalten')}
         ${chk('modul_dienstleister','Dienstleister')}
@@ -11236,7 +11244,7 @@ function renderAllgemeinSettings(view, s) {
         ${chk('modul_vde0100','VDE 0100 Prüfprotokolle')}
       </div>
 
-      ${currentRole === 'admin' ? `<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="anmeldung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">🔒 Automatische Abmeldung</h3>
         <label style="font-size:.78rem;color:#666;display:block;margin-bottom:4px">Nutzer werden nach dieser Zeit ohne Aktivität automatisch abgemeldet.</label>
         <div style="display:flex;align-items:center;gap:8px">
@@ -11246,7 +11254,7 @@ function renderAllgemeinSettings(view, s) {
         <label style="font-size:.72rem;color:#888;display:block;margin-top:6px">Bereich: 5 Minuten bis 43200 (30 Tage). Standard: 480 (8 Stunden). Wirkt ab dem nächsten Seitenaufruf.</label>
       </div>` : ''}
 
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="anmeldung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Startseite nach Anmeldung</h3>
         <label style="font-size:.78rem;color:#666;display:block;margin-bottom:4px">Welche Seite wird nach Login / Seitenaktualisierung angezeigt?</label>
         <select class="form-control" style="font-size:.85rem;width:100%" onchange="updateSetting('startseite',this.value)">
@@ -11263,7 +11271,7 @@ function renderAllgemeinSettings(view, s) {
         </select>
       </div>
 
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="anmeldung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">📱 Mobile App – Startseite</h3>
         <label style="font-size:.78rem;color:#666;display:block;margin-bottom:4px">Welche Seite wird in der Mobile App nach dem Start angezeigt?</label>
         <select class="form-control" style="font-size:.85rem;width:100%" onchange="updateSetting('mobile_startseite',this.value)">
@@ -11279,7 +11287,7 @@ function renderAllgemeinSettings(view, s) {
         </select>
       </div>
 
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="anmeldung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">📱 Mobile App – Button-Reihenfolge</h3>
         <label style="font-size:.78rem;color:#666;display:block;margin-bottom:8px">Reihenfolge der Navigationsbuttons in der mobilen App (nur verschiebbare Buttons).</label>
         <div id="mobileBtnOrderList" style="display:flex;flex-direction:column;gap:6px">
@@ -11287,6 +11295,10 @@ function renderAllgemeinSettings(view, s) {
         </div>
         <button class="btn btn-secondary" style="margin-top:10px;font-size:.8rem" onclick="resetMobileBtnOrder()">Zurücksetzen</button>
       </div>
+
+      <!-- Branche (zuvor ohne Karten-Hülle) -->
+      <div class="vw-karte" data-bereich="firma" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+        <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Branche</h3>
         <label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Standard-Branche</label>
         <select class="form-control" style="font-size:.85rem;width:100%" onchange="updateSetting('branche',this.value)">
           <option value="" ${(s.branche||'')===''?'selected':''}>- nicht gesetzt -</option>
@@ -11299,14 +11311,14 @@ function renderAllgemeinSettings(view, s) {
         </label>
       </div>
 
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="nummern" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Kundennummern</h3>
         ${chk('kundennummer_auto','Automatisch fortlaufend vergeben')}
         <label style="font-size:.78rem;color:#666;display:block;margin:8px 0 2px">Stellen (z.B. 6 =&gt; 000001)</label>
         <input type="number" min="1" max="12" class="form-control" style="width:120px;font-size:.85rem" value="${esc(s.kundennummer_stellen || '6')}" onchange="updateSetting('kundennummer_stellen',this.value)">
       </div>
 
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="nummern" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Personalnummern</h3>
         ${chk('personalnummer_auto','Automatisch fortlaufend vergeben')}
         <label style="font-size:.78rem;color:#666;display:block;margin:8px 0 2px">Stellen (z.B. 4 =&gt; 0001)</label>
@@ -11314,7 +11326,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Baustellen-Module -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="baustellen" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Baustellen - Bereiche</h3>
         ${chk('bau_material','Material')}
         ${chk('bau_arbeitszeit','Arbeitszeit')}
@@ -11325,7 +11337,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Auto-Import Stunden -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="zeiterfassung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Stunden Auto-Import</h3>
         ${chk('auto_import_stunden','Stunden aus Stundenerfassung automatisch ins Projekt übernehmen')}
         <p style="font-size:.78rem;color:#888;margin-top:6px">Wird im Projekt markiert als <em style="background:#E8F5E9;padding:2px 6px;border-radius:3px;font-size:.72rem"> Auto-Import</em></p>
@@ -11334,7 +11346,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Erweiterte Zeiterfassung (gesetzeskonform) -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="zeiterfassung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Erweiterte Zeiterfassung</h3>
         ${chk('erweiterte_zeiterfassung','Beginn, Ende & Pausen erfassen (— 16 ArbZG / EuGH-konform)')}
         <p style="font-size:.78rem;color:#888;margin-top:6px">Aktiviert zusätzliche Felder: <strong>Von</strong>, <strong>Bis</strong>, <strong>Pause</strong>. Die Stunden werden automatisch berechnet. Prüfungen auf max. 10h/Tag und Pausenpflicht werden aktiviert.</p>
@@ -11345,7 +11357,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Erfassungstypen -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="zeiterfassung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:6px;color:var(--primary,#00B4D8)">⏱ Erfassungstypen (Stundenerfassung)</h3>
         <p style="font-size:.78rem;color:#888;margin-bottom:10px">Die Standard-Typen (Arbeit, Urlaub, Krank, Gleitzeit, Sonstiger Fehlgrund) sind fest eingebaut. Hier können eigene Typen ergänzt werden. Per Checkbox kann bestimmt werden, ob der Typ als Arbeitszeit oder als Freizeit gewertet wird.</p>
         <div id="seCustomTypenList" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
@@ -11381,7 +11393,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Wochenplan Display -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <div class="vw-karte" data-bereich="zeiterfassung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Wochenplan Screenansicht</h3>
         <label style="font-size:.85rem;display:block;margin-bottom:4px">Port (optional, z.B. 8080):</label>
         <input type="text" class="form-control" value="${esc(s.wochenplan_display_port || '')}" id="settWpPort" style="width:120px;font-size:.9rem" onchange="updateSetting('wochenplan_display_port',this.value)">
@@ -11389,7 +11401,7 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Firmendaten -->
-      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;grid-column:1/-1">
+      <div class="vw-karte" data-bereich="firma" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;grid-column:1/-1">
         <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Firmendaten (für Rechnungen/Angebote)</h3>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
           <div style="width:80px;height:80px;border:2px dashed #ccc;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
@@ -11461,15 +11473,14 @@ function renderAllgemeinSettings(view, s) {
       </div>
 
       <!-- Feiertage -->
-      <div id="feiertageSection" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;grid-column:1/-1">
+      <div id="feiertageSection" class="vw-karte" data-bereich="zeiterfassung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;grid-column:1/-1">
         ${renderFeiertageSection(s)}
       </div>
     </div>
     <div id="settSaveStatus" style="margin-top:12px;font-size:.85rem;color:#388E3C"></div>
-  </div>
 
   ${(currentRole === 'admin' || currentRole === 'master') ? `
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="schnittstellen" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">🤖 KI-Bilderkennung (Lagermodul)</h2>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
       <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Google Gemini API-Key</h3>
@@ -11507,7 +11518,7 @@ function renderAllgemeinSettings(view, s) {
     </div>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="email" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">✉ E-Mail / SMTP</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:12px">
       <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">SMTP-Server (Host)</label>
@@ -11540,12 +11551,12 @@ function renderAllgemeinSettings(view, s) {
     <p style="font-size:.75rem;color:#888;margin-top:6px">Sendet eine Test-E-Mail an die unter Firmendaten hinterlegte E-Mail-Adresse.</p>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="schnittstellen" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">&#x1F3EA; OCI Großhandel – Lieferanten</h2>
     <div id="ociLieferantenSection"><em style="font-size:.9rem;color:#888">Lädt…</em></div>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="system" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">📋 System-Protokoll (Audit-Log)</h2>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
       <p style="font-size:.85rem;color:#555;margin-bottom:12px">
@@ -11559,7 +11570,14 @@ function renderAllgemeinSettings(view, s) {
     </div>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="system" style="padding:20px;border-top:1px solid #e0e0e0">
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Update &amp; Systeminfo</h3>
+      <button class="btn btn-secondary btn-sm" onclick="openUpdateModal()">⬇ Update & Systeminfo öffnen</button>
+    </div>
+  </div>` : ''}
+
+  <div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">📦 Automatisches Backup per E-Mail</h2>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
       <p style="font-size:.82rem;color:#555;margin-bottom:12px">Sendet ein ZIP-Archiv (Datenbank + JSON-Export) an die eingestellte E-Mail-Adresse. Der Versand erfolgt über den eingerichteten SMTP-Server und wird per Cron-Job (cron_backup_email.php) ausgelöst.</p>
@@ -11592,7 +11610,17 @@ function renderAllgemeinSettings(view, s) {
     </div>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Wiederherstellung &amp; Speicherorte</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openBackupModal()">↻ Wiederherstellungspunkte / Datensicherung öffnen</button>
+        ${currentRole === 'admin' ? `<button class="btn btn-secondary btn-sm" onclick="showStoragePaths()">📁 Speicherpfade öffnen</button>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="vw-karte" data-bereich="zeiterfassung" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">📊 Monatliche Stundenauswertung per E-Mail</h2>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
       <p style="font-size:.82rem;color:#555;margin-bottom:12px">Sendet einmal im Monat eine PDF-Übersicht der Mitarbeiterstunden (Soll/Ist/Differenz, Urlaub, Krank) des Vormonats – alle Mitarbeiter gesammelt – an die eingestellte E-Mail-Adresse. Versand per Cron-Job (cron_stundenauswertung_email.php).</p>
@@ -11615,11 +11643,96 @@ function renderAllgemeinSettings(view, s) {
     </div>
   </div>
 
-  <div style="padding:20px;border-top:1px solid #e0e0e0">
+  <div class="vw-karte" data-bereich="zeiterfassung" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:6px">🗓️ Jahreswechsel-Assistent</h2>
     <p style="font-size:.85rem;color:#555;margin-bottom:12px">Urlaubstage für das neue Jahr übernehmen, Gleitzeit-Überträge buchen und betriebliche Feiertage ins neue Jahr kopieren.</p>
     <button class="btn btn-secondary" onclick="openJahreswechselModal()">🗓️ Jahreswechsel-Assistent öffnen</button>
-  </div>` : ''}`;
+  </div>` : ''}
+      </div>
+    </div>
+  </div>`;
+  initVerwaltungNav(view);
+}
+
+// ============================================================
+// Verwaltung allgemein - Unternavigation (AP-20261012-datensicherung-nas, T1)
+// ============================================================
+function initVerwaltungNav(view) {
+  const nav = document.getElementById('vwNav');
+  const sel = document.getElementById('vwNavSelect');
+  if (!nav || !sel) return;
+
+  const vorhandeneIds = [];
+  view.querySelectorAll('.vw-karte[data-bereich]').forEach(karte => {
+    const id = karte.getAttribute('data-bereich');
+    if (id && !vorhandeneIds.includes(id)) vorhandeneIds.push(id);
+  });
+  const bereiche = (window.BK_VERWALTUNG_BEREICHE || []).filter(b => vorhandeneIds.includes(b.id));
+
+  nav.innerHTML = bereiche.map(b =>
+    `<button type="button" class="vw-nav-btn" data-bereich="${b.id}" onclick="vwBereichWaehlen('${b.id}')">${esc(b.titel)}</button>`
+  ).join('');
+  sel.innerHTML = bereiche.map(b => `<option value="${b.id}">${esc(b.titel)}</option>`).join('');
+
+  let gespeicherteId = null;
+  try { gespeicherteId = localStorage.getItem('bk.verwaltung.bereich'); } catch (e) { /* localStorage nicht verfügbar */ }
+  const sichtbareIds = bereiche.map(b => b.id);
+  const ziel = typeof bkVerwaltungBereich === 'function'
+    ? bkVerwaltungBereich(gespeicherteId, sichtbareIds)
+    : (sichtbareIds[0] || null);
+
+  const suche = document.getElementById('vwSuche');
+  if (suche) suche.value = '';
+  vwBereichWaehlen(ziel);
+}
+
+function vwBereichWaehlen(id) {
+  if (!id) return;
+  const suche = document.getElementById('vwSuche');
+  if (suche) suche.value = '';
+  document.querySelectorAll('.vw-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-bereich') === id);
+  });
+  const sel = document.getElementById('vwNavSelect');
+  if (sel) sel.value = id;
+  document.querySelectorAll('.vw-karte[data-bereich]').forEach(karte => {
+    karte.classList.toggle('vw-hidden', karte.getAttribute('data-bereich') !== id);
+  });
+  const hinweis = document.getElementById('vwKeineTreffer');
+  if (hinweis) hinweis.classList.add('vw-hidden');
+  try { localStorage.setItem('bk.verwaltung.bereich', id); } catch (e) { /* localStorage nicht verfügbar */ }
+}
+
+function vwSucheEingabe(wert) {
+  const begriff = (wert || '').trim();
+  const karten = Array.from(document.querySelectorAll('#vwInhalt .vw-karte[data-bereich]'));
+  const hinweis = document.getElementById('vwKeineTreffer');
+
+  if (!begriff) {
+    let gespeicherteId = null;
+    try { gespeicherteId = localStorage.getItem('bk.verwaltung.bereich'); } catch (e) { /* localStorage nicht verfügbar */ }
+    const sichtbareIds = [];
+    karten.forEach(karte => {
+      const id = karte.getAttribute('data-bereich');
+      if (id && !sichtbareIds.includes(id)) sichtbareIds.push(id);
+    });
+    const ziel = typeof bkVerwaltungBereich === 'function'
+      ? bkVerwaltungBereich(gespeicherteId, sichtbareIds)
+      : (sichtbareIds[0] || null);
+    vwBereichWaehlen(ziel);
+    return;
+  }
+
+  document.querySelectorAll('.vw-nav-btn').forEach(btn => btn.classList.remove('active'));
+  const kartenTexte = karten.map(karte => {
+    const platzhalterUndLabels = Array.from(karte.querySelectorAll('input,select,textarea'))
+      .map(el => el.getAttribute('placeholder') || '')
+      .join(' ');
+    return `${karte.textContent || ''} ${platzhalterUndLabels}`;
+  });
+  const treffer = typeof bkVerwaltungTreffer === 'function' ? bkVerwaltungTreffer(begriff, kartenTexte) : [];
+  karten.forEach((karte, index) => karte.classList.toggle('vw-hidden', !treffer.includes(index)));
+  if (hinweis) hinweis.classList.toggle('vw-hidden', treffer.length > 0);
 }
 
 function downloadAuditLog(format) {

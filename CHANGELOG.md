@@ -37,7 +37,16 @@
 
 ---
 
-## Unveröffentlicht
+## v3.0.19 – Verwaltung allgemein in Bereiche gegliedert
+
+### Geändert
+- **Verwaltung → Allgemein neu gegliedert:** Die bisher eine lange Seite ist jetzt in Bereiche mit linker
+  Unternavigation aufgeteilt (Firma & Branding, Module, Anmeldung & Startseiten, Kunden- & Personalnummern,
+  Baustellen & Bereiche, Zeiterfassung, E-Mail (SMTP), Schnittstellen (KI, OCI), Datensicherung, System & Update).
+  Ein Suchfeld filtert über alle Bereiche nach Titel und Feldbeschriftung, der zuletzt geöffnete Bereich wird
+  gemerkt, unter 768 px erscheint die Navigation als Dropdown. Alle bisherigen Einstellungen, IDs und
+  Speicherpfade sind unverändert erreichbar; „Speicherpfade“ und „Update & Systeminfo“ bleiben zusätzlich über
+  das bestehende Verwaltungsmenü verfügbar. (T1 von AP-20261012-datensicherung-nas)
 
 ---
 

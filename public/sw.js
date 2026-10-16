@@ -1,7 +1,7 @@
 // ============================================================
 // Baukalkulation – Service Worker (PWA Offline Support)
 // ============================================================
-const CACHE_VERSION = 'bk-es-v238';
+const CACHE_VERSION = 'bk-es-v240';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -9,9 +9,10 @@ const PRECACHE_URLS = [
   './mobile_light.html',
   './login.html',
   './bedienungsanleitung.html',
-  './style.css?v=145',
+  './style.css?v=146',
   './sollzeit.js?v=231',
-  './script.min.js?v=235',
+  './verwaltung-nav.js?v=1',
+  './script.min.js?v=237',
   './dist/core.js?v=100',
   './manifest.json',
   './icons/icon-512.png',

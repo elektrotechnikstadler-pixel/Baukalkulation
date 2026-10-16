@@ -4022,3 +4022,74 @@ body.dark-theme .confirm-del-cancel-btn {
   color: var(--text, #eee);
 }
 body.dark-theme .confirm-del-cancel-btn:hover { background: var(--grey-100, #2a2a2a); }
+
+/* ============================================================
+   VERWALTUNG ALLGEMEIN - UNTERNAVIGATION (AP-20261012-datensicherung-nas, T1)
+   ============================================================ */
+.vw-kopf {
+  margin-bottom: 14px;
+}
+.vw-suche {
+  max-width: 340px;
+}
+.vw-nav-select {
+  display: none;
+  width: 100%;
+  margin-bottom: 14px;
+}
+.vw-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+}
+.vw-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 220px;
+  position: sticky;
+  top: 12px;
+}
+.vw-nav-btn {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 7px;
+  background: var(--card-bg, #fff);
+  color: var(--text, #333);
+  font-size: .85rem;
+  cursor: pointer;
+}
+.vw-nav-btn:hover {
+  background: var(--grey-50, #fafafa);
+}
+.vw-nav-btn.active {
+  background: var(--primary, #00B4D8);
+  border-color: var(--primary, #00B4D8);
+  color: #fff;
+  font-weight: 600;
+}
+.vw-inhalt {
+  flex: 1;
+  min-width: 0;
+}
+.vw-keine-treffer {
+  color: var(--grey-400, #888);
+  font-size: .9rem;
+  padding: 16px 0;
+}
+.vw-hidden {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .vw-nav {
+    display: none;
+  }
+  .vw-nav-select {
+    display: block;
+  }
+  .vw-layout {
+    display: block;
+  }
+}

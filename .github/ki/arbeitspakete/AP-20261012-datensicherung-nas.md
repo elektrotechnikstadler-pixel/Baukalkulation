@@ -2,10 +2,10 @@
 
 | Feld | Wert |
 |---|---|
-| Status | freigegeben |
+| Status | in Umsetzung (T1 abgeschlossen → 3.0.19; weiter mit T2) |
 | Typ | Feature |
 | Testläufe rot | 0 |
-| Review-Runden | 0 |
+| Review-Runden | T1: 1 |
 | Commit | – |
 
 Voraussetzung: AP-20261012-ki-modelle-tests ist abgeschlossen (Modelle je Rolle, Gesamtlauf inkl. `test:js`).
@@ -314,8 +314,115 @@ Reihenfolge zwingend T1 → T2 → T3 → T4 → T5 (T3/T4 bauen auf B auf; T4 v
 
 ## 3. Umsetzung
 
+### T1 – Verwaltung gliedern (Schnitt durch Leitstand, 2026-10-16)
+
+Releases verschieben sich um eins, weil inzwischen 3.0.18 erschienen ist: T1 = 3.0.19 … T5 = 3.0.23 (O7).
+
+Vertrag T1 (bindend, E-084):
+- Karten in `renderAllgemeinSettings()` bleiben **im DOM**: Jede Karte bekommt `data-bereich="<id>"`, die Unternavigation blendet nur ein und aus. Element-IDs, `updateSetting(...)`, `saveErinnerungSettings()`, `loadErinnerungSettings()` und `loadOciLieferanten()` bleiben unverändert. Kein Server-/API-Code ändert sich.
+- Bereiche in T1: `firma`, `module`, `anmeldung`, `nummern`, `baustellen`, `zeiterfassung`, `email`, `schnittstellen`, `datensicherung`, `system`. `ueberwachung` und `datenbank` kommen erst mit T3/T5 dazu; leere Bereiche werden nicht angezeigt.
+- **Abweichung 1:** Der neue Bereich `schnittstellen` (Gemini-KI, OCI-Großhandel) fehlte in der Planliste; diese Karten passten in keinen Bereich.
+- **Abweichung 2:** Die Header-Punkte „Speicherpfade“ und „Update & Systeminfo“ bleiben unverändert (öffnen weiterhin ihre Dialoge). Die Bereiche `datensicherung` und `system` bekommen zusätzlich Knöpfe, die dieselben Dialoge öffnen. Grund: Die Dialoge sind Modals und keine Seiten; so ist das Risiko geringer.
+- **Abweichung 3:** Kein `#verwaltung/<id>`-Deep-Link, nur `localStorage` `bk.verwaltung.bereich`. Grund: Die App nutzt kein Hash-Routing.
+
+#### Umsetzung Runde 1 (Entwickler, Modell: Claude Sonnet 5 (copilot))
+
+Umgesetzt wie im Vertrag beschrieben: Alle Karten/Abschnitte aus `renderAllgemeinSettings()` bleiben im DOM, bekommen
+`data-bereich="<id>"` + `class="vw-karte"`; eine neue linke Unternavigation (`#vwNav`, `<768px` als `#vwNavSelect`)
+blendet per `class="vw-hidden"` ein/aus. Suche (`#vwSuche`) filtert über `textContent` + Input-`placeholder` aller
+Karten, hebt bei nicht leerem Begriff die Bereichsauswahl auf und zeigt bei 0 Treffern einen Hinweis; eine leere
+Suche kehrt zum zuletzt gewählten/gespeicherten Bereich zurück (`localStorage['bk.verwaltung.bereich']`, try/catch).
+
+**Geänderte Dateien:**
+- `public/script.js` – `renderAllgemeinSettings()`: Kopf (h2 + `#vwSuche`), `.vw-layout` (Nav + Inhalt), jede Karte/jeder
+  Abschnitt mit `data-bereich`/`class="vw-karte"`; zwei neue Karten `datensicherung` (Knöpfe „Wiederherstellungspunkte /
+  Datensicherung öffnen“ → `openBackupModal()`, nur Admin „Speicherpfade öffnen“ → `showStoragePaths()`) und `system`
+  (Knopf „Update & Systeminfo öffnen“ → `openUpdateModal()`, nur Admin); neue Funktionen `initVerwaltungNav(view)`,
+  `vwBereichWaehlen(id)`, `vwSucheEingabe(wert)`. Keine Element-IDs, `updateSetting(...)`-Aufrufe oder API-Pfade geändert.
+- `public/script.min.js` – neu erzeugt (`npm run minify`).
+- `public/verwaltung-nav.js` – neu: reine Helferfunktionen (kein DOM-Zugriff), s.u.
+- `public/index.html` – `verwaltung-nav.js?v=1` vor `script.min.js` eingebunden; `style.css?v=146`, `script.min.js?v=236`.
+- `public/sw.js` – `CACHE_VERSION` `bk-es-v238` → `bk-es-v239`; `PRECACHE_URLS` um `./verwaltung-nav.js?v=1` ergänzt;
+  `style.css?v=146`, `script.min.js?v=236`.
+- `public/style.css` – neuer Block `.vw-*` (Nav, Layout, Suche, `vw-hidden`, Media-Query `<768px`); nutzt bestehende
+  CSS-Variablen (`--card-bg`, `--border`, `--primary`, `--grey-50`, `--grey-400`, `--text`), damit Dark-Mode ohne
+  Zusatzregeln funktioniert.
+- `public/bedienungsanleitung.html` – Abschnitt 15 „Einstellungen & Rechte“ um Beschreibung der Bereiche, Suche,
+  gemerktem Bereich und mobiler Auswahlliste ergänzt (E-081).
+- `CHANGELOG.md` – Eintrag unter „Unveröffentlicht“ → „Geändert“.
+
+**Funktionen in `public/verwaltung-nav.js`:**
+- `BK_VERWALTUNG_BEREICHE` – Array `{id, titel, ico}`, Reihenfolge: firma, module, anmeldung, nummern, baustellen,
+  zeiterfassung, email, schnittstellen, datensicherung, system.
+- `bkVerwaltungBereich(gespeicherteId, sichtbareIds)` – liefert `gespeicherteId`, wenn in `sichtbareIds` enthalten,
+  sonst `sichtbareIds[0]` bzw. `null` wenn leer.
+- `bkVerwaltungNormalisiere(text)` – klein, `ä→ae`, `ö→oe`, `ü→ue`, `ß→ss`, Whitespace zusammengefasst/getrimmt.
+- `bkVerwaltungTreffer(suchbegriff, kartenTexte)` – Indizes der Karten, die alle normalisierten Wörter des Begriffs
+  enthalten; leerer Begriff → alle Indizes.
+
+**Abweichung 4 (zusätzlich zu 1–3 im Vertrag):** Beim Durchsuchen von `renderAllgemeinSettings()` fiel ein bestehender
+Fehler auf: Der Block „Standard-Branche“ (nach „Mobile App – Button-Reihenfolge“) hatte **keine eigene Karten-Hülle**
+(`<div>`/`<h3>` fehlten; `label`/`select`/`label` standen direkt als Geschwister im CSS-Grid). Da jede Karte eine
+`data-bereich`-Hülle braucht, wurde eine `<div class="vw-karte" data-bereich="firma"><h3>Branche</h3>…</div>`-Hülle
+ergänzt (Inhalt/Felder/IDs unverändert) und dem Bereich „Firma & Branding“ zugeordnet. Bitte im Review bestätigen.
+
+**Prüfungen:**
+- `node --check public/script.js` → ok
+- `node --check public/verwaltung-nav.js` → ok
+- `node scripts/check-versions.mjs --strict` → `OK – alle ?v=-Versionen sind konsistent.` (CACHE_VERSION bk-es-v239)
+- `npm run test:js` → 12/12 grün (bestehende `sollzeit.test.mjs`; `verwaltung-nav.test.mjs` schreibt der Tester)
+- Manuelle Stichprobe der neuen Helferfunktionen per `node:vm` (Fallback unbekannt/leer/gültig/keine Sichtbaren,
+  Normalisierung, Treffer bei SMTP/Mehrwort/leer) – alle wie erwartet.
+
+**Nicht geprüft (liegt außerhalb T1 bzw. macht der Tester/Reviewer):** PHPUnit/PHPStan (keine PHP-Änderung),
+visuelle/responsive Abnahme im Browser, `tests/js/verwaltung-nav.test.mjs`.
+
+#### T1 – Runde 2 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-Hinweis 1 behoben – Suchfeld wird bei Bereichswechsel geleert; script.min.js?v=237, CACHE_VERSION bk-es-v240.
+
+#### T1 – Abnahme Leitstand (2026-10-16)
+
+- Gelaufene Modelle laut Laufzeit: Entwickler `claude-sonnet-5`, Tester `gpt-5.3-codex` (nennt sich selbst „GPT-5.5“), Reviewer `gpt-5.5`. Tester und Reviewer gehören damit einer anderen Familie an als der Entwickler (E-089).
+- Sichtprüfung im eingebetteten Chromium (Admin, Wegwerf-DB) bestanden: 10 Bereiche; keine Karte außerhalb von `#vwInhalt`; die Suche findet „smtp“, „personalnummer“ und „grosshandel“, bei Nichttreffer erscheint der Hinweis; Bereichswechsel und gemerkter Bereich funktionieren; Speichern liefert `save_settings` 200 mit „Gespeichert“; die Backup-Mail-Felder werden geladen; bei 390 px erscheint die Auswahlliste; nach Runde 2 wird das Suchfeld beim Bereichswechsel geleert. Rolle master/normal und Dark-Mode nicht geprüft (Review-Hinweis 2, Restrisiko gering: nur Ein-/Ausblenden).
+- Gesamtläufe: PHPUnit SQLite 537 Tests grün (2 übersprungen), PostgreSQL 537 Tests grün (3 übersprungen), `test:js` 18/18 grün, `check-versions --strict` OK.
+- Version 3.0.19.
+
 ## 4. Tests
 
+### T1 – Runde 1 (Tester, Modell: GPT-5.5 (copilot))
+
+**GRÜN**
+
+- Neu: `tests/js/verwaltung-nav.test.mjs`
+- Ausgeführt:
+  - `npm.cmd run test:js` → **18/18 grün**
+  - `node scripts/check-versions.mjs --strict` → **OK – alle ?v=-Versionen sind konsistent.**
+
+| Abnahmekriterium | Test (Datei::Testname) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| AK 1 (Bereichsliste T1, Reihenfolge, Titel) | `tests/js/verwaltung-nav.test.mjs::BK_VERWALTUNG_BEREICHE enthält Vertrags-Bereiche eindeutig und sortiert` | n/a – reines Frontend | n/a – reines Frontend | grün |
+| AK 1 (Bereichs-Fallback bei ungültig/unsichtbar/leer) | `tests/js/verwaltung-nav.test.mjs::bkVerwaltungBereich nutzt gespeicherte ID oder fällt robust auf sichtbare Bereiche zurück` | n/a – reines Frontend | n/a – reines Frontend | grün |
+| AK 1 (Suche-Normalisierung inkl. Umlaute/Whitespace) | `tests/js/verwaltung-nav.test.mjs::bkVerwaltungNormalisiere normalisiert Groß-/Kleinschreibung, Umlaute und Leerzeichen` | n/a – reines Frontend | n/a – reines Frontend | grün |
+| AK 1 (Suche-Treffer inkl. SMTP/Personalnummer/Umlaut/Mehrwort/leer/kein Treffer) | `tests/js/verwaltung-nav.test.mjs::bkVerwaltungTreffer erfüllt Suche nach Vertrag (SMTP, Personalnummer, Umlaut, Mehrwort)` | n/a – reines Frontend | n/a – reines Frontend | grün |
+| AK 1 (statischer Wächter: `data-bereich` nur Vertrags-IDs + Pflicht-Element-IDs vorhanden) | `tests/js/verwaltung-nav.test.mjs::Wächter: renderAllgemeinSettings nutzt nur bekannte data-bereich-IDs und behält Pflicht-Element-IDs` | n/a – reines Frontend | n/a – reines Frontend | grün |
+| AK 1 + AK 15 (statisch: Einbindung/Precache-Version konsistent) | `tests/js/verwaltung-nav.test.mjs::Statisch: index lädt verwaltung-nav.js vor script.min.js, sw.js precacht dieselbe Version` | n/a – reines Frontend | n/a – reines Frontend | grün |
+
 ## 5. Review
+
+### T1 – Runde 1 (Reviewer, Modell: GPT-5.5 (copilot))
+
+**Urteil:** APPROVE
+
+**Prüfungen:** `npm.cmd run test:js` → 18/18 grün; `node scripts/check-versions.mjs --strict` → OK, `CACHE_VERSION = bk-es-v239`.
+
+**Befunde:**
+
+| Nr | Schwere (Blocker/Major/Minor/Hinweis) | Datei:Zeile | Befund | Vorschlag |
+|---|---|---|---|---|
+| 1 | Hinweis | `public/script.js:11689` | Wird bei aktiver Suche ein Bereich gewählt, blendet `vwBereichWaehlen()` den Bereich korrekt ein, lässt den nicht mehr angewendeten Suchbegriff in `#vwSuche` aber stehen. Das ist kein Funktionsbruch, kann aber irritieren. | Optional beim manuellen Bereichswechsel das Suchfeld leeren oder den Suchmodus sichtbar beibehalten. |
+| 2 | Hinweis | `tests/js/verwaltung-nav.test.mjs:125` | Die neuen Tests prüfen die reinen Such-/Fallback-Helfer und statisch `data-bereich`/Pflicht-IDs. Rollenvarianten (admin/master/normal), DOM-Navigation nach Suche und Dark-Mode bleiben Test-/Manuell-Lücken. | Optional einen DOM-nahen Test oder eine feste manuelle Checkliste für master/normal + Dark-Mode ergänzen. |
+
+**Geprüft ohne Befund:** HTML-Verschachtelung in `renderAllgemeinSettings()` ist für admin/master/sonstige plausibel; alle Karten liegen in `#vwInhalt`, Abweichung 4 (Branche-Karte) ist korrekt gekapselt. Neue `innerHTML`-Stellen verwenden nur konstante Bereichsdaten bzw. `esc(...)`; keine neuen unescaped Nutzerdaten gefunden. Rollenlogik für neue Dialog-Knöpfe passt zur bisherigen Admin/Master-Backup-Logik. Anleitung, Changelog, Cache-Busting, `script.min.js` und `sw.js` sind konsistent. Keine neu eingeführten Kodierungsartefakte (`Ã`, `â€`) in den geänderten Diff-Zeilen gefunden.
+
+**Lernpunkt-Kandidaten:** Keine.
 
 ## 6. Lernpunkte
