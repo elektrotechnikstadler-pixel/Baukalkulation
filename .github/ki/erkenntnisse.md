@@ -34,6 +34,8 @@ Eintrag: `E-Nr` · **Regel** (eine Zeile, positiv, prüfbar) · Warum · Quelle 
 | Nr | Regel | Warum | Quelle | Umgesetzt in |
 |---|---|---|---|---|
 | E-020 | Nach jeder Migration Backup-Fixture neu erzeugen und einchecken | Import älterer Stände muss getestet bleiben | Umbau Phase 2 | migrationen.instructions.md |
+| E-021 | Rückgabewerte „nicht ausgeführt“ (`gesperrt`, `vorhanden` ohne Prüfung, `übersprungen`) nie als Erfolg werten; Sperren in Hintergrundjobs mit begrenzter Wartezeit, danach Fehlversuch mit Wiederholung | Planer meldete Tageslauf `ok`, obwohl wegen gehaltener Sperre keine Sicherung entstand (Blocker) | AP-20261012-datensicherung-nas T2 | nur hier |
+| E-022 | Protokoll-/Statusschreiben nie im selben try wie die eigentliche Aktion (Versand, Sperrdatei); eigenes try/catch(\Throwable) mit nur `error_log()`. Die Fixture zuerst mit der Zielversion erzeugen (`VERSION` vorübergehend anheben), weil `build-backup-fixture.php` die laufende Version als Dateinamen nutzt | Protokollfehler nach Mailversand → `exit(1)` ohne Sperrdatei → doppelter Versand (Major); Fixture hieß sonst wie die Vorversion | AP-20261012-datensicherung-nas T2 | nur hier |
 
 ## Tests
 
