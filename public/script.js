@@ -17100,7 +17100,8 @@ function openSaEntryModal(username, mode, entryId) {
     .join('');
 
   const isArbeit   = isArbeitTyp(initTyp);
-  const isRangeTyp = !isEdit && !isArbeitTyp(initTyp) && initTyp !== 'gleitzeit';
+  const zeigStd    = isArbeit || isAbwesendTyp(initTyp);
+  const isRangeTyp = !isEdit && !isArbeitTyp(initTyp) && !isAbwesendTyp(initTyp) && initTyp !== 'gleitzeit';
   const erw        = appSettings.erweiterte_zeiterfassung;
 
   const overlay = document.createElement('div');
@@ -17133,7 +17134,7 @@ function openSaEntryModal(username, mode, entryId) {
             <input type="date" id="saef_datumBis" class="form-control" value="${initDatum}">
           </div>
         </div>
-        <div id="saef_std_wrap" style="margin-bottom:12px${isArbeit ? '' : ';display:none'}">
+        <div id="saef_std_wrap" style="margin-bottom:12px${zeigStd ? '' : ';display:none'}">
           <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:4px">Stunden</label>
           <input type="number" id="saef_stunden" class="form-control" value="${initStunden}" min="0" max="24" step="0.25">
         </div>
@@ -17180,9 +17181,10 @@ function _saefTypChanged() {
   const typ     = document.getElementById('saef_typ')?.value;
   const mode    = document.getElementById('saEntryModal')?.dataset.mode;
   const arbeit  = isArbeitTyp(typ);
-  const range   = mode !== 'edit' && !isArbeitTyp(typ) && typ !== 'gleitzeit';
+  const abwesend = isAbwesendTyp(typ);
+  const range   = mode !== 'edit' && !arbeit && !abwesend && typ !== 'gleitzeit';
   const set     = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? '' : 'none'; };
-  set('saef_std_wrap',  arbeit);
+  set('saef_std_wrap',  arbeit || abwesend);
   set('saef_bs_wrap',   arbeit);
   set('saef_erw_wrap',  arbeit);
   set('saef_bis_wrap',  range);
@@ -17232,8 +17234,13 @@ async function _saefSave(username, mode, entryId) {
     if (btn) { btn.disabled = false; btn.textContent = 'Speichern'; }
     return;
   }
+  if (isAbwesendTyp(typ) && stunden <= 0) {
+    showNotification('Bitte Stunden der Abwesenheit eingeben.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Speichern'; }
+    return;
+  }
 
-  const useRange = mode === 'add' && !isArbeitTyp(typ) && typ !== 'gleitzeit' && datumBis && datumBis > datum;
+  const useRange = mode === 'add' && !isArbeitTyp(typ) && !isAbwesendTyp(typ) && typ !== 'gleitzeit' && datumBis && datumBis > datum;
 
   try {
     if (mode === 'add') {

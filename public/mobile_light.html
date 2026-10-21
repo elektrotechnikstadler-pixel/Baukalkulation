@@ -370,7 +370,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=231"></script>
+<script src="sollzeit.js?v=232"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
 let currentUser = '';
@@ -872,7 +872,7 @@ async function saveEntry() {
   // Validation
   if (!datum) { toast('Bitte Datum eingeben.', 'error'); return; }
   if (!lightSollUser) { toast('Sollzeit wird noch geladen. Bitte gleich erneut versuchen.', 'error'); return; }
-  const effStunden = bkIstStundenEintrag(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen);
+  const effStunden = bkGespeicherteStunden(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen, sonstigZeitspanne);
   if (_isArbeit && !_istSoll) {
     if (stunden <= 0) { toast('Bitte Stunden eingeben.', 'error'); return; }
   }
@@ -959,7 +959,7 @@ async function saveEntry() {
       }
     }
     neueDates.forEach(d => {
-      const _st = sonstigZeitspanne ? stunden : bkIstStundenEintrag(lightSollUser, { datum: d, typ, stunden }, appSettings.ze_custom_typen);
+      const _st = bkGespeicherteStunden(lightSollUser, { datum: d, typ, stunden }, appSettings.ze_custom_typen, sonstigZeitspanne);
       zeitEntries.push({ id: nextEntryId++, clientUuid: newZeitUuid(), datum: d, typ, stunden: _st, baustelleId: null, bemerkung, von: sonstigZeitspanne ? von : '', bis: sonstigZeitspanne ? bis : '', pause: 0 });
     });
   } else {

@@ -1893,7 +1893,7 @@
 <!-- ============ Toast ============ -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=231"></script>
+<script src="sollzeit.js?v=232"></script>
 <script>
 // ============================================================
 // API-BASED PERSISTENCE  (Synology NAS)
@@ -5170,10 +5170,7 @@ function saveStundenerfassung() {
   // Custom-Arbeitstyp ohne "Ist = Soll": manuelle Stunden; mit "Ist = Soll": Soll/Tag automatisch.
   const _isManualCustomArbeitM = isArbeitTypM(typ) && typ !== 'arbeit' && typ !== 'feiertag' && !mTypIstGleichSoll(typ);
   const enteredHours = parseFloat(document.getElementById('seStunden').value) || 0;
-  const usesManualHours = typ === 'arbeit' || typ === 'abwesend' || _isManualCustomArbeitM || sonstigZeitspanne;
-  const stunden = usesManualHours
-    ? enteredHours
-    : bkIstStundenEintrag(seMobileUser, { datum, typ, stunden: 0 }, appSettings.ze_custom_typen);
+  const stunden = bkGespeicherteStunden(seMobileUser, { datum, typ, stunden: enteredHours }, appSettings.ze_custom_typen, sonstigZeitspanne);
   const baustelleId = typ === 'arbeit' ? (parseInt(document.getElementById('seBaustelle').value) || null) : null;
   const bemerkung = document.getElementById('seBemerkung').value.trim();
 
@@ -5283,7 +5280,7 @@ function saveStundenerfassung() {
     dates.forEach(d => {
       // Mehrfachbuchungen pro Tag bei Arbeitszeit und Abwesenheit erlaubt; Urlaub/Krank/Sonstig bleiben eindeutig
       if (typ !== 'arbeit' && typ !== 'abwesend' && existingDates.has(d)) return;
-      const entryHours = usesManualHours ? enteredHours : bkIstStundenEintrag(seMobileUser, { datum: d, typ, stunden: 0 }, appSettings.ze_custom_typen);
+      const entryHours = bkGespeicherteStunden(seMobileUser, { datum: d, typ, stunden: enteredHours }, appSettings.ze_custom_typen, sonstigZeitspanne);
       pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden: entryHours, baustelleId, baustelleName, bemerkung, von, bis, pause });
       added++;
     });
@@ -7045,11 +7042,13 @@ async function saMobileEditEntry(username, entryId) {
 
   const newDatum = prompt('Datum:', entry.datum || '');
   if (newDatum === null) return;
-  const newTyp = prompt('Typ (arbeit/urlaub/gleitzeit/krank/sonstig):', entry.typ || 'arbeit');
+  const newTyp = prompt('Typ (arbeit/abwesend/urlaub/gleitzeit/krank/sonstig):', entry.typ || 'arbeit');
   if (newTyp === null) return;
-  // Nur bei 'arbeit' werden Stunden manuell erfasst. Abwesenheiten (Urlaub/Krank/…)
-  // werden serverseitig mit Soll/Tag gutgeschrieben (kein pauschales 8h mehr).
-  const newStunden = newTyp === 'arbeit' ? parseFloat(prompt('Stunden:', entry.stunden || '8') || '0') : 0;
+  // Stunden nur bei Arbeit und Abwesend manuell (Abwesend dokumentiert die Dauer, zählt 0 h ins Ist).
+  // Urlaub/Krank werden serverseitig mit Soll/Tag gutgeschrieben (kein pauschales 8h mehr).
+  const manuelleStunden = newTyp === 'arbeit' || newTyp === 'abwesend';
+  const newStunden = manuelleStunden ? parseFloat(prompt('Stunden:', entry.stunden || (newTyp === 'arbeit' ? '8' : '')) || '0') : 0;
+  if (newTyp === 'abwesend' && !(newStunden > 0)) { showToast('Bitte Stunden der Abwesenheit eingeben.'); return; }
   const newBemerkung = prompt('Bemerkung:', entry.bemerkung || '') || '';
 
   try {

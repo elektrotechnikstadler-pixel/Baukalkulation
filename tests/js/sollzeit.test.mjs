@@ -16,6 +16,7 @@ vm.runInContext(script, context, { filename: 'public/sollzeit.js' });
 const {
   bkTagesSoll,
   bkIstStundenEintrag,
+  bkGespeicherteStunden,
   bkFeiertage,
   bkVirtuelleFeiertage,
   bkGleitzeitSaldo,
@@ -62,6 +63,32 @@ test('bkIstStundenEintrag erfüllt alle gemeinsamen Fälle', () => {
       fall.name,
     );
   }
+});
+
+test('bkGespeicherteStunden speichert die eingegebene Dauer bei Abwesend', () => {
+  assert.equal(typeof bkGespeicherteStunden, 'function');
+  const user = { sollstundenTag: 8, arbeitstage: '1,2,3,4,5' };
+  const custom = [
+    { value: 'montage', isArbeit: true },
+    { value: 'schulung', isArbeit: true, istGleichSoll: true },
+    { value: 'frei', isArbeit: false },
+  ];
+  const fall = (typ, stunden, zeitspanne) =>
+    bkGespeicherteStunden(user, { datum: '2025-03-17', typ, stunden }, custom, zeitspanne);
+
+  // Abwesend: Dauer wird gespeichert, zählt aber nicht ins Ist (Bug: mobile_light speicherte 0 h).
+  assert.equal(fall('abwesend', 2.5), 2.5);
+  assert.equal(bkIstStundenEintrag(user, { datum: '2025-03-17', typ: 'abwesend', stunden: 2.5 }, custom), 0);
+  assert.equal(fall('sonstig', 3, true), 3, 'Sonstig als Zeitspanne');
+  assert.equal(fall('sonstig', 3, false), 0, 'Sonstig ganztägig');
+  assert.equal(fall('arbeit', 7.25), 7.25);
+  assert.equal(fall('montage', 4), 4, 'Arbeitstyp ohne Ist = Soll');
+  assert.equal(fall('schulung', 0), 8, 'Arbeitstyp mit Ist = Soll');
+  assert.equal(fall('frei', 4), 0);
+  assert.equal(fall('urlaub', 0), 8);
+  assert.equal(fall('krank', 0), 8);
+  assert.equal(fall('gleitzeit', 5), 0);
+  assert.equal(fall('abwesend', 'x'), 0, 'ungültige Eingabe');
 });
 
 test('bkFeiertage erfüllt alle gemeinsamen Fälle', () => {

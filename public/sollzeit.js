@@ -86,6 +86,17 @@
     return definition.istGleichSoll === true ? bkTagesSoll(user, entry.datum) : hours;
   }
 
+  // Zu speichernde Stunden eines erfassten Eintrags. Nicht mit den Ist-Stunden verwechseln:
+  // „Abwesend“ und „Sonstig“ als Zeitspanne dokumentieren die eingegebene Dauer, zählen
+  // aber 0 h ins Ist. Alle übrigen Typen speichern ihre Ist-Stunden.
+  function bkGespeicherteStunden(user, entry, customTypen, zeitspanne) {
+    if (!entry || typeof entry !== 'object') return 0;
+    if (entry.typ === 'abwesend' || (entry.typ === 'sonstig' && zeitspanne === true)) {
+      return numericValue(entry.stunden) ?? 0;
+    }
+    return bkIstStundenEintrag(user, entry, customTypen);
+  }
+
   function dateKeyFromParts(year, month, day) {
     return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
@@ -332,6 +343,7 @@
 
   global.bkTagesSoll = bkTagesSoll;
   global.bkIstStundenEintrag = bkIstStundenEintrag;
+  global.bkGespeicherteStunden = bkGespeicherteStunden;
   global.bkFeiertage = bkFeiertage;
   global.bkVirtuelleFeiertage = bkVirtuelleFeiertage;
   global.bkGleitzeitSaldo = bkGleitzeitSaldo;

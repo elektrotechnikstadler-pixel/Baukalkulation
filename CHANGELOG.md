@@ -37,6 +37,31 @@
 
 ---
 
+## Unveröffentlicht
+
+---
+
+## v3.0.21 – Zeiterfassung: Abwesend speichert die eingegebenen Stunden
+
+### Behoben
+- **„Abwesend“ speichert die eingegebenen Stunden (Mobile-Light):** Seit v3.0.10 wurde jede Abwesenheit –
+  neu erfasst oder bearbeitet – mit 0 h gespeichert, weil Mobile-Light die Ist-Stunden (bei Abwesend
+  immer 0 h) statt der Eingabe ablegte. Gleiches galt beim Bearbeiten einer „Sonstig“-Zeitspanne. In der
+  mobilen Ansicht war die Erfassung seit v3.0.13 korrekt. Die Ist-Berechnung ändert sich nicht: Abwesend
+  zählt weiterhin 0 h. Bereits mit 0 h gespeicherte Einträge lassen sich nicht automatisch korrigieren,
+  da die Eingabe nicht gespeichert wurde.
+- **Stundenauswertung (Desktop):** Beim Nachtragen/Bearbeiten von „Abwesend“ war das Stundenfeld
+  ausgeblendet; neu nachgetragene Abwesenheiten erhielten still den Vorgabewert 8 h. Das Feld ist jetzt
+  sichtbar und Pflicht, ein Datumsbereich ist für Abwesend nicht mehr wählbar.
+- **Stundenauswertung (Mobil):** Bearbeiten eines Abwesend-Eintrags setzte die Stunden auf 0 h; die Stunden
+  werden jetzt abgefragt.
+
+### Intern
+- Gemeinsame Regel `bkGespeicherteStunden()` in `public/sollzeit.js` für die zu speichernden Stunden,
+  genutzt von Mobil und Mobile-Light, mit JS-Test.
+
+---
+
 ## v3.0.20 – Zeitgesteuerte Serversicherung mit Laufprotokoll
 
 ### Neu
