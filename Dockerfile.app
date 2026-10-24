@@ -22,7 +22,9 @@ RUN npm ci --no-audit --prefer-offline \
 # ============================================================
 # Stage 2: PHP-Applikation (Apache)
 # ============================================================
-FROM php:8.3-apache
+# Patch-Version gepinnt: PHP >= 8.3.36 behebt die kritischen RCE-Lücken
+# CVE-2026-109618 / CVE-2026-109619 (php.net-Advisory vom 21.10.2026).
+FROM php:8.3.36-apache
 
 # ============================================================
 # Build-Flags für modulare Installation
@@ -75,7 +77,7 @@ RUN a2enmod rewrite headers
 RUN sed -ri '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
 # PHP-Konfiguration
-RUN echo "upload_max_filesize = 100M\npost_max_size = 110M\nmax_execution_time = 120\nmax_input_time = 300\nmemory_limit = 256M\nopcache.enable=1\nopcache.memory_consumption=128\nopcache.max_accelerated_files=4000\nopcache.validate_timestamps=0\ndate.timezone = Europe/Berlin\nsession.gc_maxlifetime = 2592000\nsession.cookie_lifetime = 2592000" \
+RUN echo "upload_max_filesize = 100M\npost_max_size = 110M\nmax_execution_time = 120\nmax_input_time = 300\nmemory_limit = 256M\nopcache.enable=1\nopcache.memory_consumption=128\nopcache.max_accelerated_files=4000\nopcache.validate_timestamps=0\ndate.timezone = Europe/Berlin\nsession.gc_maxlifetime = 2592000\nsession.cookie_lifetime = 2592000\nsession.upload_progress.enabled = 0\nexpose_php = Off" \
     > /usr/local/etc/php/conf.d/custom.ini \
     && docker-php-ext-install opcache
 

@@ -41,6 +41,23 @@
 
 ---
 
+## v3.0.22 – Sicherheitsupdate PHP 8.3.36
+
+### Sicherheit
+- **PHP 8.3.36:** Das App-Image baut jetzt fest auf `php:8.3.36-apache`. Diese Version behebt zwei kritische
+  Lücken im PHP-Interpreter (CVE-2026-109618, CVE-2026-109619), über die ein nicht angemeldeter Angreifer
+  Code auf dem Server ausführen konnte (php.net-Advisory vom 21.10.2026). Alle Instanzen sollten das
+  Update zeitnah einspielen.
+- **PHP-Härtung:** `session.upload_progress.enabled = 0` (von php.net empfohlene Zusatzmaßnahme) und
+  `expose_php = Off` (PHP-Version nicht mehr im HTTP-Header).
+- **PDF-Texterkennung:** `smalot/pdfparser` 2.13.1 behebt Denial-of-Service über präparierte PDFs; beim
+  Einlesen hochgeladener PDFs wird die entpackte Datenmenge zusätzlich auf 32 MB je Datenstrom begrenzt.
+
+### Intern
+- Paket-Updates: `horstoeko/zugferd` 1.0.133, Symfony 7.4.21, `setasign/fpdi` 2.6.9.
+
+---
+
 ## v3.0.21 – Zeiterfassung: Abwesend speichert die eingegebenen Stunden
 
 ### Behoben

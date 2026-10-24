@@ -57,7 +57,12 @@ class FileActions
                     ? (string)shell_exec("timeout 30 pdftotext -l 3 $escaped - 2>/dev/null")
                     : '';
                 if (mb_strlen(trim($text)) < 20 && feature_enabled('pdfparser')) {
-                    $parser = new \Smalot\PdfParser\Parser();
+                    // Hochgeladene PDFs sind nicht vertrauenswürdig: Dekomprimierungsbomben
+                    // begrenzen, damit kein Memory-Limit-Abbruch provoziert werden kann.
+                    $pdfConfig = new \Smalot\PdfParser\Config();
+                    $pdfConfig->setDecodeMemoryLimit(32 * 1024 * 1024);
+                    $pdfConfig->setRetainImageContent(false);
+                    $parser = new \Smalot\PdfParser\Parser([], $pdfConfig);
                     $pdf = $parser->parseFile($filePath);
                     $text = $pdf->getText();
                     // Nur erste 5000 Zeichen für Klassifikation
