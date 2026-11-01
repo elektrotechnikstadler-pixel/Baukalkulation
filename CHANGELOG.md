@@ -37,6 +37,17 @@
 
 ---
 
+## v3.0.24 – Testkorrektur NAS-Abgleich (CI)
+
+### Intern
+- **CI wieder grün:** Der Test für das Übertragen ausgelagerter Speicherpfade legte seinen Testordner auf dem
+  GitHub-Runner unter `/home` an, der für den NAS-Abgleich bewusst gesperrt ist. Die Sperrliste lässt sich jetzt
+  ausschließlich im Code (Konstruktor-Parameter, nicht per Einstellung oder Umgebungsvariable) für Tests ersetzen;
+  die Sperre für übergeordnete Ordner von `data/` bzw. des App-Verzeichnisses bleibt immer aktiv. Keine
+  Verhaltensänderung für Installationen. (AP-20261012-datensicherung-nas, T4-Folgefix)
+
+---
+
 ## v3.0.23 – Überwachung mit Fehler-Mails und NAS-Abgleich
 
 ### AP-20261012-datensicherung-nas, T3 – Überwachung und Systemmeldungen

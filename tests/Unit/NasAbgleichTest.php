@@ -163,7 +163,7 @@ final class NasAbgleichTest extends TestCase
 
     public function testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle(): void
     {
-        $externDir = dirname(dirname(__DIR__, 2)) . DIRECTORY_SEPARATOR . 'nas-extern-backups';
+        $externDir = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'nas-extern-backups';
         $this->removeDir($externDir);
         mkdir($externDir, 0777, true);
         $externDir = realpath($externDir) ?: $externDir;
@@ -186,7 +186,7 @@ final class NasAbgleichTest extends TestCase
             ],
         ]);
 
-        $result = $this->newNasAbgleich()->abgleichen();
+        $result = $this->newNasAbgleich(systemPfade: [])->abgleichen();
 
         $this->assertSame(7, $result['transfers']);
         $this->assertSame(200, $result['bytes']);
@@ -306,6 +306,39 @@ final class NasAbgleichTest extends TestCase
     }
 
 
+
+    public function testAbgleichenUeberspringtDataDirVorfahrAuchBeiLeererSystempfadListe(): void
+    {
+        $vorfahr = dirname((string) APP_ROOT);
+        file_put_contents($this->dataDir . DIRECTORY_SEPARATOR . 'paths_config.json', json_encode([
+            'backups' => $vorfahr,
+        ], JSON_UNESCAPED_UNICODE));
+
+        $this->storeNas($this->nasConfig(['passwort' => 'Geheim!123']));
+        $this->writeControl([
+            'queue' => [
+                ['stdout' => "obscured-pass\n"],
+                ['exitCode' => 0],
+                ['exitCode' => 0],
+                ['stdout' => "obscured-pass\n"],
+                ['exitCode' => 0, 'stats' => ['transfers' => 1, 'bytes' => 10, 'errors' => 0]],
+                ['exitCode' => 0],
+            ],
+        ]);
+
+        $result = $this->newNasAbgleich(systemPfade: [])->abgleichen();
+
+        $this->assertSame(0, $result['externePfade']);
+        $this->assertSame(1, $result['externeUebersprungen']);
+
+        $copyBefehle = array_values(array_filter(
+            $this->logEntries(),
+            static fn(array $entry): bool => ($entry['command'] ?? '') === 'copy',
+        ));
+        $this->assertCount(1, $copyBefehle);
+        $this->assertSame(rtrim($this->dataDir, '/\\'), $copyBefehle[0]['argv'][1] ?? null);
+    }
+
     public function testAbgleichenUeberspringtExternePfadeInnerhalbVonAppRootAusserhalbDataDir(): void
     {
         if (!defined('APP_ROOT')) {
@@ -341,34 +374,90 @@ final class NasAbgleichTest extends TestCase
         $this->assertSame(rtrim($this->dataDir, '/\\'), $copyBefehle[0]['argv'][1] ?? null);
     }
 
-    public function testAbgleichenUeberspringtExternePfadeInUnixSystempfaden(): void
+    public function testAbgleichenUeberspringtTmpPfadInUnixSystempfaden(): void
     {
         if (DIRECTORY_SEPARATOR !== '/') {
-            $this->markTestSkipped('Unix-Systempfade wie /tmp sind unter Windows nicht reproduzierbar.');
+            $this->markTestSkipped('Unix-Systempfade wie /tmp/... sind unter Windows nicht reproduzierbar.');
         }
 
-        $tmp = realpath('/tmp');
-        if ($tmp === false) {
-            $this->markTestSkipped('Systempfad /tmp ist auf dieser Umgebung nicht verfuegbar.');
+        $tmpPfad = '/tmp/nas-abgleich-test-systempfad';
+        $this->removeDir($tmpPfad);
+
+        if (!@mkdir($tmpPfad, 0777, true) && !is_dir($tmpPfad)) {
+            $this->markTestSkipped('Systempfad /tmp ist auf dieser Umgebung nicht reproduzierbar.');
         }
 
-        file_put_contents($this->dataDir . DIRECTORY_SEPARATOR . 'paths_config.json', json_encode([
-            'backups' => $tmp,
-        ], JSON_UNESCAPED_UNICODE));
+        $tmp = realpath($tmpPfad) ?: $tmpPfad;
 
-        $this->storeNas($this->nasConfig(['passwort' => 'Geheim!123']));
-        $this->writeControl([
-            'queue' => [
-                ['stdout' => "obscured-pass\n"],
-                ['exitCode' => 0],
-                ['exitCode' => 0],
-                ['stdout' => "obscured-pass\n"],
-                ['exitCode' => 0, 'stats' => ['transfers' => 1, 'bytes' => 10, 'errors' => 0]],
-                ['exitCode' => 0],
-            ],
-        ]);
+        try {
+            file_put_contents($this->dataDir . DIRECTORY_SEPARATOR . 'paths_config.json', json_encode([
+                'backups' => $tmp,
+            ], JSON_UNESCAPED_UNICODE));
 
-        $result = $this->newNasAbgleich()->abgleichen();
+            $this->storeNas($this->nasConfig(['passwort' => 'Geheim!123']));
+            $this->writeControl([
+                'queue' => [
+                    ['stdout' => "obscured-pass\n"],
+                    ['exitCode' => 0],
+                    ['exitCode' => 0],
+                    ['stdout' => "obscured-pass\n"],
+                    ['exitCode' => 0, 'stats' => ['transfers' => 1, 'bytes' => 10, 'errors' => 0]],
+                    ['exitCode' => 0],
+                ],
+            ]);
+
+            $result = $this->newNasAbgleich()->abgleichen();
+        } finally {
+            $this->removeDir($tmpPfad);
+        }
+
+        $this->assertSame(0, $result['externePfade']);
+        $this->assertSame(1, $result['externeUebersprungen']);
+
+        $copyBefehle = array_values(array_filter(
+            $this->logEntries(),
+            static fn(array $entry): bool => ($entry['command'] ?? '') === 'copy',
+        ));
+        $this->assertCount(1, $copyBefehle);
+        $this->assertSame(rtrim($this->dataDir, '/\\'), $copyBefehle[0]['argv'][1] ?? null);
+    }
+
+    public function testAbgleichenUeberspringtHomePfadInUnixSystempfadenWennReproduzierbar(): void
+    {
+        if (DIRECTORY_SEPARATOR !== '/') {
+            $this->markTestSkipped('Unix-Systempfade wie /home/... sind unter Windows nicht reproduzierbar.');
+        }
+
+        $homePfad = '/home/nas-abgleich-test-systempfad';
+        $this->removeDir($homePfad);
+
+        if (!@mkdir($homePfad, 0777, true) && !is_dir($homePfad)) {
+            $this->markTestSkipped('Systempfad /home ist auf dieser Umgebung nicht reproduzierbar (keine Schreibrechte).');
+        }
+
+        $home = realpath($homePfad) ?: $homePfad;
+
+        try {
+            file_put_contents($this->dataDir . DIRECTORY_SEPARATOR . 'paths_config.json', json_encode([
+                'backups' => $home,
+            ], JSON_UNESCAPED_UNICODE));
+
+            $this->storeNas($this->nasConfig(['passwort' => 'Geheim!123']));
+            $this->writeControl([
+                'queue' => [
+                    ['stdout' => "obscured-pass\n"],
+                    ['exitCode' => 0],
+                    ['exitCode' => 0],
+                    ['stdout' => "obscured-pass\n"],
+                    ['exitCode' => 0, 'stats' => ['transfers' => 1, 'bytes' => 10, 'errors' => 0]],
+                    ['exitCode' => 0],
+                ],
+            ]);
+
+            $result = $this->newNasAbgleich()->abgleichen();
+        } finally {
+            $this->removeDir($homePfad);
+        }
 
         $this->assertSame(0, $result['externePfade']);
         $this->assertSame(1, $result['externeUebersprungen']);
@@ -473,9 +562,14 @@ final class NasAbgleichTest extends TestCase
         $this->assertSame('NAS_VERBINDUNG', $result['fehlerCode'] ?? null);
     }
 
-    private function newNasAbgleich(): NasAbgleich
+    private function newNasAbgleich(?array $systemPfade = null): NasAbgleich
     {
-        return new NasAbgleich($this->db, [PHP_BINARY, $this->fakeRclone], static fn(): \DateTimeImmutable => new \DateTimeImmutable('2026-11-01 10:00:00'));
+        return new NasAbgleich(
+            $this->db,
+            [PHP_BINARY, $this->fakeRclone],
+            static fn(): \DateTimeImmutable => new \DateTimeImmutable('2026-11-01 10:00:00'),
+            $systemPfade,
+        );
     }
 
     /** @param array<string,mixed> $overrides */

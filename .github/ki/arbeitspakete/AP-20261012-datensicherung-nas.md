@@ -2,7 +2,7 @@
 
 | Feld | Wert |
 |---|---|
-| Status | T1 → 3.0.19, T2 → 3.0.20, T3 + T4 → 3.0.23 abgeschlossen; T5 (PostgreSQL-Bereich) offen |
+| Status | T1 → 3.0.19, T2 → 3.0.20, T3 + T4 → 3.0.23 abgeschlossen, CI-Folgefix → 3.0.24; T5 (PostgreSQL-Bereich) offen |
 | Typ | Feature |
 | Testläufe rot | T2: 1 · T3: R2 2 (N1; Test widersprach Vertrag), R3 1 (Folge N1) · T4: R1 8/12 nur Linux PHP 8.2 (Leitstand), R2 1 (neue Kennzahl), R3 2 (Filterstrings, `pfad`-Trim) – Testanpassungen jeweils mit Begründung (E-090) |
 | Review-Runden | T1: 1 · T2: 2 · T3: 3 · T4: 3 |
@@ -1317,6 +1317,30 @@ sind unten dokumentiert.
 - **Commits:** Ein gemeinsamer Feature-Commit für T3 + T4, weil Planer, `SystemJobActions` und `script.js` von beiden geändert wurden und sich nicht sauber trennen lassen. Abweichung von „zwei Feature-Commits“.
 - **Gemischte Dateien:** Fremde, parallel entstandene Änderungen (E-091/E-092 in `erkenntnisse.md`, `AGENTS.md`, `.github/agents/*`, `docs/ki-architektur.md`, `AP-20261101-*`) werden **nicht** mitcommittet. In gemischten Dateien kommen nur die eigenen Zeilen in den Index (E-076).
 
+#### T4 – CI-Folgefix (Entwickler, Modell: Claude Sonnet 5 (copilot))
+
+- **Anlass:** Die CI (GitHub-Runner, Repo unter `/home/runner/work/…`) ist bei
+  `NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` rot, weil der
+  externe Testordner neben dem Repo (also unter `/home`) liegt und daher durch
+  `NasAbgleich::SYSTEM_PFADE` gesperrt wird – Testabbruch mit „5 is identical to 7“. Produktverhalten
+  ist korrekt; der Test kann den Erfolgsfall auf dem Runner nicht prüfen, weil dort jeder
+  beschreibbare Ort unter `/home` oder `/tmp` liegt.
+- **Änderung (minimal, src/Services/Jobs/NasAbgleich.php):** Konstruktor um optionalen vierten
+  Parameter `?array $systemPfade = null` erweitert:
+  `NasAbgleich::__construct(\PDO $db, array $rcloneBefehl = ['rclone'], ?callable $uhr = null, ?array $systemPfade = null)`.
+  `null` (Standard) übernimmt unverändert `self::SYSTEM_PFADE` – alle Produktiv-Aufrufer
+  (`NasAbgleichCommand`, `SystemJobActions`) bleiben unverändert. Ein übergebenes Array ersetzt die
+  Liste nur für diese Instanz (per `grep "new NasAbgleich("` gegengeprüft: alle Aufrufer nutzen
+  höchstens drei positionale Argumente, der neue vierte Parameter ist rein additiv). Keine
+  Konfiguration über Einstellungen/Umgebung (keine neue Angriffsfläche). `istGesperrterExternerPfad`
+  liest jetzt die Instanzliste `$this->systemPfade` statt der Konstante; die Vorfahren-/APP_ROOT-
+  Prüfungen bleiben unverändert und nicht abschaltbar. PHPDoc markiert den Parameter als „nur für
+  Tests“.
+- **Prüfung:** `php -l` ohne Fehler; `phpstan analyse --memory-limit=2G` 0 Fehler (153/153);
+  `phpunit --filter "NasAbgleichTest|NasJobTest"` lokal 30 Tests/124 Assertions, 1 übersprungen
+  (derselbe Test wie auf dem CI-Runner, lokal nur übersprungen statt rot, da `C:\Users\...` kein
+  Systempfad ist) – keine Teständerung vorgenommen.
+
 ## 4. Tests
 
 ### T1 – Runde 1 (Tester, Modell: GPT-5.5 (copilot))
@@ -1552,6 +1576,43 @@ Die externen rclone-Filter wurden auf die in Runde 3 implementierten, unveranker
 | php-cs-fixer | **GRUEN** | `Found 0 of 52 files that can be fixed` |
 | phpstan | **GRUEN** | `[OK] No errors` |
 
+### T4 – CI-Folgefix (Tester, Modell: GPT-5 (copilot))
+
+**Status:** GRUEN
+
+Runde 2: Review-Befunde 1/2 behoben - `/tmp`-Sperrfall separat verifiziert (Nicht-root-Lauf: `testAbgleichenUeberspringtTmpPfadInUnixSystempfaden` lief), `/home`-Sperrfall separat mit begruendetem Skip ohne Schreibrechte (Nicht-root-Lauf: `testAbgleichenUeberspringtHomePfadInUnixSystempfadenWennReproduzierbar` wurde geskippt); Docker-Ergebnisse: PHP 8.2/8.4 je **OK (22 Tests, 95 Assertions)**, Nicht-root PHP 8.2 **OK, but some tests were skipped!** (22 Tests, 91 Assertions, 1 Skip).
+
+**Begruendung (E-090):**
+- CI-Fehler war reproduzierbar: `tests/Unit/NasAbgleichTest.php::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` legte den externen Pfad unter `/home/...` an; auf Linux-Runnern ist `/home` in `NasAbgleich::SYSTEM_PFADE` gesperrt, dadurch wurde der externe Copy-Schritt uebersprungen (Transfervarianten 5 statt 7).
+- Erfolgsfall-Tests fuer erlaubte externe Pfade laufen jetzt instanzlokal mit `systemPfade: []`, damit der fachliche Erfolgsfall plattformunabhaengig bleibt, ohne Produktiv-Sperrliste zu lockern.
+- Sperrtests bleiben mit Standardliste aktiv; zusaetzlich abgesichert: `/home/...` und `/tmp/...` sind unter Linux gesperrt, unter Windows mit begruendetem Skip.
+- Neues Guardrail: auch mit `systemPfade: []` bleibt ein Vorfahr von `DATA_DIR` gesperrt (Vorfahren-/`APP_ROOT`-Pruefung unveraendert).
+
+**Geaenderte Tests:**
+- `NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` -> `new NasAbgleich(..., systemPfade: [])` fuer externen Erfolgsfall.
+- Neu: `NasAbgleichTest::testAbgleichenUeberspringtDataDirVorfahrAuchBeiLeererSystempfadListe`.
+- Neu (statt kombiniertem Unix-Systempfad-Test): `NasAbgleichTest::testAbgleichenUeberspringtTmpPfadInUnixSystempfaden` (muss unter Linux laufen) und `NasAbgleichTest::testAbgleichenUeberspringtHomePfadInUnixSystempfadenWennReproduzierbar` (bei fehlenden Schreibrechten begruendeter Skip).
+
+**Ausgefuehrt (Pflicht):**
+- `docker run --rm -v "${PWD}:/home/runner/work/app" -w /home/runner/work/app php:8.2-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `docker run --rm -v "${PWD}:/home/runner/work/app" -w /home/runner/work/app php:8.3-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `docker run --rm -v "${PWD}:/home/runner/work/app" -w /home/runner/work/app php:8.4-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpunit --filter "NasAbgleichTest|NasJobTest|SystemPlanerApiTest"`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/php-cs-fixer check --diff`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpstan analyse --memory-limit=2G`
+
+**Ergebnisse je Umgebung:**
+| Umgebung | Ergebnis |
+|---|---|
+| Windows, PHP 8.2.31 (lokal) | **GRUEN**: `NasAbgleichTest|NasJobTest|SystemPlanerApiTest` -> 63 Tests, 650 Assertions, 0 Failures, 1 Skip (`/home`/`/tmp`-Sperrtest unter Windows). |
+| Linux `/home/runner/work/app`, PHP 8.2.35 | **GRUEN**: 31 Tests, 132 Assertions, 0 Failures. |
+| Linux `/home/runner/work/app`, PHP 8.3.36 | **GRUEN**: 31 Tests, 132 Assertions, 0 Failures. |
+| Linux `/home/runner/work/app`, PHP 8.4.27 | **GRUEN**: 31 Tests, 132 Assertions, 0 Failures. |
+| php-cs-fixer | **GRUEN**: `Found 0 of 52 files that can be fixed`. |
+| phpstan | **GRUEN**: `[OK] No errors`. |
+
+**Aufraeumen:** `tests/tmp` im Repo und `nas-extern-backups` neben dem Repo entfernt.
+
 ## 5. Review
 
 ### T1 – Runde 1 (Reviewer, Modell: GPT-5.5 (copilot))
@@ -1680,3 +1741,4 @@ Neu:
 - E-021, E-022 (Backup/Migration) aus Review T2 in `erkenntnisse.md`, erstes Auftreten → nur dort.
 - T3/T4: E-023 (Claim vor Zustellung), E-024 (Zeitbudget an der innersten Schleife), E-025 (UI-Hinweise nur aus behebbaren Zuständen), E-026 (Filter gegen echtes Werkzeug prüfen, Pfadsperre), E-027 (Tageslauf nur im Tageslauf-Pfad → `php-backend.instructions.md`, 2. Auftreten), E-067 (Prozess-Code unter Linux mit kleinster PHP-Version testen). E-087 → `AGENTS.md` (2. Auftreten).
 - Kennzahlen T3/T4: je 3 Review-Runden (Schleifenbremse erreicht, nicht überschritten). Rote Testläufe überwiegend aus Leitstand-/Reviewer-Befunden; davon zwei Tests, die einer Vertragsvorgabe widersprachen (E-090).
+- **CI nach Release 3.0.23 rot** (1 Test, Repository auf dem Runner unter `/home` → gesperrt). Nach Rückfrage beim Nutzer (Schleifenbremse) gab es den Folge-Patch 3.0.24: Sperrliste per Konstruktor-Parameter für Tests ersetzbar, Tests getrennt und isoliert. Leitstand-Prüfung: CI-Situation per Docker unter `/home/runner/…` nachgestellt, auch als Nicht-root. Gesamtläufe SQLite 628 / PostgreSQL 629 grün, Review APPROVE. E-067 (2. Auftreten) → `tests.instructions.md`.

@@ -84,13 +84,25 @@ final class NasAbgleich
     private array $rcloneBefehl;
     /** @var callable(): \DateTimeImmutable */
     private $uhr;
+    /** @var list<string> */
+    private array $systemPfade;
 
-    /** @param list<string> $rcloneBefehl Standard: ['rclone'], per BK_RCLONE_BIN überschreibbar (E-034). */
+    /**
+     * @param list<string> $rcloneBefehl Standard: ['rclone'], per BK_RCLONE_BIN überschreibbar (E-034).
+     * @param list<string>|null $systemPfade Nur für Tests: ersetzt self::SYSTEM_PFADE für diese Instanz
+     *        (z. B. damit ein CI-Runner, auf dem jeder beschreibbare Ort unter /home oder /tmp liegt, den
+     *        Erfolgsfall ausgelagerter Pfade prüfen kann). `null` (Standard) verwendet die feste Liste aus
+     *        self::SYSTEM_PFADE; keine Konfiguration über Einstellungen/Umgebung (keine neue Angriffsfläche).
+     *        Die Vorfahren-/APP_ROOT-Prüfungen in istGesperrterExternerPfad() bleiben davon unberührt und
+     *        sind nicht abschaltbar.
+     */
     public function __construct(
         private readonly \PDO $db,
         array $rcloneBefehl = ['rclone'],
         ?callable $uhr = null,
+        ?array $systemPfade = null,
     ) {
+        $this->systemPfade = $systemPfade ?? self::SYSTEM_PFADE;
         if ($rcloneBefehl === ['rclone']) {
             $env = getenv('BK_RCLONE_BIN');
             if (is_string($env) && $env !== '') {
@@ -393,7 +405,7 @@ final class NasAbgleich
             return true; // liegt innerhalb von APP_ROOT, aber (laut Aufrufer) außerhalb von DATA_DIR
         }
         $realNorm = str_replace('\\', '/', $real);
-        foreach (self::SYSTEM_PFADE as $systemPfad) {
+        foreach ($this->systemPfade as $systemPfad) {
             if ($this->istVorfahrOderGleich($systemPfad, $realNorm)) {
                 return true;
             }
