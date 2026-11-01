@@ -11,6 +11,7 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 - Analyse: `php vendor/bin/phpstan analyse --memory-limit=2G` – keine neuen Baseline-Einträge
 - Format: `php vendor/bin/php-cs-fixer check --diff` (prüft vorerst nur `tests/`)
 - Windows: `php` fehlt in neuen Terminals oft im PATH → absoluten WinGet-Pfad nutzen; npm als `npm.cmd`
+- Windows: Dateien (auch Hilfsskripte mit Umlauten) nur per Edit-/Create-Werkzeug oder Node `fs` mit `'utf8'` schreiben – nie PowerShell 5.1 `Set-Content`/`Out-File`/`Get-Content` (E-087)
 
 ## Unverhandelbar
 

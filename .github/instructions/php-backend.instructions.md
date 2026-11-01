@@ -17,3 +17,4 @@ applyTo: "**/src/**/*.php, **/modules/**/*.php, **/public/*.php, **/cron_*.php, 
 - Neuer Code ohne neue PHPStan-Baseline-Einträge (Level 5).
 - Zeiterfassung: Soll/Ist, Feiertage, Gleitzeit, Urlaubsanspruch nur über `Services\Sollzeit`, `Feiertage`, `Gleitzeit` (JS-Gegenstück `public/sollzeit.js` synchron halten) – E-041.
 - Ändert sich eine fachliche Regel oder Datenquelle, alle Schreib-/Einstiegspunkte per grep inventarisieren (Admin-Endpunkte, Altimporte, Reparatur, `cron_*`, `bin/console`, Desktop/Mobil) und über eine zentrale Funktion führen – E-083, E-086.
+- Geplante Jobs: Tageslauf-Felder (`tageslaufDatum`/`-Status`/`versuche`) nur im Tageslauf-Pfad schreiben, nie aus manuellen Läufen; „nicht ausgeführt“ (`gesperrt`, `uebersprungen`) nie als `ok` – E-021, E-027.
