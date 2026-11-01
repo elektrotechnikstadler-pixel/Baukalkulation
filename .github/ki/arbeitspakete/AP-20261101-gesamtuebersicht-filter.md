@@ -2,11 +2,11 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | abgeschlossen (lokal committet, Release nach B3) |
 | Typ | Bugfix |
 | Testläufe rot | 0 |
-| Review-Runden | 0 |
-| Commit | – |
+| Review-Runden | 2 |
+| Commit | fb8ca84 (Bündel B1) |
 
 ## 1. Auftrag
 
@@ -63,15 +63,52 @@
 
 **Entscheidung Nutzer (2026-11-01):** KPI-Karten werden ebenfalls auf die gefilterte Menge umgerechnet.
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Festlegung Leitstand (B1):** Summen als reine Funktion `bkUebersichtSummen(rows, sichtbareIds)` in neuer Datei `public/uebersicht-summen.js` (Muster `verwaltung-nav.js`, Einbindung in `index.html` + `sw.js`), testbar per `node:vm`. Regel: Sichtbare Oberprojekte und eigenständige Baustellen (nicht `excluded`) zählen mit ihren aggregierten Werten. Sichtbare Unterprojekte zählen nur, wenn ihr Oberprojekt **nicht** sichtbar ist (keine Doppelzählung). KPI „Baustellen“ = Anzahl sichtbarer Zeilen.
+
+**Freigabe G1:** ☑ durch Nutzer am 2026-11-01 (Bündel B1)
 
 ## 3. Umsetzung
+- `public/uebersicht-summen.js` (neu): reine Funktion `bkUebersichtSummen(rows, sichtbareIds)`.
+- `public/script.js`: `renderUebersicht()`/neue `_ovAktualisiereSummen()` nutzen die Funktion für
+  Fußzeile + KPI-Karten nach Filter/Sortierung.
+- `public/index.html`, `public/sw.js`: Einbindung `uebersicht-summen.js?v=1` + Cache-Busting
+  (`script.min.js?v=247`, `CACHE_VERSION=bk-es-v250`).
+- `public/script.min.js`: neu minifiziert (`npm run minify`).
+- Keine PHP-Änderung (reiner Frontend-Bugfix, wie geplant).
+- Prüfungen (B1, Runde 2): `php vendor/bin/phpstan analyse --memory-limit=2G` → 0 Befunde;
+  `npm.cmd run test:js` → 27/27 grün (inkl. `uebersicht-summen.test.mjs`);
+  `node scripts/check-versions.mjs --strict` → OK; `node -e "new Function(...script.js)"` → Syntax OK.
+- Abweichung: keine.
+- Modell laut Aufruf (E-097): Entwickler-Agent, `entwickler.agent.md` → Claude Sonnet 5 (Selbstauskunft „GPT-5.1“ unzuverlässig, nicht überprüfbar). Runde 1 brach mit 402 ab; der Rest wurde gezielt nachdelegiert.
+
+**Korrekturrunde 1 (E-094):** Befund A: `bkUebersichtSummen` nutzt String-Set + `String(id)`-Vergleich,
+`filterUebersichtRows` sammelt `tr.dataset.id` ungecastet. Befund B: `updateSchnellnotiz` liest `id`
+zusätzlich aus `$_GET['id']` (Reihenfolge unverändert). Cache: `?v=2`/`?v=248`/`v251`; phpstan/test:js (27/27)/
+phpunit unit (346 OK)/check-versions grün. Modell laut Aufruf: Entwickler-Agent (Claude Sonnet 5).
 
 ## 4. Tests
-
-| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
-|---|---|---|---|---|
+- Lauf: `npm.cmd run test:js` -> **GRUEN** (29/29).
+- Matrix AK1 -> `tests/js/uebersicht-summen.test.mjs::ohne Filter summiert nur Oberprojekte ohne excluded` (JS).
+- Matrix AK2+AK3 -> `...::Filter auf Teilmenge ...`, `...::Parent + Unterprojekt sichtbar vermeidet Doppelzaehlung`, `...::gemischte ID-Typen ...`, `...::sichtbare Zahlen-IDs ...` (JS).
+- Matrix AK4 -> `...::leerer Filter liefert 0-Summen und anzahl 0` (JS).
+- Matrix AK5 -> `...::Reihenfolge der rows ist fuer Summen egal` (JS).
+- DB-Ergebnis: SQLite n/a, PostgreSQL n/a (reiner Frontend-Test).
+- Modell laut Aufruf (E-097): Tester-Agent, `tester.agent.md` → GPT-5.3-Codex.
 
 ## 5. Review
 
+**Sammelreview B1** (Reviewer, Modell aus dem Aufruf: GPT-5.3-Codex – GPT-5.5 nicht verfügbar, E-097; eingetragen vom Leitstand, da der Reviewer Runde 1 nicht ins AP schrieb, E-072)
+
+Runde 1: **CHANGES_REQUESTED**
+
+| Schwere | Datei:Zeile | Problem | Entscheidung Leitstand |
+|---|---|---|---|
+| Major | `public/uebersicht-summen.js`, `public/script.js` `filterUebersichtRows` | Typstrenger ID-Vergleich → Doppelzählung bei String-`parentId` | berechtigt → Korrekturrunde 1 (A) |
+| Major | `src/Handlers/PlanActions.php` `updateSchnellnotiz` | GET mit `?id=` liefert 404 statt 405 (E-015) | berechtigt, als Minor eingestuft (GET ändert nichts) → Korrekturrunde 1 (B) |
+| Major | Tests AP4/AP5 fehlen | E-090 | entfällt in dieser Runde: Tests nach `APPROVE` (E-094) |
+
+Runde 2 (nur Korrekturen A/B, E-094): **APPROVE** – A und B behoben, Reihenfolge 404 → 403 → 405 eingehalten, Cache-Busting konsistent.
+
 ## 6. Lernpunkte
+
+- E-096 (ID-Typen normalisieren), E-097 (Modell aus dem Aufruf, Rest nach Abbruch delegieren); Lernprotokoll 2026-11-01 „B1“.

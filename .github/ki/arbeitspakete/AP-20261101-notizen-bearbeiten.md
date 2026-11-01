@@ -2,11 +2,11 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | abgeschlossen (lokal committet, Release nach B3) |
 | Typ | Feature |
 | Testläufe rot | 0 |
-| Review-Runden | 0 |
-| Commit | – |
+| Review-Runden | 2 |
+| Commit | fb8ca84 (Bündel B1) |
 
 ## 1. Auftrag
 
@@ -69,15 +69,39 @@
 
 **Entscheidung Nutzer (2026-11-01):** Bearbeiten dürfen alle Nutzer, die die Schnellnotiz sehen (gleiche Sichtbarkeitsprüfung wie beim Laden).
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Festlegung Leitstand (B1, Vorschlag aus dem Plan):** Editierbar ist `text`; `zugewiesen_an` nur für admin/master (wie `saveSchnellnotiz`). Archivierte Notizen sind nicht bearbeitbar (409). Sichtbarkeit wie `loadSchnellnotizen`: admin/master alle; sonst Notiz mit `baustelleId` (die Baustellenansicht zeigt sie allen) oder `ersteller`/`zugewiesen_an` = Nutzer, `alle` oder eigene Gruppe – sonst 403.
+
+**Freigabe G1:** ☑ durch Nutzer am 2026-11-01 (Bündel B1)
 
 ## 3. Umsetzung
+- `src/Handlers/PlanActions.php`: `updateSchnellnotiz()` + private `kannSchnellnotizSehen()`
+  (Sichtbarkeit wie `loadSchnellnotizen`); `text` für alle Sichtberechtigten editierbar,
+  `zugewiesen_an` nur admin/master, archivierte Notizen → 409.
+- `public/api.php`: Routing `update_schnellnotiz` → `PlanActions::updateSchnellnotiz` (POST).
+- `public/script.js`: Desktop – `editSchnellnotiz(id)`/`editBaustelleSchnellnotiz(id,...)`,
+  `_openSchnellnotizEditModal()`, `_saveSchnellnotizEdit()` (Modal + POST, danach Reload).
+- `public/mobile.html`: `editSchnellnotizMobile(id)` + Bearbeiten-Button je Karte.
+- Cache-Busting: `script.min.js?v=247`, `CACHE_VERSION=bk-es-v250` (Runde 2, nach erneutem Minify).
+- Prüfungen (B1, Runde 2): `php vendor/bin/phpunit --filter "KundenArchivTest|Zeiterfassung|Kunden"`
+  → 51/51 grün; `php vendor/bin/phpstan analyse --memory-limit=2G` → 0 Befunde;
+  `node -e "new Function(...mobile.html <script>)"` → Syntax OK.
+- Abweichung: keine.
+- Modell laut Aufruf (E-097): Entwickler-Agent, `entwickler.agent.md` → Claude Sonnet 5 (Selbstauskunft „GPT-5.1“ unzuverlässig, nicht überprüfbar). Runde 1 brach mit 402 ab; der Rest wurde gezielt nachdelegiert.
 
 ## 4. Tests
-
-| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
-|---|---|---|---|---|
+- Lauf: `php vendor/bin/phpunit --filter "KundenArchivTest|SchnellnotizUpdateTest|ZeiterfassungBearbeiten|ZeiterfassungProjektbuchungTest"` -> **GRUEN** (SQLite) und via `scripts/test-pgsql.ps1` -> **GRUEN** (PostgreSQL).
+- Matrix AK1 -> `tests/Api/SchnellnotizUpdateTest.php::testErstellerKannTextAendernUndLoadZeigtNeuenText` (SQLite/PG).
+- Matrix AK2 -> `...::testBaustellenNotizDarfVonJedemAngemeldetenBearbeitetWerden` + `...::testZuweisungAnAlleOderEigeneGruppeErlaubtBearbeiten` (SQLite/PG; gleicher API-Pfad fuer Desktop/Mobile).
+- Matrix AK3 -> `...::testNichtSichtbareNotizLiefert403`, `...::testUnbekannteIdLiefert404`, `...::testGastUndAbgemeldeterNutzerErhalten401` (SQLite/PG).
+- Matrix AK4 -> `...::testGetMitSichtbarerIdLiefert405UndMitUnsichtbarerId403` (SQLite/PG).
+- Matrix AK5 -> `...::testArchivierteNotizLiefert409` (SQLite/PG).
+- Zusatzregeln -> `...::testLeererTextLiefert400`, `...::testNormalerNutzerKannZugewiesenAnNichtAendern`, `...::testAdminKannZugewiesenAnAendern` (SQLite/PG).
+- Modell laut Aufruf (E-097): Tester-Agent, `tester.agent.md` → GPT-5.3-Codex.
 
 ## 5. Review
 
+Siehe Sammelreview B1 in AP-20261101-gesamtuebersicht-filter.md (2 Runden, APPROVE).
+
 ## 6. Lernpunkte
+
+Siehe AP-20261101-gesamtuebersicht-filter.md.

@@ -2,11 +2,11 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | abgeschlossen (lokal committet, Release nach B3) |
 | Typ | Feature · Bugfix |
 | Testläufe rot | 0 |
-| Review-Runden | 0 |
-| Commit | – |
+| Review-Runden | 2 |
+| Commit | fb8ca84 (Bündel B1) |
 
 ## 1. Auftrag
 
@@ -69,15 +69,33 @@
 
 **Entscheidung Nutzer (2026-11-01):** Alt-Archive ohne `kundeId` werden in der Kundendetailansicht ausgeblendet.
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Freigabe G1:** ☑ durch Nutzer am 2026-11-01 (Bündel B1)
 
 ## 3. Umsetzung
+- `src/Handlers/BaustelleActions.php`: `listArchive()` liefert je Archiv `kundeId` (int|null) aus
+  `$snap['baustelle']['kundeId']`.
+- `public/script.js`: `renderKundenListe()` – Zeile klickbar (`onclick="openKundeForm(...)"`,
+  `cursor:pointer`), Telefon/E-Mail/Bearbeiten/Löschen mit `event.stopPropagation()`. `openKundeForm()`
+  filtert geladene Archive auf `a.kundeId === kunde.id` (Alt-Archive ohne `kundeId` ausgeblendet).
+- Abweichung vom Plan: `public/style.css` nicht geändert – Cursor/Hover per Inline-Style
+  (`style="cursor:pointer"`) statt eigener CSS-Klasse, kein funktionaler Unterschied.
+- Cache-Busting: `script.min.js?v=247`, `CACHE_VERSION=bk-es-v250` (Runde 2, nach erneutem Minify).
+- Prüfungen (B1, Runde 2): `php vendor/bin/phpunit --filter "KundenArchivTest|Zeiterfassung|Kunden"`
+  → 51/51 grün; `php vendor/bin/phpstan analyse --memory-limit=2G` → 0 Befunde;
+  `node scripts/check-versions.mjs --strict` → OK.
+- Modell laut Aufruf (E-097): Entwickler-Agent, `entwickler.agent.md` → Claude Sonnet 5 (Selbstauskunft „GPT-5.1“ unzuverlässig, nicht überprüfbar). Runde 1 brach mit 402 ab; der Rest wurde gezielt nachdelegiert.
 
 ## 4. Tests
-
-| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
-|---|---|---|---|---|
+- Lauf: `php vendor/bin/phpunit --filter "KundenArchivTest|SchnellnotizUpdateTest|ZeiterfassungBearbeiten|ZeiterfassungProjektbuchungTest"` -> **GRUEN** (SQLite) und via `scripts/test-pgsql.ps1` -> **GRUEN** (PostgreSQL).
+- Matrix AK3 -> `tests/Api/KundenArchivTest.php::testListArchiveLiefertKundeIdAuchWennFehlend` (SQLite/PG).
+- Matrix AK4+AK5 -> `tests/Api/KundenArchivTest.php::testListArchiveOrdnetMehrereKundenKorrektZu` (SQLite/PG).
+- Hinweis AK1/AK2 (Zeilenklick/stopPropagation) bleiben Frontend-E2E-Thema und sind nicht Teil dieses API-Buendels.
+- Modell laut Aufruf (E-097): Tester-Agent, `tester.agent.md` → GPT-5.3-Codex.
 
 ## 5. Review
 
+Siehe Sammelreview B1 in AP-20261101-gesamtuebersicht-filter.md (2 Runden, APPROVE).
+
 ## 6. Lernpunkte
+
+Siehe AP-20261101-gesamtuebersicht-filter.md.

@@ -2,11 +2,11 @@
 
 | Feld | Wert |
 |---|---|
-| Status | geplant |
+| Status | abgeschlossen (lokal committet, Release nach B3) |
 | Typ | Feature |
 | Testläufe rot | 0 |
-| Review-Runden | 0 |
-| Commit | – |
+| Review-Runden | 2 |
+| Commit | fb8ca84 (Bündel B1) |
 
 ## 1. Auftrag
 
@@ -66,15 +66,43 @@
 
 **Entscheidung Nutzer (2026-11-01):** Rechte wie Mobil – nur Auswertungs-Berechtigte (`canSeeStundenauswertung`); kein eigener Eigentümer-Pfad.
 
-**Freigabe G1:** ☐ durch Nutzer am …
+**Plankorrektur Leitstand (2026-11-01, E-072, vom Nutzer bestätigt):** Die Annahme „Desktop kann nicht bearbeiten“ stimmt nur für die **eigene Stundenerfassung**. Die Desktop-Stundenauswertung bearbeitet bereits (`saEditEntry` → `openSaEntryModal`, script.js ≈17159). Mobil bearbeitet eigene Einträge per Zeilenklick (`showStundenerfassungSheet(id)` + `saveStundenerfassung()` mit `editingSeId`, mobile.html ≈5107–5300) über `save_zeiterfassung` (fullSnapshot).
+**Neuer Umfang (ersetzt Schritte 1–3 und die Rechtefrage):** Die Desktop-Stundenerfassung (`renderSeDesktop()` ≈15801, `addStundenerfassungDesktop()` ≈15941, `saveSeDesktopEntries()` ≈16140) bekommt „Bearbeiten“ für dieselben Einträge wie Löschen (`canEdit`: letzte 5 Tage, nicht virtuell). Bearbeiten lädt den Eintrag ins vorhandene Erfassungsformular (Bearbeiten-Modus, Abbrechen). Speichern ändert den Eintrag an Ort und Stelle (gleiche `id`/`clientUuid`) mit denselben Validierungen wie Neu (Überschneidung, Urlaubslimit, ArbZG, Gleitzeit), ohne den bearbeiteten Eintrag selbst mitzuzählen; Rollback bei Fehler. Kein neuer Endpunkt, kein `admin_edit_zeiterfassung`; Mobil unverändert. Abnahmekriterien 1–6 gelten sinngemäß für die eigene Erfassung (AK5: Einträge außerhalb `canEdit` ohne Button).
+
+**Freigabe G1:** ☑ durch Nutzer am 2026-11-01 (Bündel B1)
 
 ## 3. Umsetzung
+- `public/script.js`: `_resetSeDesktopForm()` (neue Hilfsfunktion, von `openStundenerfassungModal()`
+  UND `cancelSeDesktopEdit()` genutzt); neue `editSeDesktop(id)` (lädt Eintrag ins Formular,
+  nur innerhalb `canEdit`-Regel wie beim Löschen), `cancelSeDesktopEdit()`, `_saveSeDesktopEdit()`
+  (gleiche Validierungen wie `addStundenerfassungDesktop()` – Überschneidung via
+  `findSeDesktopOverlap`, Urlaubslimit, Gleitzeit max. 1/Tag, ArbZG-Hinweise – jeweils ohne den
+  bearbeiteten Eintrag; `Object.assign` an Ort und Stelle, Rollback per Snapshot bei Fehler).
+  Keine neue API, kein `admin_edit_zeiterfassung` (wie im Plan festgelegt).
+- `public/index.html`: Formular-Buttons `seDesktopSubmitBtn`/`seDesktopCancelEditBtn`/
+  `seDesktopEditHint` bereits vorhanden (Runde 1), keine weitere Änderung nötig.
+- Cache-Busting: `script.min.js?v=247`, `CACHE_VERSION=bk-es-v250` (Minify nach den neuen Funktionen).
+- Prüfungen (B1, Runde 2): `php vendor/bin/phpunit --filter "KundenArchivTest|Zeiterfassung|Kunden"`
+  → 51/51 grün; `php vendor/bin/phpstan analyse --memory-limit=2G` → 0 Befunde;
+  `npm.cmd run test:js` → 27/27 grün; `node scripts/check-versions.mjs --strict` → OK;
+  `node -e "new Function(...script.js)"` → Syntax OK.
+- Abweichung vom Plan: kein separater Endpunkt/Backend-Änderung nötig (wie im „Neuer Umfang“
+  des Plans vermerkt); Datum-bis-Feld im Edit-Modus wird geleert und ausgeblendet statt genutzt
+  (Bearbeiten betrifft immer nur den einen Eintrag, kein Datumsbereich).
+- Modell laut Aufruf (E-097): Entwickler-Agent, `entwickler.agent.md` → Claude Sonnet 5 (Selbstauskunft „GPT-5.1“ unzuverlässig, nicht überprüfbar). Runde 1 brach mit 402 ab; der Rest wurde gezielt nachdelegiert.
 
 ## 4. Tests
-
-| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
-|---|---|---|---|---|
+- Lauf: `php vendor/bin/phpunit --filter "KundenArchivTest|SchnellnotizUpdateTest|ZeiterfassungBearbeiten|ZeiterfassungProjektbuchungTest"` -> **GRUEN** (SQLite) und via `scripts/test-pgsql.ps1` -> **GRUEN** (PostgreSQL).
+- Matrix AK2+AK3 -> `tests/Api/ZeiterfassungBearbeitenTest.php::testDesktopFullSnapshotAktualisiertEintragUndBuchungOhneDoppelung` (gleiches `id`/`clientUuid`, Eintragsanzahl unveraendert, Werte geaendert, keine Doppelbuchung).
+- Matrix AK4 -> `tests/Api/ZeiterfassungBearbeitenTest.php::testVeralteteBaseZeitRevLiefertNeedsMergeUndAendertNichts` (409 `needsMerge`, keine Aenderung).
+- Referenz Abgleichsmuster -> `tests/Api/ZeiterfassungProjektbuchungTest.php::testGeaenderteStundenUndDatumWerdenNachgezogen` (SQLite/PG).
+- Hinweis AK1/AK5 (Desktop-Button/canEdit-UI) bleiben Frontend-Thema; API-Vertrag ist abgesichert.
+- Modell laut Aufruf (E-097): Tester-Agent, `tester.agent.md` → GPT-5.3-Codex.
 
 ## 5. Review
 
+Siehe Sammelreview B1 in AP-20261101-gesamtuebersicht-filter.md (2 Runden, APPROVE).
+
 ## 6. Lernpunkte
+
+Siehe AP-20261101-gesamtuebersicht-filter.md.
