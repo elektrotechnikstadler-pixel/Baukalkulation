@@ -37,6 +37,9 @@ Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibs
 - Vor dem Commit prüfen, dass sichtbare Änderungen in `public/bedienungsanleitung.html` beschrieben sind (E-081).
 - Leere Subagent-Rückgabe: Stand im AP und per `git status` prüfen, bevor erneut delegiert wird.
 - Befunde der Schwere Hoch/Blocker/Major vor G1 bzw. vor der Weitergabe an der Fundstelle selbst prüfen; widerlegte Befunde im AP korrigieren (E-072).
+- AP schlank halten: Subagenten bekommen nur den Vertrag und ihren AP-Abschnitt (Zeilenbereich), nie das ganze AP; jeder Aufruf fordert einen AP-Eintrag ≤ 15 Zeilen je Runde und eine Rückgabe ≤ 10 Zeilen (Ergebnis, rote Tests mit Grund, Abweichungen) – Details nur auf Nachfrage (E-093).
+- Korrekturrunden schmal: nach `CHANGES_REQUESTED` bekommt der Entwickler nur die Befundliste mit Fundstellen, der Reviewer prüft nur diese Befunde und die dafür geänderten Stellen; der Tester ergänzt Tests erst nach `APPROVE` einmal für den Endstand – Tester und Reviewer nie parallel auf einem Stand, der sich noch ändert (E-094).
+- Große Ausgaben gezielt lesen: CI nur fehlgeschlagene Jobs mit `tail_lines` ≤ 40, Diffs zuerst mit `--stat`, JSON per Node filtern; Fakten über externe Werkzeuge vor dem Vertrag selbst prüfen statt per Korrekturrunde (E-026, E-095).
 
 ## Abschlussbericht an den Nutzer
 Ergebnis in 3–5 Sätzen, Commit-Hash, Testergebnis, offene Punkte, neue Lernpunkte.
