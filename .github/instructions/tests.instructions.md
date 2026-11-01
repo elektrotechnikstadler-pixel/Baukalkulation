@@ -13,3 +13,4 @@ applyTo: "**/tests/**"
 - Windows: SQLite-Dateien erst nach `gc_collect_cycles()` löschen/umbenennen.
 - PostgreSQL-Läufe leeren das Schema `public` der Test-DB – nie gegen echte Datenbanken.
 - Formatierung: `php vendor/bin/php-cs-fixer check --diff`.
+- Code mit Prozess-, Pfad- oder Plattformabhängigkeit zusätzlich wie in der CI testen: `docker run --rm -v "${PWD}:/home/runner/work/app" -w /home/runner/work/app php:8.2-cli php vendor/bin/phpunit --filter …` (kleinste PHP-Version, Repository unter `/home` wie auf dem Runner, Befehl ohne `sh -c`) – E-067.
