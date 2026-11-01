@@ -37,7 +37,38 @@
 
 ---
 
-## Unveröffentlicht
+## v3.0.23 – Überwachung mit Fehler-Mails und NAS-Abgleich
+
+### AP-20261012-datensicherung-nas, T3 – Überwachung und Systemmeldungen
+- **Überwachung der System-Jobs:** Neue monatliche Wiederherstellungs-Probe (prüft die neueste
+  Tagessicherung inkl. Datenbank-Integritätstest), stündliche Speicherplatzprüfung und eine
+  Zustandsüberwachung aller Jobs (Serversicherung, NAS-Abgleich, Wiederherstellungs-Probe, Speicherplatz,
+  Backup-E-Mail, Zeitplaner) mit Fehler-/Ausbleiben-/Entwarnungs-Mails (höchstens eine Fehler-Mail
+  je Job und Tag, erst nach allen Wiederholungen).
+- **Healthcheck-Watchdog:** Erkennt einen stehenden Zeitplaner auch ohne Admin-Aufruf und löst
+  selbst eine Ausbleiben-Mail aus. Die Antwort von `check` bleibt unverändert.
+- **Neuer Bereich „Überwachung & Systemmeldungen“** (Verwaltung → Allgemein, nur Administratoren):
+  Ampel je Job, Einstellungen (aktiv, Empfänger, Ausbleiben-Frist, Mindest-Speicher), Testmail-Versand,
+  manuelles Auslösen der Wiederherstellungs-Probe, Tabelle „Systemmeldungen“ und Laufprotokoll.
+- **Roter Admin-Hinweisbalken** bei bestehender Störung oder stehendem Zeitplaner.
+
+### AP-20261012-datensicherung-nas, T4 – NAS-Abgleich per rclone
+- **NAS-Abgleich** (Verwaltung → Allgemein → Datensicherung & NAS, nur Administratoren): täglicher
+  Dateiabgleich mit einer SMB/CIFS-Netzwerkfreigabe per `rclone`, nach der Serversicherung, als eigener
+  Prozess (`bin/console nas:abgleich`, eigene Cron-Zeile) mit eigener Sperre. Übertragen werden nur
+  Sicherungen, Uploads, Bautagebuch, Datanorm, Archiv, Exporte, Logo und Pfadeinstellungen – die
+  Live-Datenbank, `secret.key`, das Startpasswort und weitere interne Dateien **nie** (die Tagessicherungen
+  enthalten einen Datenbank-Snapshot). Auf der NAS wird nie gelöscht, nur hinzugefügt bzw. aktualisiert.
+  „Verbindung testen“ prüft vorab das Schreibrecht im Zielpfad. Das NAS-Passwort wird verschlüsselt
+  gespeichert und nie angezeigt.
+- **Übergang:** Ein bisher auf dem Host eingerichteter Cronjob (z. B. rsync auf eine eingehängte Freigabe)
+  kann abgeschaltet werden, sobald der NAS-Abgleich in der App drei Tage fehlerfrei gelaufen ist
+  (siehe `docs/installation.md`).
+- **Schlüssel separat aufbewahren:** Admin-Karte zum Anzeigen/Herunterladen von `secret.key` nach
+  erneuter Passwortabfrage; nach einer Wiederherstellung mit abweichendem Schlüssel wird ein nicht
+  entschlüsselbares NAS-Passwort automatisch geleert (Hinweis zur Neueingabe).
+- **Bereichstitel** „Datensicherung“ → „Datensicherung & NAS“.
+- rclone wird im App-Image installiert (≈ 50–60 MB zusätzlich, betrifft auch den minimal-Build).
 
 ---
 

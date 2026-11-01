@@ -4,6 +4,7 @@ namespace App\Handlers;
 use App\Auth;
 use App\Core\ModuleLoader;
 use App\Services\AuditService;
+use App\Services\Jobs\Watchdog;
 use App\Services\LicenseService;
 
 class AuthActions
@@ -58,6 +59,15 @@ class AuthActions
         if (!$loggedIn) {
             $license['customer'] = null;
             $license['expires']  = null;
+        }
+
+        // Healthcheck-Watchdog (T3, R8, AP-20261012-datensicherung-nas): erkennt einen
+        // stehenden Planer auch ohne Admin-Aufruf. Komplett fehlertolerant und gedrosselt –
+        // die Antwort von check() bleibt in jedem Fall unverändert (E-013, E-088).
+        try {
+            Watchdog::vielleichtPruefen($this->db, new \DateTimeImmutable());
+        } catch (\Throwable $e) {
+            error_log('[AuthActions] Watchdog fehlgeschlagen: ' . $e->getMessage());
         }
 
         jsonOut([

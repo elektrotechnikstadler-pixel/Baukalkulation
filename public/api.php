@@ -256,11 +256,15 @@ $routes = [
     'backup_upload'                => ['App\\Handlers\\DataActions',           'backupUpload'],
     'backup_upload_replace'        => ['App\\Handlers\\DataActions',           'backupUploadReplace'],
 
-    // Serversicherung / Planer (AP-20261012-datensicherung-nas, T2)
+    // Serversicherung / Planer (AP-20261012-datensicherung-nas, T2) / Überwachung (T3)
     'system_jobs_status'           => ['App\\Handlers\\SystemJobActions',      'status'],
     'system_einstellungen_speichern' => ['App\\Handlers\\SystemJobActions',    'einstellungenSpeichern'],
     'job_anfordern'                => ['App\\Handlers\\SystemJobActions',      'auftragAnfordern'],
     'job_auftrag_status'           => ['App\\Handlers\\SystemJobActions',      'auftragStatus'],
+    'system_hinweise'              => ['App\\Handlers\\SystemJobActions',      'hinweise'],
+    'ueberwachung_testmail'        => ['App\\Handlers\\SystemJobActions',      'testmail'],
+    'nas_verbindung_testen'        => ['App\\Handlers\\SystemJobActions',      'nasVerbindungTesten'],
+    'secret_key_anzeigen'          => ['App\\Handlers\\SystemJobActions',      'secretKeyAnzeigen'],
 
     // E-Mail-Versand
     'send_vde'                     => ['App\\Handlers\\EmailActions',          'sendVde'],

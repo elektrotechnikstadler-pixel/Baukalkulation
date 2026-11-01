@@ -2,11 +2,11 @@
 
 | Feld | Wert |
 |---|---|
-| Status | in Umsetzung (T1 → 3.0.19, T2 → 3.0.20 abgeschlossen; T3–T5 offen, T3 auf Wunsch später) |
+| Status | T1 → 3.0.19, T2 → 3.0.20, T3 + T4 → 3.0.23 abgeschlossen; T5 (PostgreSQL-Bereich) offen |
 | Typ | Feature |
-| Testläufe rot | T2: 1 (Sperre ≠ Erfolg, Leitstand-Befund) |
-| Review-Runden | T1: 1 · T2: 2 |
-| Commit | – |
+| Testläufe rot | T2: 1 · T3: R2 2 (N1; Test widersprach Vertrag), R3 1 (Folge N1) · T4: R1 8/12 nur Linux PHP 8.2 (Leitstand), R2 1 (neue Kennzahl), R3 2 (Filterstrings, `pfad`-Trim) – Testanpassungen jeweils mit Begründung (E-090) |
+| Review-Runden | T1: 1 · T2: 2 · T3: 3 · T4: 3 |
+| Commit | T1 `6406362` · T2 `bcb28a8` · T3 + T4 siehe Abschnitt 3 |
 
 Voraussetzung: AP-20261012-ki-modelle-tests ist abgeschlossen (Modelle je Rolle, Gesamtlauf inkl. `test:js`).
 
@@ -654,6 +654,669 @@ visuelle Abnahme, Commit/Release.
 - Gesamtläufe: PHPUnit SQLite 557 grün (2 übersprungen), PostgreSQL 557 grün (3 übersprungen); `test:js`, PHPStan (No errors) und `php-cs-fixer` grün.
 - Version 3.0.20.
 
+### T3 – Überwachung und Systemmeldungen (Schnitt durch Leitstand, 2026-11-01)
+
+> Wiederhergestellt durch den Leitstand (2026-11-01): Vertrag, Umsetzung Runde 1 und Testberichte zu T3 sowie Vertrag und Umsetzung Runde 1 zu T4 fehlten nach einem unbeabsichtigten Überschreiben dieser Datei; die Ursache ließ sich nicht mehr klären (ein `git stash` des Entwicklers enthielt das AP nicht). Wiederhergestellt aus dem Leitstand-Verlauf, den Agenten-Rückmeldungen und `git show HEAD`.
+
+Ausgangslage: Seit T2 sind 3.0.21 und 3.0.22 erschienen (Zeiterfassung, PHP-CVE), ohne Überschneidung mit T3. Auf Wunsch des Nutzers (2026-11-01) werden T3 und T4 gemeinsam als **3.0.23** veröffentlicht.
+
+Vertrag T3 (bindend; Abweichungen im AP melden, E-084). Zeitstempel wie in T2 `Y-m-d H:i:s` (Ortszeit); Uhren und Mailversand injizierbar (E-034); nur feste Texte in DB, Mails und Antworten (E-014).
+
+1. **Migration** `AddBeobachtetSeitToJobStatus`: `ALTER TABLE job_status ADD COLUMN beobachtetSeit TEXT NOT NULL DEFAULT ''`. Fixture mit Zielversion erzeugen (E-022); `v3.0.20.*` bleibt als ältere Fixture.
+2. **`MailService::send()`**: optionaler Schlüssel `smtp_timeout` (Sekunden); ohne ihn bleibt das Verhalten unverändert (PHPMailer-Standard 300 s).
+3. **`SmtpKonfig::laden(PDO)`**: SMTP-Konfiguration wie in `cron_backup_email.php` (nicht entschlüsselbares Passwort → leer + `error_log`); `cron_backup_email.php` wird nicht umgebaut.
+4. **Einstellungen** `ueberwachung` mit den Standardwerten `{aktiv: true, empfaenger: [], ausbleibenStunden: 26, speicherMinMb: 1024}`.
+   - `speichernUeberwachung()` prüft: höchstens 10 gültige, entdoppelte Empfänger; `ausbleibenStunden` ganze Zahl 25–168 (Abweichung 6; nach Review-Befund 8 → **26–168**); `speicherMinMb` 100–1 000 000; `aktiv` bool.
+5. **Planer**, Reihenfolge der Schritte:
+   1. Herzschlag.
+   2. Hängende Läufe und Aufträge.
+   3. Aufträge für `sicherung` und `probe_wiederherstellung` annehmen.
+   4. `sicherung`.
+   5. `probe_wiederherstellung` (monatlich ab 04:00, Wiederholungen wie bei der Sicherung).
+   6. `speicherplatz` (stündlich; `SPEICHER_KNAPP`; ein Laufeintrag nur bei Zustandswechsel).
+   7. `Ueberwachung::pruefen()`.
+   8. `MeldungsZustellung::zustellen()`.
+   9. Aufräumen.
+
+   Jeder Schritt läuft in einem eigenen `try/catch` (E-022). `faelligkeit(…, $periode = 'tag'|'monat')`.
+   - `WiederherstellungsProbe::pruefe()`: neueste Tagessicherung über `BackupArchive::fromDir()`, Kopie der DB, `PRAGMA integrity_check`; Fehlercodes `PROBE_KEINE_SICHERUNG`, `PROBE_DEFEKT`.
+6. **`Ueberwachung::pruefen()`**:
+   - **Aktive Jobs:** `sicherung`, `probe_wiederherstellung`, `speicherplatz` immer; `backupmail`, wenn aktiviert; `planer` erst nach dem ersten Herzschlag. Schonfrist über `beobachtetSeit`.
+   - **Gemeldete Störung** = jüngster Eintrag `fehler`/`ausbleiben` nach der letzten Entwarnung.
+   - **Fehler-Ereignisse:**
+     - höchstens 1 je Job und Periode (UNIQUE-Schlüssel, R7);
+     - `sicherung`/`probe` bei `tageslaufStatus = 'fehlgeschlagen'`;
+     - `backupmail` bei Störung ≥ 60 min;
+     - `speicherplatz` bei `SPEICHER_KNAPP`.
+   - **Ausbleiben** nur ohne gemeldete Störung. Fristen: `ausbleibenStunden`; Probe 32 × 24 + 2 h; Backup-Mail nach Zyklus 26 h / 170 h / 746 h; Planer 15 min.
+   - **Entwarnung** nur nach einer gemeldeten Störung, in einer Transaktion mit dem Zurücksetzen von `stoerungSeit`.
+7. **`MeldungsZustellung`** (injizierbarer Sender):
+   - offene Einträge jünger als 7 Tage;
+   - Empfänger aus den Einstellungen, sonst aktive Admins mit E-Mail;
+   - Backoff 5 min / 30 min / 2 h / 6 h;
+   - HTML-Mail mit Jobname, Ereignis, Fehlertext und Handlungsempfehlung, ohne Pfade oder Geheimnisse.
+8. **Watchdog** in `AuthActions::check()`:
+   - fehlertolerant, höchstens alle 10 min (Sperrdatei und Zeitstempel);
+   - Planer-Herzschlag > 15 min → Ausbleiben, danach Zustellung mit kurzem Zeitbudget;
+   - die Antwort von `check` bleibt unverändert (E-013, E-088).
+9. **API** (nur admin, POST/405):
+   - `system_jobs_status` additiv erweitert;
+   - `system_einstellungen_speichern` mit `ueberwachung`;
+   - neu `system_hinweise` (GET);
+   - neu `ueberwachung_testmail` (POST, 1/60 s, Audit);
+   - `job_anfordern` zusätzlich mit `probe_wiederherstellung`.
+10. **Frontend:**
+    - Bereich `ueberwachung` (Ampel, Einstellungen, Empfänger, Testmail, Probe auslösen, Systemmeldungen, Laufprotokoll mit 30 Einträgen);
+    - roter Admin-Banner über `system_hinweise` (für die Sitzung schließbar);
+    - `verwaltung-nav.js?v=2`.
+11. **Doku:** Bedienungsanleitung (E-081), `docs/installation.md`, CHANGELOG.
+
+#### Umsetzung Runde 1 (Entwickler, Modell: claude-sonnet-5) – Zusammenfassung wiederhergestellt
+
+- Migration `migrations/20261101000000_add_beobachtet_seit_to_job_status.php`.
+- Neue Klassen in `src/Services/Jobs/`: `SmtpKonfig`, `WiederherstellungsProbe`, `Ueberwachung`, `MeldungsZustellung` (`__construct(?callable $absender)`, `zustellen(PDO, DateTimeImmutable, int $max = 20, int $timeoutSek = 30): int`, `empfaengerWirksam(PDO)`) und `Watchdog`.
+- Geändert: `MailService`, `SystemEinstellungen`, `Planer` (9 Schritte), `SystemJobActions`, `AuthActions::check()`, `public/api.php`, Frontend, Doku.
+- Prüfungen: `php -l`; Wegwerf-SQLite (Fehler → 1 Outbox-Eintrag → kein Duplikat → Erfolg → 1 Entwarnung); Fixture `v3.0.23` mit VERSION 3.0.23 erzeugt, danach wieder 3.0.22; gezielte PHPUnit-Tests 71/71; PHPStan 0; `test:js` 19/19; `check-versions` ok.
+- Abweichung (E-084): Probe-Baseline für frische Installationen. In Runde 2 nach Review-Befund 5 umgebaut zum Status `uebersprungen`, nur ohne ältere gültige Tagessicherung.
+
+#### Umsetzung Runde 2 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-Befunde 1–17 behoben
+
+Alle 17 vom Reviewer (gpt-5.5) gemeldeten Befunde bearbeitet (Befund 1 unabhängig auch vom
+Leitstand gefunden); Befund 17 war laut Vorgabe reine Dokumentation ohne Code-Änderung. Keine
+Tests geändert.
+
+1. **Major – Doppelzustellung** (`MeldungsZustellung.php`): `zustellen()` beansprucht jeden
+   Eintrag jetzt vor dem Senden per CAS-UPDATE auf `naechsterVersuchAm` (neue private
+   `beanspruchen()`, Lease 10 min) – nur bei `rowCount() === 1` wird gesendet; das Ergebnis wird
+   danach per `WHERE id = ? AND gesendetAm = ''` festgehalten. `Watchdog::vielleichtPruefen()`
+   stellt nur noch zu, wenn der Planer-Herzschlag fehlt oder älter als 15 min ist (neue private
+   `planerHerzschlagPruefen()` gibt das als bool zurück); läuft der Planer, liefert sie `false`
+   und Watchdog ruft `zustellen()` gar nicht erst auf.
+2. **Major – Dauerbanner** (`SystemJobActions.php::hinweise()`, `MeldungsZustellung::zustellen()`):
+   Der Zustell-Hinweis zählt jetzt nur ungesendete Einträge mit `erstelltAm >=` jetzt−7 Tage und
+   `versuche >= 3` (neue Konstante `HINWEIS_ALTER_GRENZE_TAGE`). `zustellen()` löscht beim
+   Aufräumen zusätzlich ungesendete Einträge älter als 90 Tage (zweites `DELETE`).
+3. **Watchdog-Tagesschlüssel** (`Watchdog.php`, `Ueberwachung.php`): `Ueberwachung::gemeldeteStoerung()`
+   ist jetzt `public static` (vorher `private`) und wird von
+   `Watchdog::planerHerzschlagPruefen()` vor dem Anlegen eines `ausbleiben`-Eintrags für `planer`
+   genutzt – besteht bereits eine offene (nicht entwarnte) Störung, wird kein weiterer Tageseintrag
+   erzeugt.
+4. **Watchdog `aktiv` + Doppellauf** (`Watchdog.php::vielleichtPruefen()`): Liest zu Beginn
+   `SystemEinstellungen::laden()` und kehrt bei `ueberwachung.aktiv === false` sofort zurück (keine
+   Outbox-Einträge, keine Zustellung). Der Zeitstempel (`watchdog.stamp`) wird nach erfolgreichem
+   `flock()` erneut gelesen und gegen die Drosselschwelle geprüft, bevor er geschrieben wird
+   (schließt die Race zwischen dem ungesicherten Lesen und dem Sperren).
+5. **Probe-Baseline** (`Planer.php::probeAusfuehren()/probeBaselineSetzen()`,
+   `WiederherstellungsProbe.php`): Neue `tageslaufStatus`-Ausprägung `'uebersprungen'` statt `'ok'`
+   (E-021); `Planer::faelligkeit()` behandelt sie für die laufende Periode wie `'ok'`/`'fehlgeschlagen'`.
+   Neue `public static WiederherstellungsProbe::hatGueltigenTagesordnerVor(string $heute): bool`
+   (prüft per `BackupArchive::fromDir()` auf einen gültigen Tagesordner vor `$heute`); die Baseline
+   wird nur noch gesetzt, wenn das `false` liefert (reine Neuinstallation). Bestehende
+   Installationen mit älteren Tagessicherungen überspringen die Baseline und werden zur ersten
+   regulären Fälligkeit geprüft. UI/Anleitung sprechen dafür von „erste Probe im Folgemonat“.
+   `SystemPlanerApiTest::testPlanerErstelltTaeglicheSicherungNurEinmalUndSetztStatus` bleibt grün
+   (an diesem Punkt existiert noch kein älterer Tagesordner als heute, da `sicherung` im selben
+   Lauf zuvor die Tagessicherung für heute erst anlegt).
+6. **Zeitbudget** (`MeldungsZustellung::zustellen()`, `SystemJobActions::testmail()`): `zustellen()`
+   hat jetzt den Parameter `int $budgetSek = 60`; vor jedem Sendeversuch wird das Restbudget
+   geprüft und `smtp_timeout = max(1, min(timeoutSek, Restbudget))` gesetzt. Nach dem ersten
+   vollständigen Fehlschlag eines Eintrags (kein Empfänger erreicht) bricht der gesamte Lauf ab
+   (`break`), der betroffene Eintrag bekommt Backoff, weitere Einträge bleiben unangetastet.
+   `Planer::lauf()` ruft `zustellen($db, $jetzt, 20, 30, 60)` auf, `Watchdog` mit
+   `self::ZUSTELL_BUDGET_SEKUNDEN = 4`. `SystemJobActions::testmail()` hat ein eigenes
+   Gesamtbudget `TESTMAIL_BUDGET_SEKUNDEN = 20`; nach dem ersten Fehlschlag erhalten die übrigen
+   Empfänger `{ok:false, fehler:'Nicht versucht – vorheriger Versand fehlgeschlagen.'}`.
+7. **Hinweise** (`SystemJobActions.php::hinweise()`): inaktive Jobs werden jetzt über
+   `Ueberwachung::istJobAktiv()` ausgelassen; die Störungstexte nutzen die lesbaren Namen aus
+   `MeldungsZustellung::JOB_NAMEN` (jetzt `public const`, gemeinsame Tabelle), inkl. `'planer' =>
+   'Zeitplaner (Cron)'`.
+8. **Ausbleiben während Wiederholungen** (`Ueberwachung.php::ausbleibenPruefen()`,
+   `SystemEinstellungen.php`): Für `sicherung`/`probe_wiederherstellung` wird kein Ausbleiben
+   geprüft, solange `tageslaufStatus` ∈ {`laufend`,`fehler`} **und** `tageslaufDatum` der aktuellen
+   Periode entspricht. Untergrenze `ausbleibenStunden` von 25 auf **26** angehoben (Standard bleibt
+   26) – **Änderung von Abweichung 6** (Kommentar in `SystemEinstellungen.php` entsprechend
+   aktualisiert).
+9. **Validierung** (`SystemEinstellungen.php::validierenUeberwachung()`): Fehlertexte enthalten
+   keine Nutzereingabe mehr (z. B. „Empfängerliste enthält eine ungültige E-Mail-Adresse.“ statt
+   der Adresse im Text); nicht-String-Adressen lösen direkt 400 aus (kein impliziter
+   String-Cast/Warnung). `aktiv` akzeptiert nur echte `bool` oder
+   `filter_var(..., FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)`, sonst 400.
+10. **UI Testmail/Ampel** (`script.js`, `bedienungsanleitung.html`): Bei 0 wirksamen Empfängern
+    zeigt `uebTestmail()` „Keine Empfänger – bitte Adressen eintragen oder Admins eine E-Mail
+    hinterlegen.“; sonst je Empfänger Symbol + Adresse + ggf. Fehlertext. `uebAmpelSymbol()`/neue
+    `uebAmpelText()` unterscheiden jetzt `status.aktiv === false` (grau = inaktiv) von „noch kein
+    Lauf“ (gelb, eigener Text); ein Legendentext über der Job-Tabelle nennt die Ausbleiben-Frist
+    als Fristhinweis. `SystemJobActions::status()` liefert dafür je Job zusätzlich `aktiv`
+    (`Ueberwachung::istJobAktiv()`). Anleitung Abschnitt 13 entsprechend angeglichen (E-081).
+11. **Fehlercode in Mail** (`MeldungsZustellung::inhalt()`): Bei passender Regex wird zusätzlich
+    zum festen Beschreibungstext eine eigene Zeile „Fehlercode: SICHERUNG_FEHLER“ (Rohcode)
+    ausgegeben.
+12. `MeldungsZustellung::empfaengerWirksam()`: SQL nutzt jetzt `COALESCE(isLocked, 0) = 0`.
+13. **Kein `@`**: `Planer::speicherplatzPruefen()` (`disk_free_space`), `WiederherstellungsProbe::kopiePruefen()`
+    (`unlink`/`rmdir`) und `SystemJobActions::testmail()` (`mkdir`) nutzen jetzt explizite
+    `is_dir`/`is_file`-Prüfungen plus `set_error_handler(static fn(): bool => true)` /
+    `restore_error_handler()` (gleiches Muster wie `UpdatePruefung.php`) statt `@` – nötig, weil
+    der globale Error-Handler (`public/api.php`) Warnungen sonst trotzdem in Exceptions verwandelt
+    (E-063).
+14. **Herzschlag je Schritt** (`Planer.php::lauf()`): Die `$schritt()`-Closure erneuert in einem
+    `finally`-Block nach jedem Schritt `$protokoll->herzschlag('planer')` (selbst fehlertolerant
+    gekapselt) – wichtig für lange NAS-Läufe in T4.
+15. `Ueberwachung.php`: `fehlerEreignisPruefen()`/`ausbleibenPruefen()` nutzen jetzt
+    `$jetzt->modify('-1 hour')`/`$jetzt->getTimestamp()` statt `date()`/`strtotime()`;
+    `statusLesen()` wurde in `statusLesen()` (legt an) und neue `statusLesenOhneAnlegen()`
+    (legt nicht an) aufgeteilt – inaktive Jobs bekommen keine `job_status`-Zeile mehr.
+    `Watchdog::vielleichtPruefen(\PDO $db, \DateTimeImmutable $jetzt, ?callable $absender = null)`
+    hat jetzt einen optionalen injizierbaren Sender (E-034), durchgereicht an `new
+    MeldungsZustellung($absender)`.
+16. `script.js`: `sysHinweisSchluessel()` bildet einen Schlüssel aus Art+Job+Seit aller aktuellen
+    Hinweise; `sessionStorage['bk.sysHinweis.geschlossen']` speichert diesen Schlüssel statt `'1'`
+    – ändert sich die Hinweisliste, erscheint der Banner wieder. `doLogout()` entfernt den
+    Schlüssel beim Abmelden.
+17. **Nur Dokumentation:** Hinweis in `bedienungsanleitung.html` Abschnitt 13 und oben ergänzt:
+    Bei `ueberwachung.aktiv=false` werden auch Entwarnungen unterdrückt; nach dem
+    Wiedereinschalten kann eine Entwarnung zu einer älteren, zwischenzeitlich eventuell schon
+    behobenen Störung eintreffen. Kein Code geändert (Vorgabe Leitstand).
+
+**Geänderte/neue Dateien:** `src/Services/Jobs/MeldungsZustellung.php`,
+`src/Services/Jobs/Ueberwachung.php`, `src/Services/Jobs/Watchdog.php`,
+`src/Services/Jobs/WiederherstellungsProbe.php`, `src/Services/Jobs/SystemEinstellungen.php`,
+`src/Services/Jobs/Planer.php`, `src/Handlers/SystemJobActions.php`, `public/script.js`,
+`public/script.min.js`, `public/bedienungsanleitung.html`, `public/index.html`, `public/sw.js`.
+
+**Ausgeführte Prüfungen (Ergebnis):**
+- `php -l` auf allen 7 geänderten PHP-Dateien → alle ok.
+- `php vendor/bin/phpunit --filter "UeberwachungMeldungsZustellungTest|PlanerFaelligkeitTest|SystemPlanerApiTest|BackupFixture|Auth"`
+  (SQLite) → **61 Tests, 60 grün, 1 rot** (siehe unten, vorgegebene Verhaltensänderung).
+- `php vendor/bin/phpunit` Gesamtlauf (SQLite) → **578 Tests, 577 grün, 1 rot, 2 übersprungen**
+  (derselbe rote Test wie oben; keine weiteren Regressionen).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **1 Fehler**, aber **vorbestehend und
+  nicht von dieser Runde verursacht**: `tests/Api/SystemPlanerApiTest.php:700`
+  (`method.alreadyNarrowedType`, `assertSame(1, …)` auf eine bereits als `1` erkannte Spalte).
+  Per `git stash` der drei in dieser Runde geänderten getrackten Dateien
+  (`SystemJobActions.php`, `Planer.php`, `SystemEinstellungen.php`) bestätigt: Der Fehler
+  besteht identisch auch ohne meine Änderungen (Runde-1-Altlast in einer Testdatei, die ich
+  nicht ändern darf). Keine neuen PHPStan-Befunde durch Runde 2.
+- `npm run minify` → `public/script.min.js` neu erzeugt; `script.min.js?v=` in `index.html` und
+  `sw.js` von 240 auf **241**, `CACHE_VERSION` von `bk-es-v243` auf **`bk-es-v244`**.
+- `node --check public/script.js` → ok.
+- `node scripts/check-versions.mjs --strict` → **OK – alle ?v=-Versionen sind konsistent.**
+- `npm run test:js` → **19/19 grün**.
+- `VERSION` unverändert `3.0.22`.
+
+**Roter Test wegen vorgegebener Verhaltensänderung (nicht abgeschwächt, Test nicht geändert):**
+- `tests/Api/SystemPlanerApiTest.php::testUeberwachungEinstellungenWerdenValidiertUndDuplikateEntfernt`
+  – erwartet u. a., dass `ausbleibenStunden => 25` beim Speichern als gültig akzeptiert wird
+  (`assertOk(...)`, Zeile 528/529). Durch Befund 8 (Untergrenze von 25 auf 26 angehoben) liefert
+  dieser Aufruf jetzt `400 Ausbleiben-Frist muss eine ganze Zahl zwischen 26 und 168 Stunden sein.`
+  statt `200`. Das ist die vom Reviewer vorgegebene Verhaltensänderung; der Test müsste vom
+  Tester auf `26` angepasst werden.
+
+**Abweichungen vom Vertrag:** keine; alle 17 Befunde wie vom Reviewer/Leitstand vorgegeben
+umgesetzt. `php-cs-fixer` wurde in dieser Runde nicht geprüft (nicht Teil der für Runde 2
+vorgegebenen Prüfliste); ein Stichprobenlauf zeigte projektweit vorbestehende
+Formatierungsabweichungen (z. B. Leerzeile nach `<?php`), die nicht Teil dieser Änderung sind.
+
+#### Umsetzung Runde 3 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-Befunde N1–N9 behoben
+
+Letzte Runde vor der Schleifenbremse – nur die vom Leitstand benannten Punkte N1, N2, N3, N4,
+N7, N8, N9 bearbeitet (N5/N6 laut Vorgabe nicht angefasst; `SystemPlanerApiTest`-Verhalten rund
+um `aktiv:"false"` nicht geändert).
+
+1. **N1 Major – Budget/Abbruch nur je Empfänger statt je Eintrag** (`MeldungsZustellung.php`):
+   `zustellen()` übergibt jetzt Startzeit (`$begin`), `$budgetSek` und `$timeoutSek` an
+   `einenZustellen()`. Dort wird vor **jedem** Empfänger das Restbudget seit Laufbeginn neu
+   berechnet und `smtp_timeout = max(1, min(timeoutSek, Restbudget))` gesetzt; ist das
+   Restbudget < 1, bricht der Lauf sofort ab. Nach der **ersten** Exception bei einem Empfänger
+   werden die übrigen Empfänger desselben Eintrags ausgelassen und der gesamte Zustelllauf
+   beendet (`einenZustellen()` liefert jetzt `array{erfolg:bool,abbruch:bool}` statt eines
+   String-Ergebnisses; die alten `ERGEBNIS_*`-Konstanten entfallen, da nicht mehr benötigt).
+   Wurde vorher mindestens ein Empfänger erreicht, zählt der Eintrag als gesendet
+   (Teil-Erfolg-Regel unverändert), sonst erhält er Backoff. Der rote Vertragstest
+   `UeberwachungMeldungsZustellungTest::testZustelllaufBrichtNachErstemEmpfaengerFehlerAbUndSetztBackoff`
+   ist jetzt grün.
+2. **N2 Minor – Ausnahme nach dem Claim ohne Backoff** (`MeldungsZustellung.php::zustellen()`):
+   Der Aufruf von `einenZustellen()` steht jetzt in einem `try/catch(\Throwable)`; jede
+   Ausnahme nach `beanspruchen()` (Claim) löst `rueckfallBackoff()` (`versuche++`,
+   `naechsterVersuchAm` nach der bestehenden Backoff-Tabelle) aus, loggt per `error_log()` und
+   beendet den Lauf – ein Eintrag bleibt dadurch nie nur mit der 10-min-Lease ohne erhöhten
+   Versuchszähler stehen.
+3. **N3 Minor – `aktiv` vor der Stamp-Drosselung gelesen** (`Watchdog.php::vielleichtPruefen()`):
+   Das Laden von `SystemEinstellungen::laden()` sowie die `aktiv`-Prüfung erfolgen jetzt erst
+   **nach** der ungesicherten Stamp-Drosselung (`stampLesen()` vs. `DROSSEL_SEKUNDEN`); bei
+   jedem (meist gedrosselten) `check()`-Aufruf werden die Einstellungen dadurch nicht mehr
+   unnötig geladen.
+4. **N4 Minor – Probe-Text bei `uebersprungen`** (`public/script.js`): `uebAmpelText()` liefert
+   bei `status.tageslaufStatus === 'uebersprungen'` jetzt „Probe ab nächstem Monat“ (vor der
+   bisherigen „noch kein Lauf“-Prüfung); `uebJobZeile()` zeigt denselben Text in der
+   Fehlertext-Spalte statt eines leeren Felds.
+5. **N7 Hinweis – fehlendes `unset($row)`** (`SystemJobActions.php::letzteMeldungen()`): Nach
+   `foreach ($rows as &$row) { … }` steht jetzt `unset($row);`, um eine hängende Referenz auf das
+   letzte Array-Element zu vermeiden.
+6. **N8 Hinweis – stille Standardwerte bei Zahleneingaben** (`public/script.js`): Neue Hilfsfunktion
+   `uebZahlEingabe()` sendet eine gültige Ganzzahl-Eingabe als Zahl, eine ungültige oder leere
+   Eingabe aber **unverändert als Text** statt sie durch `26`/`1024` zu ersetzen; `speichereUeberwachung()`
+   nutzt sie für `ausbleibenStunden`/`speicherMinMb`, sodass der Server bei ungültiger Eingabe mit
+   400 antwortet und dieser Fehler (statt eines stillen Standardwerts) über `showNotification(j.error, 'error')`
+   angezeigt wird.
+7. **N9 Hinweis – Teil-Erfolg dokumentiert** (`public/bedienungsanleitung.html`, Abschnitt 13
+   „Überwachung & Systemmeldungen“): Ein Satz im Punkt „Systemmeldungen“ ergänzt, dass ein
+   erreichter Empfänger vor dem Fehlschlag eines anderen die Meldung als zugestellt gelten lässt
+   und für den nicht erreichten Empfänger kein erneuter Versandversuch erfolgt.
+
+**Abweichung vom Vertrag / neu entdeckter Testkonflikt (Test nicht geändert):**
+Die bereits bestehende `UeberwachungMeldungsZustellungTest::testZustellungMarkiertBeiMindestensEinemEmpfaengerAlsGesendetUndEscapedHtml`
+konfiguriert die Empfänger in der Reihenfolge `['fail@example.com', 'ok@example.com']` – der
+scheiternde Empfänger steht also **vor** dem erfolgreichen. Mit dem durch N1 vorgegebenen
+Verhalten (Abbruch der übrigen Empfänger nach der ersten Exception) wird `ok@example.com` dadurch
+nie mehr versucht, der Eintrag bekommt Backoff statt als gesendet zu gelten – der Test wird dadurch
+**rot** (`assertSame(1, $anzahl)` schlägt fehl, `0` erhalten). Das ist eine direkte, unvermeidbare
+Folge der in N1 vorgegebenen Vertragsänderung (dieselbe Art Konflikt wie bereits in Runde 2 bei
+Befund 8/Untergrenze 26 dokumentiert) und keine Abschwächung meinerseits – der Test müsste vom
+Tester auf die Reihenfolge `['ok@example.com', 'fail@example.com']` angepasst werden, damit der
+erfolgreiche Empfänger vor dem scheiternden steht.
+
+**Prüfungen:**
+- `php -l` auf `MeldungsZustellung.php`, `Watchdog.php`, `SystemJobActions.php` → ok.
+- `php vendor/bin/phpunit --filter "UeberwachungMeldungsZustellungTest|PlanerFaelligkeitTest"`
+  (SQLite) → **25 Tests, 24 grün, 1 rot** (der oben dokumentierte, vorgegebene Testkonflikt; der
+  im Auftrag genannte Test `testZustelllaufBrichtNachErstemEmpfaengerFehlerAbUndSetztBackoff` ist
+  grün).
+- `php vendor/bin/phpunit --filter "SystemPlanerApiTest"` (SQLite, informativ, nicht angefasst)
+  → **27 Tests, 27 grün**.
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **No errors**.
+- `npm.cmd run minify` → `public/script.min.js` neu erzeugt; `script.min.js?v=` in `index.html`
+  und `sw.js` von 241 auf **242**, `CACHE_VERSION` von `bk-es-v244` auf **`bk-es-v245`**.
+- `node --check public/script.js` → ok.
+- `node scripts/check-versions.mjs --strict` → **OK – alle ?v=-Versionen sind konsistent.**
+- `npm.cmd run test:js` → **19/19 grün**.
+- `VERSION` unverändert `3.0.22`; kein Commit.
+
+#### T3 – Abnahme Leitstand (2026-11-01)
+
+- Gelaufene Modelle laut Laufzeit: Entwickler `claude-sonnet-5`, Tester `gpt-5.3-codex`, Reviewer `gpt-5.5` (E-089 eingehalten).
+- 3 Entwicklerrunden. Die Schleifenbremse wurde erreicht, aber nicht überschritten: Runde 3 = letzte, APPROVE.
+- Testanpassungen mit Begründung (E-090):
+  - Untergrenze 25 → 26 (Befund 8).
+  - `aktiv:"false"` gültig laut Vertrag (Befund 9).
+  - Empfänger-Reihenfolge im Teil-Erfolg-Test (Folge von N1).
+- G2: gezielte Klassen grün auf SQLite **und** PostgreSQL (56 Tests). G3: APPROVE in Runde 3.
+- Gesamtläufe folgen auf Wunsch des Nutzers erst nach T4, über den gemeinsamen Stand.
+- Offen nach T4: R1 (Empfänger-Rotation) und R3 (Text) → T4-Vertrag Punkt 9. N5 ist durch T4 Punkt 5 erledigt (eigener NAS-Prozess). N6 und R2/R4/R5 sind zurückgestellt (Minor/Nit).
+- Leitstand-Fehler bei diesem Eintrag: Ein Node-Hilfsskript wurde per `Set-Content -Encoding ASCII` geschrieben. Die Umlaute in diesem Abschnitt wurden dadurch zu `?` und sind von Hand korrigiert (2. Auftreten der Ursache von E-087 → Lernprotokoll).
+
+### T4 – NAS-Abgleich per rclone (Schnitt durch Leitstand, 2026-11-01)
+
+Vorgabe Nutzer (2026-11-01): T3 und T4 nacheinander umsetzen, die Gesamtläufe auf SQLite und PostgreSQL erst danach einmal über den gemeinsamen Stand. Release: ein gemeinsames **3.0.23**. Es gibt zwei Feature-Commits (T3, T4); der Gesamtlauf gilt für den gemeinsamen Stand (Abweichung zu O7 und E-082 auf Wunsch des Nutzers).
+
+**Vorab-Prüfung Leitstand (rclone 1.60.1 = Debian-Paket in bookworm/trixie, gegen eine echte Samba-Freigabe im Container):**
+- `rclone obscure -` liest von stdin. `RCLONE_SMB_HOST/USER/PASS/PORT/DOMAIN` werden ausgewertet; `RCLONE_CONFIG` auf eine nicht vorhandene Datei unterdrückt nur eine NOTICE.
+- `mkdir` und `rcat` funktionieren als Schreibprobe; ohne Schreibrecht → `permission denied`, Exit 1.
+- Die `--filter`-Positivliste (unten) überträgt genau die freigegebenen Pfade. Nicht übertragen wurden `database.sqlite`, `database.sqlite-wal`, `secret.key`, `systemadmin-passwort.txt`, `audit_pepper.txt`, `run/`, `update/`, `backups/.tmp-*` und `cron.log`.
+- `copy` lässt eine lokal gelöschte Datei auf der NAS bestehen (F3) und überträgt geänderte Dateien.
+- Die letzte JSON-Logzeile enthält `"stats":{bytes, errors, transfers, lastError…}` (bei `--use-json-log --stats 1m --stats-log-level NOTICE`).
+- Unterscheidbare Meldungen in der Verbindungsphase: `The attempted logon is invalid` (falsche Anmeldung), `no such host` / `dial tcp` (nicht erreichbar), `permission denied` (keine Schreibrechte).
+
+**Bestandsaufnahme `data/`** (grep über `src/`, `modules/`, `public/*.php`, `cron_*.php`):
+- Daten: `backups/` (ohne `.tmp-*`), `uploads/`, `bautagebuch/`, `datanorm/`, `archiv/`, `archiv_material/`, `exports/`, `pg-backups/`, `paths_config.json`, `firma_logo.*`, `audit.log`. Module schreiben nur nach `UPLOADS_DIR` (vde0100); `datanorm_index.tsv` ist neu erzeugbar → nicht nötig.
+- Nie übertragen: `database.sqlite*`, `secret.key`, `systemadmin-passwort.txt`, `audit_pepper.txt`, `update/`, `run/`, `*.lock`, `migrate.lock`, `*_sent.txt`, `*_result.json`, `*_last.txt`, `update_check.json`, `project_presence.json`, `cron.log`, `erinnerung.log`, `baukalkulation.json` (Altbestand), `erinnerung_settings.json` (Altbestand), `datanorm_index.tsv`.
+
+Vertrag T4 (bindend, E-084):
+
+1. **Image** (`Dockerfile.app`): `rclone` per apt im gemeinsamen `apt-get install`-Block (unabhängig von `ENABLE_OCR`). Danach Build-Prüfung `rclone version` und `rclone help backend smb > /dev/null` (Build bricht sonst ab).
+2. **Einstellungen** `system_einstellungen.nas`, Standardwerte `{aktiv:false, host:'', port:445, freigabe:'', pfad:'baukalkulation', benutzer:'', passwort:'', domaene:'', bandbreiteKBs:0, passwortNeuEingeben:false}`. `SystemEinstellungen::speichernNas(PDO, array)` prüft:
+   - `host` `^[A-Za-z0-9][A-Za-z0-9.\-]{0,252}$` oder IPv4;
+   - `port` 1–65535;
+   - `freigabe` `^[A-Za-z0-9 ._\-]{1,80}\$?$`;
+   - `pfad`: Segmente `^[A-Za-z0-9 ._\-]{1,64}$`, getrennt durch `/`, kein `.`/`..`, kein führender oder abschließender `/`, höchstens 200 Zeichen;
+   - `benutzer` `^[A-Za-z0-9 ._@\-]{1,100}$`; `domaene` `^[A-Za-z0-9.\-]{0,100}$`;
+   - `bandbreiteKBs` 0–1 000 000; `aktiv` bool.
+
+   `aktiv=true` setzt `host`, `freigabe`, `benutzer` und ein gesetztes Passwort voraus.
+
+   **Passwort:**
+   - nur schreibbar: Ein leeres oder fehlendes Feld behält das bisherige Passwort, `passwortLoeschen:true` leert es;
+   - gespeichert über `SecretBox::encrypt`;
+   - ein neues Passwort setzt `passwortNeuEingeben=false`.
+
+   **Ausgabe:** Antworten enthalten nie das Passwort, nur `passwortGesetzt` (bool) und `passwortNeuEingeben`.
+3. **Wiederherstellen (R12):** Nach dem Import von `system_einstellungen` (Importer, beide Modi) ruft der Importer `SystemEinstellungen::secretsNachImportPruefen(PDO)` auf. Lässt sich `nas.passwort` nicht entschlüsseln, wird es geleert und `passwortNeuEingeben=true` gesetzt; der Hinweis erscheint in `system_hinweise`.
+4. **`App\Services\Jobs\NasAbgleich`** – `__construct(\PDO $db, array $rcloneBefehl = ['rclone'], ?callable $uhr = null)`, Standard über die Umgebung `BK_RCLONE_BIN`, falls gesetzt (E-034; Tests übergeben z. B. `[PHP_BINARY, '<fake-rclone.php>']`):
+   - **Prozessaufruf**:
+     - `proc_open` immer mit Argument-Array, nie über die Shell.
+     - Umgebung = Minimal-Env: `PATH`, `HOME` = `DATA_DIR/run`, `RCLONE_CONFIG` = `DATA_DIR/run/rclone-leer.conf` (nicht vorhanden), `RCLONE_SMB_HOST/PORT/USER/PASS/DOMAIN`.
+     - `RCLONE_SMB_PASS` = Ausgabe von `rclone obscure -`; das Passwort geht dabei nur über stdin.
+     - Zeitbegrenzung über eine `stream_select`-Schleife und danach `proc_terminate`.
+     - Alle Ausgaben werden vor jedem `error_log` bereinigt: Host, Benutzer, Passwort und das verschleierte Passwort werden durch `***` ersetzt, die Länge wird gekürzt.
+   - **`verbindungTesten(array $nasEinstellungen): array`** (höchstens 20 s gesamt, `--contimeout 10s --timeout 15s --retries 1 --low-level-retries 1`):
+     - Ablauf: `mkdir :smb:<freigabe>/<pfad>`, dann `rcat :smb:<freigabe>/<pfad>/_baukalkulation_verbindungstest.txt` (stdin: Zeitstempel und App-Version).
+     - Ergebnis `{ok, fehlerCode?}`.
+     - Fehlercodes:
+       - `NAS_ANMELDUNG` – Meldung enthält `logon is invalid`
+       - `NAS_NICHT_ERREICHBAR` – `no such host`, `dial tcp`, `i/o timeout` oder `connection refused`
+       - `NAS_KEINE_SCHREIBRECHTE` – `permission denied` oder `access denied`
+       - `NAS_VERBINDUNG` – alle übrigen Fälle sowie Zeitüberschreitung
+       - `NAS_RCLONE_FEHLT` – Programm nicht startbar
+       - `NAS_KONFIGURATION` – Validierung
+   - **`abgleichen(): array`** (Kennzahlen) – Phasen:
+     1. Konfiguration prüfen (`NAS_KONFIGURATION`).
+     2. Schreibprobe wie `verbindungTesten` (die dortigen Codes).
+     3. `rclone copy <DATA_DIR> :smb:<freigabe>/<pfad>/data` mit `--filter`-Regeln in genau dieser Reihenfolge:
+        - `- /database.sqlite*`, `- /secret.key`, `- /systemadmin-passwort.txt`, `- /audit_pepper.txt`, `- /update/**`, `- /run/**`, `- /backups/.tmp-*/**`, `- *.lock`
+        - `+ /backups/**`, `+ /uploads/**`, `+ /bautagebuch/**`, `+ /datanorm/**`, `+ /archiv/**`, `+ /archiv_material/**`, `+ /exports/**`, `+ /pg-backups/**`, `+ /paths_config.json`, `+ /firma_logo.*`, `+ /audit.log`
+        - `- **`
+
+        Weitere Optionen: `--contimeout 15s --timeout 5m --retries 3 --use-json-log --stats 1m --stats-log-level NOTICE`, bei `bandbreiteKBs>0` zusätzlich `--bwlimit <n>k`.
+     4. Für jeden Pfad aus `paths_config.json` (`backups`, `archiv`, `exports`, `bautagebuch`, `uploads`, `datanorm`), dessen `realpath` außerhalb von `realpath(DATA_DIR)` liegt: `copy <pfad> :smb:<freigabe>/<pfad>/extern/<schlüssel>` mit `- /.tmp-*/**`, `- *.lock`.
+     5. Statusdatei per `rcat :smb:<freigabe>/<pfad>/_baukalkulation_status.json` (`{zeit, ergebnis, version, transfers, fehler}`); wird bei Erfolg **und** bei Transferfehlern geschrieben, ein Fehler dabei wird nur geloggt.
+
+     Fehlercodes: Transfer-Exit ≠ 0 → `NAS_TRANSFER`; Gesamtdauer über **2 h 45 min** → `NAS_ZEIT`, mit Abbruch. Grund: Der Planer schließt Läufe ab 3 h als hängend ab, die NAS-Grenze muss darunter liegen. Ein abgebrochener Lauf ist unkritisch, weil `copy` beim nächsten Versuch bereits übertragene Dateien überspringt.
+
+     Kennzahlen: `transfers`, `bytes`, `fehler`, `dauerSek`, `externePfade` (Anzahl) – keine Pfade, keine Hosts.
+   - Jedes `copy` startet von einer Quelle, nie `sync`, `move`, `delete`, `purge`, `rmdir` o. Ä. Es gibt einen Test, der die Argumente prüft.
+5. **Eigener Prozess statt Planer-Schritt (Leitstand-Erkenntnis aus T3, Review-Hinweis 14):** Ein NAS-Lauf kann beim ersten Abgleich Stunden dauern. Als Planer-Schritt hielte er die Planer-Sperre, Überwachung und Zustellung würden stundenlang ausfallen, und der Watchdog meldete fälschlich „Zeitplaner steht“. Deshalb:
+   - **Neuer Befehl** `bin/console nas:abgleich` mit eigener Sperre `DATA_DIR/run/nas.lock` (`LOCK_NB`; ist sie belegt, endet er mit Exit 0) und **eigener Crontab-Zeile** in `Dockerfile.app` nach dem Muster aus R1:
+     `* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console nas:abgleich >> /var/www/html/data/cron.log 2>&1`
+   - **Ablauf je Minute:**
+     1. Herzschlag `nas_prozess`.
+     2. Ist `nas.aktiv` false und kein Auftrag offen → Ende.
+     3. Wartenden Auftrag `nas` annehmen (wie im Planer, `rowCount`).
+     4. Fälligkeit: `faelligkeit(status('nas'), <Uhrzeit der Sicherung>, jetzt)`. Ein Erstversuch erfolgt nur, wenn die heutige Sicherung abgeschlossen ist (`sicherung.tageslaufStatus` ∈ {`ok`, `fehlgeschlagen`} für heute) **oder** jetzt ≥ Uhrzeit + 2 h. So wird die frische Sicherung mit übertragen.
+     5. Wiederholungen wie bei `sicherung` (F10).
+     6. Protokoll über `JobProtokoll` (Job `nas`).
+   - Den Planer **nicht** um einen NAS-Schritt erweitern; seine Hängelauf-Erkennung (3 h) gilt auch für `nas`.
+   - Manuelle Anforderung per `job_anfordern` mit `job:'nas'` (in `ANFORDERBARE_JOBS` aufnehmen).
+   - Fehlercode im Protokoll = Code aus der Phase, Text fest.
+   - `Ueberwachung` (läuft weiter im Planer):
+     - `nas` ist aktiv bei `nas.aktiv`; Fehler-Ereignis bei `tageslaufStatus='fehlgeschlagen'` (`nas:<tag>:fehler`); kein Ausbleiben während `laufend`/`fehler` (wie bei Befund 8 von T3), sonst Ausbleiben über `ausbleibenStunden`.
+     - Die Codetabelle und die Handlungsempfehlungen für Mails bekommen alle `NAS_*`-Codes.
+     - Die Jobnamen-Tabelle bekommt `nas` = „NAS-Abgleich“.
+   - Nicht-Docker-Installationen: Die zweite Cron-Zeile wird in `docs/installation.md` dokumentiert.
+6. **API** (nur `admin`, POST, 405 nach der Rollenprüfung):
+   - `system_jobs_status`: additiv `einstellungen.nas` (ohne Passwort, mit `passwortGesetzt`), `status.nas`.
+   - `system_einstellungen_speichern`: zusätzlicher Schlüssel `nas`.
+   - **Neu** `nas_verbindung_testen` (POST, optional Formularwerte; ein leeres Passwort nutzt das gespeicherte): synchron, höchstens 20 s, Drosselung 1 je 10 s (sonst 429), Eintrag im Audit-Log ohne Zugangsdaten.
+   - **Neu** `secret_key_anzeigen` (POST `{passwort}`): Das Passwort des angemeldeten Admins wird erneut geprüft (`password_verify` gegen `users.password`, sonst 403); Drosselung 5 je 10 min je Benutzer; Antwort `{ok, schluessel}` mit `Cache-Control: no-store`, Eintrag im Audit-Log. Ist `BK_SECRET_KEY` gesetzt: `{ok:true, ausUmgebung:true}` ohne Schlüssel.
+7. **Frontend** (Bereich `datensicherung`, nur admin; Bereichstitel wird „Datensicherung & NAS“ → `verwaltung-nav.js` `?v=` erhöhen):
+   - **Karte „NAS-Abgleich“:**
+     - Felder aktiv, Host, Port, Freigabe, Pfad, Benutzer, Passwort (Platzhalter „gespeichert – neu eingeben zum Ändern“), Domäne, Bandbreite.
+     - Knöpfe Speichern, „Verbindung testen“ (Ergebnis als fester Text je Code), „Jetzt abgleichen“ (Auftrag und Polling wie in T2).
+     - Anzeige von Status und letztem Lauf mit Kennzahlen; Hinweis, wenn `passwortNeuEingeben` gesetzt ist.
+     - Infotext: Auf der NAS wird nie gelöscht; Empfehlungen E4/E5; der bisherige Host-Cronjob erst abschalten, wenn der Abgleich 3 Tage grün war.
+   - **Karte „Schlüssel separat aufbewahren“ (F9):**
+     - Erklärung; Knopf „Schlüssel anzeigen“ mit Passwortabfrage; Anzeige in einem schreibgeschützten Feld mit Kopieren und Herunterladen als `baukalkulation-secret.key`.
+     - Nach einem Bereichswechsel wird der Schlüssel aus dem DOM entfernt.
+     - Bei `ausUmgebung` erscheint der Hinweis „Schlüssel kommt aus der Umgebung (`BK_SECRET_KEY`)“.
+   - Darstellung nur über `textContent` bzw. `esc()`; Cache-Busting nach Vorgabe.
+8. **Doku:**
+   - `public/bedienungsanleitung.html` (E-081): NAS-Abgleich, Schlüssel, Übergang vom Host-Cron.
+   - `docs/installation.md`: rclone im Image; Übergang vom Host-Cron; externe Überwachung (E6: NAS prüft das Alter von `_baukalkulation_status.json`, z. B. Synology-Aufgabenplaner, oder Uptime Kuma auf `api.php?action=check`); Empfehlungen E4/E5; Restore ohne Schlüssel → Passwörter neu eingeben.
+   - `CHANGELOG.md` unter „Unveröffentlicht“ (gemeinsamer Abschnitt mit T3).
+9. **Nachzug aus Review T3 Runde 3:**
+   - **R1:** In `MeldungsZustellung::einenZustellen` die Empfängerliste je Versuch um `versuche % anzahl` rotieren. So verhindert ein dauerhaft abgelehnter erster Empfänger (z. B. SMTP 550) nicht dauerhaft die Zustellung an alle anderen.
+   - **R3:** Text in `testmail()` bei aufgebrauchtem Budget: „Nicht versucht – Zeitbudget aufgebraucht.“
+   - Weitere Änderungen an T3-Code nur, wenn T4 sie erfordert.
+
+#### Umsetzung Runde 1 (Entwickler, Modell: claude-sonnet-5) – Zusammenfassung wiederhergestellt
+
+- Neu: `src/Services/Jobs/{NasAbgleich,NasAbgleichFehler,NasJob}.php`, `src/Console/Command/NasAbgleichCommand.php`.
+- Geändert: `SystemEinstellungen` (`nas`, `speichernNas`, `nasOeffentlich`, `secretsNachImportPruefen`), `Ueberwachung`/`MeldungsZustellung` (Job `nas`, R1-Rotation, R3-Text), `SystemJobActions` (`nas_verbindung_testen`, `secret_key_anzeigen`), `Importer` (R12), `Kernel`, `api.php`, `Dockerfile.app` (rclone, Build-Prüfung, 2. Crontab-Zeile), Frontend, Doku.
+- Kern-API: `NasAbgleich::__construct(PDO, array $rcloneBefehl = ['rclone'], ?callable $uhr)`, `verbindungTesten(array): {ok, fehlerCode?}`, `abgleichen(): array` (wirft `NasAbgleichFehler`); `NasJob::__construct(PDO, ?callable $uhr)->lauf(NasAbgleich): ?string`.
+- Docker-Echtprüfung (rclone 1.60.1 + Samba): `mkdir`/`rcat`/`copy` mit den Vertragsargumenten erfolgreich, Positivliste korrekt, F3 bestätigt, Fehlermeldungen wie erwartet.
+- Prüfungen: `php -l`, eigenes Fake-rclone, gezielte PHPUnit-Tests 79/79, PHPStan 0, `test:js`, `check-versions`, `QuelltextKodierungTest`.
+
+#### Umsetzung Runde 2 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-Befunde 1–14 behoben
+
+Alle 14 vom Reviewer (gpt-5.5)/Leitstand gemeldeten Befunde bearbeitet; Befund 15 (Hinweis,
+Verbindungstest auf beliebigen Host/Port) laut Vorgabe unverändert gelassen (akzeptiertes
+Restrisiko). Keine Tests geändert.
+
+1. **Major – Exit-Code auf PHP 8.2/Linux** (`NasAbgleich.php::prozessAusfuehren()`): Der
+   Exit-Code wird jetzt beim ersten `running===false` aus `$status['exitcode']` gemerkt (laut
+   PHP-Doku nur dann gültig) und direkt verwendet; `proc_close()` wird weiterhin aufgerufen
+   (Ressource freigeben), sein Rückgabewert aber nicht mehr als Exit-Code genutzt (auf PHP <
+   8.3 sonst fälschlich -1 nach bereits beobachtetem `running=false`). Damit liefert auch die
+   Erkennung „nicht startbar“ (`NAS_RCLONE_FEHLT`, z. B. in `obscure()`) auf PHP 8.2 und 8.3
+   denselben, korrekten Exit-Code.
+2. **Major – ausgelagerte Pfade** (`NasAbgleich.php::externePfade()`): (a) Ein externer Pfad
+   wird jetzt übersprungen (mit `error_log` und neuer Kennzahl `externeUebersprungen`), wenn
+   sein `realpath` gleich oder Vorfahr von `realpath(DATA_DIR)`/`APP_ROOT` ist oder ein
+   Systempfad (`/`, `/etc`, `/proc`, `/sys`, `/dev`, `/root`, `/boot`, `/usr`, `/bin`, `/sbin`,
+   `/lib`, `/lib64`, `/var/lib`, `/run`, `/var/run`) bzw. dessen Unterordner (neue
+   `istGesperrterExternerPfad()`/`istVorfahrOderGleich()`). (b) Auf externe Kopien werden
+   zusätzlich unverankerte harte Ausschlüsse angewendet (neue Konstante
+   `EXTERN_FILTER_REGELN`: `**/secret.key`, `**/database.sqlite*`,
+   `**/systemadmin-passwort.txt`, `**/audit_pepper.txt`, `**/*.env`, `**/.tmp-*/**`,
+   `**/*.lock`). (c) Doku ergänzt: Ordner innerhalb `data/`, die nicht auf der Positivliste
+   stehen, werden nicht übertragen (`installation.md` + `bedienungsanleitung.html`).
+3. **Major – manueller Lauf überschreibt `tageslaufDatum`** (`NasJob.php::lauf()`):
+   `$protokoll->start('nas', $ausloeser)` jetzt ohne dritten Parameter, wie beim Planer – das
+   Datum setzt ausschließlich `tageslaufSetzen()`, wenn tatsächlich ein Tageslauf läuft.
+4. **`NAS_ZEIT` im Verbindungstest** (`NasAbgleich.php::verbindungTesten()`): Ein in der
+   Schreibprobe auftretendes `NAS_ZEIT` (z. B. aus `prozessAusfuehren()`) wird im `catch`-Block
+   auf `NAS_VERBINDUNG` abgebildet – gilt auch für die Schreibprobe vor dem eigentlichen
+   Abgleich, da `abgleichen()` dafür dieselbe Methode aufruft. Frontend `NAS_FEHLER_TEXT`
+   (`script.js`) um `NAS_ZEIT` und `NAS_TRANSFER` ergänzt.
+5. **NasJob: Protokoll/`naechsterVersuchAm` mit aktueller Uhr** (`NasJob.php::lauf()`): Die
+   `JobProtokoll`-Instanz bekommt jetzt die injizierbare Uhr direkt durchgereicht
+   (`$this->uhr`) statt einer Closure auf den eingefrorenen Startzeitpunkt – `start()`,
+   `erfolg()`, `fehler()` und `herzschlag()` fragen die Uhrzeit damit bei jedem Aufruf neu ab.
+   `naechsterVersuchAm` und `auftragAbschliessen()` nutzen nach `abgleichen()` zusätzlich
+   explizit eine frisch abgefragte `$this->jetzt()` (neue lokale `$jetztNachAbgleich` im
+   Fehlerpfad) statt des Startzeitpunkts – wichtig, da `abgleichen()` laut Klassendoku Stunden
+   dauern kann und der 30-Minuten-Backoff sonst ab dem (längst vergangenen) Startzeitpunkt statt
+   ab dem tatsächlichen Fehlschlag gezählt hätte. Die Uhr bleibt injizierbar (Tests verwenden
+   weiterhin eine feste Uhrzeit je Lauf, daher unverändertes Testverhalten).
+6. **`fwrite`/`mkdir` im geschützten Muster** (`NasAbgleich.php::prozessAusfuehren()`): `mkdir`
+   des Sperrverzeichnisses und `fwrite` auf die stdin-Pipe laufen jetzt im selben Muster wie
+   `proc_open` (`set_error_handler`/`finally restore_error_handler()`, kein `@`). Schlägt
+   `fwrite` fehl, wird der Prozess sauber geschlossen (neue `prozessAbbrechen()`: terminieren,
+   Pipes/Prozess schließen) und `NAS_RCLONE_FEHLT` geworfen.
+7. **Regex mit `/D`** (`SystemEinstellungen.php::pruefeNasFelder()`): Host-, Freigabe-, Pfad-
+   segment-, Benutzer- und Domänen-Regex haben jetzt `/D` (kein stillschweigendes Akzeptieren
+   eines abschließenden `\n`); `freigabe` lehnt zusätzlich `.`/`..` explizit ab (Pfadsegmente
+   taten das bereits).
+8. **Nicht-String-Eingaben vor dem Cast** (`SystemEinstellungen.php`: neue
+   `nasEingabeAlsString()` in `pruefeNasFelder()` für host/freigabe/pfad/benutzer/domaene; die
+   Passwort-Prüfung in `vorabPruefenNas()` läuft jetzt unconditional vor der `aktiv`-Prüfung;
+   `NasAbgleich.php::konfigurationPruefen()` lehnt ein Nicht-String-Passwort ebenfalls vor dem
+   Cast ab) → 400 bzw. `NAS_KONFIGURATION` mit festem Text, keine Warnung.
+9. **Drosselungen unter `flock`** (`SystemJobActions.php`: neue
+   `nasTestDrosselPruefenUndSetzen()` und überarbeitete `secretDrosselPruefen()`): Lesen,
+   Prüfen und Schreiben des Zeitstempels bzw. Zählers laufen jetzt in einer einzigen
+   `flock(LOCK_EX)`-Sperre je Datei (`fopen('c+')` … `flock`/`ftruncate`/`fwrite` …
+   `flock(LOCK_UN)`), keine Lese-/Schreib-Race mehr zwischen zwei gleichzeitigen Anfragen.
+10. **Passwort-Modal statt `window.prompt()`** (`index.html`: neues Modal
+    `secretKeyPasswortModal` mit `<input type="password">`; `script.js`: `secretKeyAnfordern()`
+    öffnet das Modal, neue `secretKeyPasswortBestaetigen()`/`secretKeyPasswortAbbrechen()`
+    führen den bisherigen API-Aufruf aus).
+11. **Schlüssel-DOM-Entfernung erweitert** (`script.js`): `secretKeyAusBlenden()` wird jetzt
+    zusätzlich in `vwSucheEingabe()` und zu Beginn von `renderAllgemeinSettings()` (Neu-Rendern
+    der Verwaltung) aufgerufen sowie automatisch nach 60 s (neuer `secretKeyAutoHideTimer`).
+    Anleitung entsprechend formuliert.
+12. **NAS-Karte nur über „Speichern“** (`script.js::renderNasAbgleich()`): Alle
+    `onchange="speichereNas()"`-Attribute der Eingabefelder/Checkbox entfernt; Speichern löst
+    ausschließlich der Knopf „💾 Speichern“ aus (kein automatisches Neu-Rendern bei jedem Feld).
+13. **Fehlererkennung case-insensitive** (`NasAbgleich.php::pruefeRcloneFehler()`): Die
+    rclone-Ausgabe wird vor dem Abgleich mit `mb_strtolower()` kleingeschrieben; zusätzlich
+    `access is denied` als weiterer Treffer für `NAS_KEINE_SCHREIBRECHTE`.
+14. **Doku** (`installation.md`, `bedienungsanleitung.html`): `&amp;`/`&nbsp;` in
+    `installation.md` (Markdown) durch Klartext `&`/Leerzeichen ersetzt (bedienungsanleitung.html
+    bleibt als echtes HTML bei `&amp;`/`&nbsp;`); Satz „Die Live-Datenbank (`database.sqlite`)
+    wird nie übertragen – die Tagessicherungen in `backups/` enthalten jedoch einen
+    Datenbank-Snapshot“ ergänzt; Nicht-Docker-Cron-Zeile für `nas:abgleich` um den Hinweis „als
+    Webserver-Benutzer (z. B. www-data)“ (E-065) ergänzt.
+15. Hinweis (Verbindungstest auf beliebigen Host/Port) laut Vorgabe nicht bearbeitet
+    (akzeptiertes Restrisiko).
+
+**Abweichung vom Vertrag:** keine.
+
+**Bekannter, vorgegebener Testkonflikt (Test nicht geändert):** Befund 2a verlangt die neue
+Kennzahl `externeUebersprungen` in der `abgleichen()`-Rückgabe. Dadurch geht
+`tests/Unit/NasAbgleichTest.php::testAbgleichenSchreibtStatusdateiBeiTransferfehlerUndWirftNasTransfer`
+rot – der Test prüft `array_keys($e->kennzahlen)` exakt gegen
+`['transfers','bytes','fehler','dauerSek','externePfade']` ohne den neuen Schlüssel. Grund:
+unmittelbare Folge der in Runde 2 vorgegebenen Kennzahl-Erweiterung; Test absichtlich nicht
+angepasst (Rolle Tester). Bitte im Testplan nachziehen (`externeUebersprungen` ergänzen).
+
+**Prüfungen:**
+- `php -l` auf `NasAbgleich.php`, `NasJob.php`, `SystemEinstellungen.php`,
+  `SystemJobActions.php` → ok.
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.2-cli php vendor/bin/phpunit --colors=never
+  --filter "NasAbgleichTest|NasJobTest"` (PHP 8.2.35, Linux, ohne `sh -c`) → **17 Tests, 81
+  Assertions, 16 grün, 1 rot** (der oben dokumentierte, vorgegebene Testkonflikt). Befund 1
+  bestätigt behoben: vorher 8/12 rot wegen `NAS_RCLONE_FEHLT`, jetzt nur noch der
+  Kennzahl-Konflikt rot.
+- Dieselbe Prüfung mit `php:8.3-cli` (PHP 8.3.36, Linux) → **identisch: 17 Tests, 81
+  Assertions, 16 grün, 1 rot** (derselbe, vorgegebene Testkonflikt).
+- Lokal (Windows, PHP 8.2.31) `php vendor/bin/phpunit --filter
+  "NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture"`
+  → **69 Tests, 728 Assertions, 68 grün, 1 rot** (derselbe Testkonflikt).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **No errors** (zwei neue Meldungen
+  während der Umsetzung – `nullCoalesce.variable` und `if.alwaysTrue` in der neuen
+  Exit-Code-/`prozessAbbrechen()`-Logik – durch Umbau statt Unterdrückung behoben).
+- `npm.cmd run minify` → `public/script.min.js` neu erzeugt; `script.min.js?v=` in `index.html`
+  und `sw.js` von 243 auf **244**, `CACHE_VERSION` von `bk-es-v246` auf **`bk-es-v247`**.
+- `node --check public/script.js` → ok.
+- `node scripts/check-versions.mjs --strict` → **OK – alle ?v=-Versionen sind konsistent.**
+- `npm.cmd run test:js` → **19/19 grün**.
+- `VERSION` unverändert `3.0.22`; kein Commit.
+
+#### Umsetzung Runde 3 (Entwickler, Modell: Claude Sonnet 5 (copilot)): Review-Befunde 1–6 behoben
+
+Alle 6 vom Reviewer (gpt-5.5)/Leitstand gemeldeten Befunde der Runde 2 bearbeitet. Keine Tests
+geändert (Vorgabe); die beiden dadurch roten Tests (Befund 1, Leitstand-Entscheidung zu `pfad`)
+sind unten dokumentiert.
+
+1. **Major – Filter greifen im Wurzelordner nicht** (`NasAbgleich.php::EXTERN_FILTER_REGELN`):
+   Die Regeln sind jetzt unverankert **ohne** `**/`-Präfix (`- secret.key`, `-
+   database.sqlite*`, `- systemadmin-passwort.txt`, `- audit_pepper.txt`, `- *.env`, `-
+   .tmp-*/**`, `- *.lock`, unveränderte Reihenfolge) – mit `**/muster` verlangt rclone laut
+   Dokumentation mindestens einen Verzeichnistrenner vor dem Treffer, ein unverankertes Muster
+   ohne führendes `/` oder `**/` greift dagegen auf jeder Ebene inklusive Wurzel.
+   **Verifikation mit echtem rclone 1.60.1 (ohne NAS), Temp-Ordner mit Dateien in Wurzel und
+   Unterordner:**
+   ```
+   docker run --rm -v "<temp>:/q:ro" rclone/rclone:1.60.1 lsf -R /q
+     --filter "- secret.key" --filter "- database.sqlite*"
+     --filter "- systemadmin-passwort.txt" --filter "- audit_pepper.txt"
+     --filter "- *.env" --filter "- .tmp-*/**" --filter "- *.lock" --filter "+ **"
+   ```
+   Inhalt: `secret.key`, `database.sqlite`, `database.sqlite-wal`,
+   `systemadmin-passwort.txt`, `audit_pepper.txt`, `.env`, `a.env`, `x.lock`, `.tmp-b/f`,
+   `normal.txt`, `sub/secret.key`, `sub/ok.txt`. Ergebnis: genau `normal.txt`, `sub/`,
+   `sub/ok.txt` – wie gefordert. Zum Vergleich dieselbe Prüfung mit den alten,
+   `**/`-verankerten Regeln: Ergebnis enthielt zusätzlich `.env`, `a.env`,
+   `audit_pepper.txt`, `database.sqlite`, `database.sqlite-wal`, `secret.key`,
+   `systemadmin-passwort.txt`, `x.lock` im Wurzelordner (Bug bestätigt, nur `sub/secret.key`
+   wurde dort bereits korrekt gefiltert).
+   Zusätzlich die Hauptkopie-Regeln (`FILTER_REGELN`, verankerte `- /database.sqlite*` +
+   Positivliste) mit `lsf -R` gegen einen Testbaum (Wurzel-Geheimnisse,
+   `backups/.tmp-x/`, alle Positivlisten-Ordner, ein nicht gelisteter `sonstiges/`-Ordner)
+   geprüft: Ergebnis enthält ausschließlich die elf Positivlisten-Einträge
+   (`archiv/`, `archiv_material/`, `audit.log`, `backups/`, `bautagebuch/`, `datanorm/`,
+   `exports/`, `firma_logo.png`, `paths_config.json`, `pg-backups/`, `uploads/`) und ihre
+   Dateien – `sonstiges/`, `backups/.tmp-x/`, Wurzel-Geheimnisse sowie `update/`/`run/`
+   fehlen vollständig. Temp-Ordner nach der Prüfung gelöscht.
+2. **Minor/Major – manueller Erfolg setzt Tageslauf** (`NasJob.php::lauf()`): Nach
+   `$protokoll->erfolg($laufId, $kennzahlen)` wird `tageslaufSetzen(..., 'ok', ...)` jetzt nur
+   noch aufgerufen, wenn `$faellig !== null` **oder** (manueller Auftrag **und** der vor dem
+   Lauf gelesene `tageslaufDatum === heute` **und** `tageslaufStatus` ∈ `{fehler,
+   fehlgeschlagen}`) – letzteres analog zur Planer-Regel aus T2 (ein erfolgreicher manueller
+   Lauf ersetzt einen heute bereits fehlgeschlagenen Tageslauf). In allen anderen Fällen bleibt
+   der Tageslauf unverändert. `NasJobTest::testManuellerLaufOhneFaelligkeitAendertTageslaufNicht`
+   ist jetzt grün.
+3. **Minor – Handler-Typprüfung** (`SystemJobActions.php::nasVerbindungTesten()`,
+   `::secretKeyAnzeigen()`): `passwort` wird in beiden Handlern jetzt vor dem `(string)`-Cast
+   per `is_string()` geprüft (analog `SystemEinstellungen::nasEingabeAlsString()`) → bei
+   Nicht-String 400 mit festem Text (`Ungültiges NAS-Passwort.` bzw. `Ungültiges Passwort.`)
+   statt eines möglichen `(string)`-Warnings auf einem Array/Objekt.
+4. **Hinweis → umsetzen – Sperrliste erweitert** (`NasAbgleich.php::SYSTEM_PFADE`,
+   `::istGesperrterExternerPfad()`): Zusätzlich `/tmp`, `/var/tmp`, `/var/log`,
+   `/var/backups`, `/var/spool`, `/var/mail`, `/var/cache`, `/home` (jeweils inkl.
+   Unterordner) ergänzt. Neu zusätzlich: ein ausgelagerter Pfad wird auch übersprungen, wenn
+   er **innerhalb** von `APP_ROOT` liegt, aber außerhalb von `DATA_DIR` (z. B. `src`,
+   `vendor`) – der Aufrufer hat „innerhalb `DATA_DIR`“ bereits vorher ausgefiltert, die neue
+   Prüfung ergänzt den bisher nur umgekehrt (Vorfahr-von-APP_ROOT) abgedeckten Fall.
+5. **Hinweis → umsetzen** (`script.js::renderNasAbgleich()`): `externeUebersprungen > 0` aus
+   dem letzten `nas`-Lauf (`laeufe[0].kennzahlen.externeUebersprungen`) zeigt jetzt die
+   Warnzeile „N ausgelagerte(r) Speicherpfad(e) wurde(n) aus Sicherheitsgründen nicht
+   übertragen.“ in der NAS-Karte. `installation.md` und `bedienungsanleitung.html` erklären
+   neu, welche Pfade gesperrt sind (Systempfade, `data/`/App-Verzeichnis selbst, Ordner
+   innerhalb des App-Verzeichnisses außerhalb von `data/`) und dass dann dieselbe Warnzeile
+   erscheint.
+6. **Hinweis → umsetzen** (`script.js::secretKeyPasswortBestaetigen()`): Neues Modul-Flag
+   `secretKeyPasswortLaeuft` verhindert eine Doppelauslösung durch Enter (Eingabefeld) und
+   Klick (Bestätigen-Knopf) – ein zweiter Aufruf während der ersten laufenden Anfrage kehrt
+   sofort zurück; das Flag wird im `finally`-Block zurückgesetzt.
+
+**Abweichung vom Vertrag:** keine.
+
+**Bekannte, vorgegebene Testkonflikte (Tests nicht geändert):**
+- Befund 1 ändert die `EXTERN_FILTER_REGELN`-Strings (Vorgabe). Dadurch geht
+  `NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` rot – der Test
+  prüft die alten, `**/`-verankerten Strings exakt. Grund: unmittelbare Folge der in Runde 3
+  vorgegebenen, korrigierten Filterregeln; Test absichtlich nicht angepasst (Rolle Tester).
+- Leitstand-Entscheidung (reine Information, keine Codeänderung): `pfad` mit abschließendem
+  `\n` wird weiterhin getrimmt und als z. B. `a` gespeichert (gewollt). Dadurch bleibt
+  `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` (Teilfall
+  `pfad="baukalkulation\n"`, erwartet 400) rot, bis der Tester den Test anpasst.
+
+**Prüfungen:**
+- `php -l` auf `NasAbgleich.php`, `NasJob.php`, `SystemJobActions.php`,
+  `SystemEinstellungen.php` → ok.
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.2-cli php vendor/bin/phpunit --colors=never
+  --filter "NasAbgleichTest|NasJobTest"` (PHP 8.2.35, Linux) → **26 Tests, 110 Assertions, 25
+  grün, 1 rot** (Befund-1-Testkonflikt, s. o.).
+- Dieselbe Prüfung mit `php:8.3-cli` (PHP 8.3.36, Linux) → **identisch: 26 Tests, 110
+  Assertions, 25 grün, 1 rot**.
+- Lokal (Windows, PHP 8.2.31) `php vendor/bin/phpunit --filter
+  "NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture"`
+  → **78 Tests, 737 Assertions, 76 grün, 2 rot** (Befund-1-Testkonflikt +
+  Leitstand-Entscheidung `pfad`-Trim).
+- PostgreSQL (Wegwerf-Container, `scripts/test-pgsql.ps1`, E-064), derselbe Filter → **78
+  Tests, 737 Assertions, 76 grün, 2 rot** (identisch zu SQLite).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → **No errors**.
+- `php vendor/bin/php-cs-fixer check --diff` → grün (0 von 52 Dateien mit Änderungsbedarf).
+- `npm.cmd run minify` → `public/script.min.js` neu erzeugt; `script.min.js?v=` in
+  `index.html` und `sw.js` von 244 auf **245**, `CACHE_VERSION` von `bk-es-v247` auf
+  **`bk-es-v248`**.
+- `node --check public/script.js` → ok.
+- `node scripts/check-versions.mjs --strict` → **OK – alle ?v=-Versionen sind konsistent.**
+- `npm.cmd run test:js` → **19/19 grün**.
+- `VERSION` unverändert `3.0.22`; kein Commit.
+
+**Rote Tests (gemeldet, nicht geändert):**
+- `NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` – Grund: Befund 1
+  (`EXTERN_FILTER_REGELN` vertraglich korrigiert, Test prüft noch die alten `**/`-Strings).
+- `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` – Grund:
+  Leitstand-Entscheidung, `pfad` mit abschließendem `\n` wird weiterhin getrimmt/akzeptiert
+  (gewollt), Test erwartet noch 400.
+
+#### T4 – Abnahme Leitstand (2026-11-01)
+
+- Gelaufene Modelle: Entwickler `claude-sonnet-5`, Tester `gpt-5.3-codex`, Reviewer `gpt-5.5` (E-089).
+- Drei Entwickler-/Review-Runden; Schleifenbremse erreicht, nicht überschritten; Runde 3 = APPROVE.
+- **Leitstand-Prüfungen:**
+  - Image-Build (`ENABLE_OCR=false`, Debian trixie): `rclone v1.60.1` installiert, Build-Prüfung bestanden, Cron-Zeile vorhanden.
+  - Ende-zu-Ende-Prüfung im Image gegen Samba: Anmeldung, Erreichbarkeit, erfolgreicher Abgleich, Statusdatei, Passwort nur verschlüsselt, Positivliste.
+  - Reproduktion des PHP-8.2-Exit-Code-Fehlers in `php:8.2-cli` (8/12 rot).
+- **Eigene Fehler des Leitstands, korrigiert:**
+  - Filtervorgabe `**/…` (Review R2 Befund 1, E-026).
+  - Kodierungspanne im AP (E-087, 2. Auftreten).
+- Doku-Nit aus Review R3 vom Leitstand korrigiert: Ordner innerhalb `data/` gelten nicht als ausgelagert.
+- **Gesamtläufe** über T3 + T4 (auf Wunsch des Nutzers erst nach T4):
+
+  | Lauf | Ergebnis |
+  |---|---|
+  | PHPUnit SQLite | 627 grün (3 übersprungen) |
+  | PHPUnit PostgreSQL | 627 grün (4 übersprungen) |
+  | `test:js` | 19/19 |
+  | `check-versions --strict`, PHPStan (0 Fehler), `php-cs-fixer` | grün |
+  | NAS-Tests Linux PHP 8.2 und 8.3 (Tester Runde 3) | grün |
+
+- **Commits:** Ein gemeinsamer Feature-Commit für T3 + T4, weil Planer, `SystemJobActions` und `script.js` von beiden geändert wurden und sich nicht sauber trennen lassen. Abweichung von „zwei Feature-Commits“.
+- **Gemischte Dateien:** Fremde, parallel entstandene Änderungen (E-091/E-092 in `erkenntnisse.md`, `AGENTS.md`, `.github/agents/*`, `docs/ki-architektur.md`, `AP-20261101-*`) werden **nicht** mitcommittet. In gemischten Dateien kommen nur die eigenen Zeilen in den Index (E-076).
+
 ## 4. Tests
 
 ### T1 – Runde 1 (Tester, Modell: GPT-5.5 (copilot))
@@ -727,6 +1390,168 @@ visuelle Abnahme, Commit/Release.
 | AK 12 (Restore importiert keine Job-Tabellen; Fixture-Suite enthält jetzt `v3.0.20`) | `tests/Api/SystemPlanerApiTest.php::testRestoreImportiertKeineJobTabellenUndFixtureV3020IstImFixtureTestEnthalten` | grün | grün | n/a |
 | Fixture-Regression (v3.0.20 importierbar) | `tests/Api/BackupFixtureImportTest.php::testFixtureLaesstSichEinspielen` (Datensatz `v3.0.20.zip`) | grün | grün | n/a |
 
+### T3 – Runde 1 (Tester, Modell: gpt-5.3-codex) – Zusammenfassung wiederhergestellt
+
+**GRÜN** – neu `tests/Unit/UeberwachungMeldungsZustellungTest.php`, erweitert `PlanerFaelligkeitTest`, `SystemPlanerApiTest`. Gezielt 43 Tests auf SQLite **und** PostgreSQL grün; `php-cs-fixer` grün.
+
+| Abnahmekriterium | Test | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| AK 6 / F10 / R7 (Fehler, Entwarnung, Ausbleiben, Deaktivierung, Doppelmail über 2 Verbindungen) | `UeberwachungMeldungsZustellungTest` (mehrere) | grün | grün | n/a |
+| Zustellung (Backoff, > 7 Tage, Teil-Erfolg, Admin-Rückfall, Escaping) | `UeberwachungMeldungsZustellungTest` | grün | grün | n/a |
+| Vertrag 5 (`faelligkeit(…,'monat')`, 3 Parameter kompatibel) | `PlanerFaelligkeitTest` | grün | grün | n/a |
+| AK 7 / R8 (Watchdog, `check`-Schlüssel unverändert, < 3 s, Entwarnung) | `SystemPlanerApiTest::testWatchdog…`, `::testSystemJobsStatusUndCheck…` | grün | grün | n/a |
+| AK 8 + 11 (Rechte, GET → 405, Testmail ohne SMTP, 429) | `SystemPlanerApiTest::testUeberwachungHinweiseUndTestmail…` | grün | grün | n/a |
+| AK 11 + E-088 (Validierung, Duplikate, `sicherung` allein weiterhin gültig) | `SystemPlanerApiTest::testUeberwachungEinstellungen…` | grün | grün | n/a |
+| AK 9 (Probe: Erfolg, `PROBE_KEINE_SICHERUNG`, `PROBE_DEFEKT`, Auftrag) | `SystemPlanerApiTest` (3 Methoden) | grün | grün | n/a |
+| AK 3 (Speicherplatz-Zustandswechsel) | `SystemPlanerApiTest::testSpeicherplatz…` | grün | grün | n/a |
+| AK 12 (Fixtures v3.0.23 und v3.0.20) | `SystemPlanerApiTest::testRestore…`, `BackupFixtureImportTest` | grün | grün | n/a |
+
+### T3 – Runde 2 (Tester) – Zusammenfassung wiederhergestellt
+
+**ROT** (2, nicht abgeschwächt):
+- `testZustelllaufBrichtNachErstemEmpfaengerFehlerAbUndSetztBackoff` – Produktbefund N1.
+- `testUeberwachungEinstellungenWerdenValidiertUndDuplikateEntfernt` – erwartete 400 für `aktiv:"false"` entgegen der Vorgabe zu Befund 9 → Leitstand: Test korrigieren.
+
+Neu: Tests zu den Befunden 1–14 (Lease bei zwei Verbindungen, Watchdog nur bei stehendem Planer, Dauerbanner, `uebersprungen`, Abbruch nach erstem Fehler, Hinweise, Ausbleiben bei `laufend`/`fehler`, Validierung, Fehlercode in der Mail, `isLocked` NULL). E-090: Grenze 26 gültig / 25 ungültig. Ergebnis: 56 Tests (54 grün, 2 rot) auf SQLite und PostgreSQL; PHPStan 0.
+
+### T3 – Runde 3 und 3b (Tester) – Zusammenfassung wiederhergestellt
+
+- **Runde 3:** `aktiv:"false"` → 200 und als `false` gespeichert; `"abc"` → 400 mit festem Text (E-090, Vertrag Befund 9). `SystemPlanerApiTest` 27/27 grün.
+- **Runde 3b:** Teil-Erfolg-Test mit Reihenfolge ok → fail (Folge der N1-Abbruchregel, E-090). 56 Tests grün auf SQLite und PostgreSQL; CS-Fixer und PHPStan grün.
+
+### T4 - Runde 1 (Tester, Modell: GPT-5 (copilot))
+
+**GRUEN**
+
+- Neu/erweitert:
+  - `tests/fixtures/rclone/fake-rclone.php`
+  - `tests/Unit/NasAbgleichTest.php`
+  - `tests/Unit/NasJobTest.php`
+  - `tests/Unit/UeberwachungMeldungsZustellungTest.php`
+  - `tests/Api/SystemPlanerApiTest.php`
+- Ausgefuehrt:
+  - `php vendor/bin/phpunit --filter "NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture"` (SQLite) -> **69 Tests, 731 Assertions, gruen**
+  - `powershell -ExecutionPolicy Bypass -File scripts/test-pgsql.ps1 -Php <php.exe> -PhpUnitArgs @('--filter','NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture')` (PostgreSQL, Wegwerf-Container, E-064) -> **69 Tests, 731 Assertions, gruen**
+  - `php vendor/bin/php-cs-fixer check --diff` -> **gruen**
+  - `php vendor/bin/phpstan analyse --memory-limit=2G` -> **No errors**
+
+| Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| AK 4 (Verbindungstest: `mkdir` dann `rcat` auf `:smb:<freigabe>/<pfad>`, Fehlercode-Mapping inkl. `NAS_RCLONE_FEHLT`/`NAS_KONFIGURATION`) | `tests/Unit/NasAbgleichTest.php::testVerbindungTestenFuehrtMkdirDannRcatMitSmbZielAus`, `::testVerbindungTestenMapptRcloneFehlercodes`, `::testVerbindungTestenLiefertRcloneFehltBeiNichtStartbaremBefehl`, `::testVerbindungTestenLiefertKonfigurationsfehlerBeiUngueltigemHost` | gruen | gruen | n/a |
+| AK 4 + F3 (Abgleich nutzt nur erlaubte Befehle, nie sync/move/delete/purge/rmdir/cleanup; vertragliche `--filter` in Reihenfolge; Quelle `DATA_DIR`; externe Pfade -> `extern/<schluessel>`) | `tests/Unit/NasAbgleichTest.php::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` | gruen | gruen | n/a |
+| AK 4 (Statusdatei via `rcat` auch bei Transferfehler, Transfer-Exit != 0 -> `NAS_TRANSFER`, Kennzahlen ohne Pfad/Host-Leak) | `tests/Unit/NasAbgleichTest.php::testAbgleichenSchreibtStatusdateiBeiTransferfehlerUndWirftNasTransfer` | gruen | gruen | n/a |
+| AK 5 (Passwort-Leck-Schutz: kein Klartext in Args/Logs/Rueckgaben; `RCLONE_SMB_PASS` nur obscured, Klartext nur stdin bei `obscure`) | `tests/Unit/NasAbgleichTest.php::testPasswortBleibtAusArgumentenRueckgabenUndErrorLogs` | gruen | gruen | n/a |
+| AK 6 (Zeitlimit-Verhalten: Abbruch auf `NAS_ZEIT` oder `NAS_VERBINDUNG`) | `tests/Unit/NasAbgleichTest.php::testVerbindungTestenBrichtBeiZeitlimitMitNasZeitOderNasVerbindungAb` | gruen | gruen | n/a |
+| Vertrag 5 (NAS-Prozess/Faelligkeit: inaktiv -> nichts; Erstversuch erst nach Sicherung oder Uhrzeit+2h; Erfolg vor +2h bei abgeschlossener Sicherung) | `tests/Unit/NasJobTest.php::testInaktiverJobOhneAuftragMachtNichts`, `::testErstversuchWartetBisTagessicherungOderZweiStundenVorbei`, `::testErstversuchStartetVorZweiStundenWennSicherungAbgeschlossenIst` | gruen | gruen | n/a |
+| Vertrag 5 + AK 6 (Wiederholung alle 30 min; nach 4 Versuchen `fehlgeschlagen`; Ueberwachung erzeugt `nas:<tag>:fehler`) | `tests/Unit/NasJobTest.php::testFehlerWirdWiederholtUndNachVierVersuchenFehlgeschlagenMitMeldung` | gruen | gruen | n/a |
+| Vertrag 5/6 (manueller Auftrag `job_anfordern nas`; zweiter Lauf bei gehaltener `nas.lock` endet Exit 0 ohne Lauf) | `tests/Unit/NasJobTest.php::testManuellerAuftragWirdAuchBeiInaktivemJobAlsFertigMarkiert`, `tests/Api/SystemPlanerApiTest.php::testJobAnfordernErlaubtNasUndNasCommandUeberspringtBeiLock` | gruen | gruen | n/a |
+| AK 11 (API `system_einstellungen_speichern` mit `nas`: Validierung, `aktiv=true` ohne Passwort -> 400, Passwort nur schreibbar, Antworten ohne Passwort/ohne `enc:v1:`) | `tests/Api/SystemPlanerApiTest.php::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` | gruen | gruen | n/a |
+| Vertrag 6 (API `nas_verbindung_testen`/`secret_key_anzeigen`: Rechte, GET->405 nach Rollenpruefung, Drosselung 429, `Cache-Control: no-store`, Audit ohne Zugangsdaten) | `tests/Api/SystemPlanerApiTest.php::testNasUndSecretKeyApiRechteMethodenDrosselungUndAudit` | gruen | gruen | n/a |
+| AK 12 + R12 (Restore mit fremdem Secret: NAS-Passwort geleert, `passwortNeuEingeben=true`, Hinweis in `system_hinweise`) | `tests/Api/SystemPlanerApiTest.php::testRestoreMitFremdemSecretLeertNasPasswortUndSetztHinweis` | gruen | gruen | n/a |
+| Vertrag 9 / R1 (Empfaenger-Rotation je Versuch) | `tests/Unit/UeberwachungMeldungsZustellungTest.php::testEmpfaengerRotationBeginntBeimNaechstenVersuchMitAnderemEmpfaenger` | gruen | gruen | n/a |
+| Vertrag 9 / R3 (API-Testmail meldet nicht versuchte Empfaenger als "Nicht versucht ...") | `tests/Api/SystemPlanerApiTest.php::testUeberwachungHinweiseUndTestmailRechteMethodenUndDrosselung` | gruen | gruen | n/a |
+
+### T4 - Runde 2 (Tester, Modell: GPT-5 (copilot))
+
+**ROT**
+
+**A. Begruendete Testanpassung (E-090):** `NasAbgleichTest::testAbgleichenSchreibtStatusdateiBeiTransferfehlerUndWirftNasTransfer` prueft die Kennzahl-Schluessel jetzt inkl. `externeUebersprungen`, weil Befund 2a diese Kennzahl vertraglich neu eingefuehrt hat. Ohne Anpassung waere der Test ein falsches Negativ (kein Produktivfehler).
+
+**Neu/erweitert (Runde 2):**
+- `tests/Unit/NasAbgleichTest.php`
+  - Exit-Code-Abdeckung (`exit 0/1/3`) in `testVerbindungTestenErkenntExitCodesKorrekt`.
+  - Fehler-Mapping um gemischte Schreibweise ergaenzt (`Permission Denied`, `Access is denied`).
+  - Externe harte Ausschluesse fuer legitime Pfade explizit geprueft.
+  - Vorfahr-Pfad von `DATA_DIR` wird als ausgelagerter Pfad uebersprungen und zaehlt `externeUebersprungen` hoch.
+  - Zeitueberschreitung in `verbindungTesten()` strikt auf `NAS_VERBINDUNG` geprueft.
+- `tests/Unit/NasJobTest.php`
+  - Manueller Lauf ohne Faelligkeit darf `tageslaufDatum`/`tageslaufStatus` nicht veraendern.
+  - Fehlgeschlagener manueller Lauf blockiert den spaeteren automatischen Tageslauf nicht.
+  - `naechsterVersuchAm` basiert auf Uhrzeit **nach** dem Abgleich (vorrueckende injizierte Uhr).
+- `tests/Api/SystemPlanerApiTest.php`
+  - NAS-Validierung um Befund-7/8-Faelle erweitert: `freigabe='.'/'..'`, `pfad` mit abschliessendem `\n`, Segment `..`, Nicht-String-Eingaben (`host`, `benutzer`, `passwort` als Array).
+
+**Befund-Matrix (Runde 2):**
+| Befund | Testabdeckung | Ergebnis |
+|---|---|---|
+| 1 Exit-Codes/`NAS_RCLONE_FEHLT` | `NasAbgleichTest::testVerbindungTestenErkenntExitCodesKorrekt`, `::testVerbindungTestenLiefertRcloneFehltBeiNichtStartbaremBefehl` | gruen in allen Laeufen; Linux 8.2/8.3 kein `proc_close()`-Regressionseffekt mehr |
+| 2 Externe Pfade (Vorfahr/System + harte Ausschluesse) | `NasAbgleichTest::testAbgleichenUeberspringtExternePfadeDieDataDirVorfahrSind`, `::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` | gruen |
+| 3 Manueller Lauf/Faelligkeit | `NasJobTest::testManuellerLaufOhneFaelligkeitAendertTageslaufNicht`, `::testFehlgeschlagenerManuellerLaufBlockiertAutomatischenTageslaufNicht` | **rot**: erster Test schlaegt fehl (Produktivverhalten ueberschreibt `tageslaufDatum`) |
+| 4 Timeout Verbindungstest | `NasAbgleichTest::testVerbindungTestenBrichtBeiZeitlimitMitNasVerbindungAb` | gruen |
+| 5 `naechsterVersuchAm` nach Abgleich-Uhr | `NasJobTest::testNaechsterVersuchAmOrientiertSichAnZeitNachAbgleich` | gruen |
+| 7 Pfad/Freigabe-Validierung | `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` (erweitert) | **rot**: `pfad` mit abschliessendem `\n` wird aktuell akzeptiert (HTTP 200 statt 400) |
+| 8 Nicht-String-Eingaben -> 400 | `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` (erweitert) | gruen (bis auf den oben genannten Pfad-`\n`-Teilfall) |
+| 9 Drosselung `secret_key_anzeigen` (6. Versuch) | `SystemPlanerApiTest::testNasUndSecretKeyApiRechteMethodenDrosselungUndAudit` | gruen (6. Fehlversuch -> 429) |
+| 13 Meldung `Permission Denied`/`Access is denied` | `NasAbgleichTest::testVerbindungTestenMapptRcloneFehlercodes` | gruen |
+
+**Ausgefuehrt:**
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpunit --filter "NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture"` (SQLite)
+- `powershell -ExecutionPolicy Bypass -File .\scripts\test-pgsql.ps1 -Php <php.exe> -PhpUnitArgs '--filter=NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture'` (PostgreSQL, E-064)
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.2-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.3-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/php-cs-fixer check --diff` -> gruen
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpstan analyse --memory-limit=2G` -> `[OK] No errors`
+
+**Umgebungsstatus (Pflichtausgabe):**
+| Umgebung | Status | Details |
+|---|---|---|
+| SQLite | **ROT** | 78 Tests, 738 Assertions, 2 Failures (`NasJobTest::testManuellerLaufOhneFaelligkeitAendertTageslaufNicht`; `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` Teilfall `pfad="baukalkulation\n"`) |
+| PostgreSQL | **ROT** | 78 Tests, 738 Assertions, 2 Failures (identisch zu SQLite) |
+| Linux PHP 8.2 | **ROT** | 26 Tests, 111 Assertions, 1 Failure (`NasJobTest::testManuellerLaufOhneFaelligkeitAendertTageslaufNicht`) |
+| Linux PHP 8.3 | **ROT** | 26 Tests, 111 Assertions, 1 Failure (`NasJobTest::testManuellerLaufOhneFaelligkeitAendertTageslaufNicht`) |
+
+Hinweis: Rote Tests sind unveraendert gemeldet und **nicht** abgeschwaecht (Vorgabe).
+
+### T4 - Runde 3 (Tester, Modell: GPT-5 (copilot))
+
+**Status:** GRUEN
+
+**A. Begruendete Anpassung (`NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle`):**
+Die externen rclone-Filter wurden auf die in Runde 3 implementierten, unverankerten Regeln umgestellt (`- secret.key`, `- database.sqlite*`, `- systemadmin-passwort.txt`, `- audit_pepper.txt`, `- *.env`, `- .tmp-*/**`, `- *.lock`; ohne `**/`). Das ist der dokumentierten Leitstand-/Reviewer-Korrektur aus Befund 1 entsprechend (inkl. `rclone lsf`-Beleg in Abschnitt 3).
+
+**B. Begruendete Anpassung (`SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert`):**
+`pfad="baukalkulation\n"` wird gemaess Leitstand-Entscheidung getrimmt und als `baukalkulation` gespeichert (200, Rueckgabe + gespeicherter Wert geprueft). Umbruch *innerhalb* des Pfads (`"a\nb"`, `"a\n/b"`) bleibt 400.
+
+**Neu/erweitert (Runde 3):**
+- `tests/Unit/NasAbgleichTest.php`
+  - Externe Filter-Erwartung auf die korrigierten Runde-3-Regeln umgestellt.
+  - Neuer Test fuer ausgelagerten Pfad innerhalb `APP_ROOT` ausserhalb `DATA_DIR` (`externeUebersprungen`).
+  - Neuer Test fuer Unix-Systempfad (`/tmp`) mit begruendetem Skip auf Windows; auf Linux aktiv.
+- `tests/Unit/NasJobTest.php`
+  - `testManuellerErfolgSetztHeutigenFehlgeschlagenenTageslaufAufOk`.
+  - `testManuellerErfolgOhneHeutigenFehlschlagLaesstTageslaufUnveraendert`.
+- `tests/Api/SystemPlanerApiTest.php`
+  - `pfad`-Trim-Fall (`baukalkulation\n`) und interne Newline-Fehlerfaelle (`a\nb`, `a\n/b`).
+  - Neuer API-Test: `nas_verbindung_testen`/`secret_key_anzeigen` mit `passwort: []` liefern 400 (kein 500).
+
+**Befund-Matrix (Runde 3):**
+| Thema | Testabdeckung | Ergebnis |
+|---|---|---|
+| A: Externe Filter ohne `**/` | `NasAbgleichTest::testAbgleichenVerwendetVertragsfilterUndErlaubteBefehle` | gruen |
+| B: `pfad`-Trim + interne Newlines | `SystemPlanerApiTest::testNasEinstellungenWerdenValidiertUndPasswortBleibtMaskiert` | gruen |
+| C1: Manueller Erfolg nach heutigem Fehlschlag -> `ok` | `NasJobTest::testManuellerErfolgSetztHeutigenFehlgeschlagenenTageslaufAufOk` | gruen |
+| C2: Manueller Erfolg ohne Faelligkeit/ohne heutigen Fehlschlag -> Tageslauf unveraendert | `NasJobTest::testManuellerErfolgOhneHeutigenFehlschlagLaesstTageslaufUnveraendert` | gruen |
+| C3: `passwort: []` bei NAS-/Secret-Endpunkten -> 400 | `SystemPlanerApiTest::testNasUndSecretKeyApiLehnenArrayPasswoerterMit400Ab` | gruen |
+| C4: Externe Pfade in Systempfad bzw. innerhalb `APP_ROOT` ausserhalb `DATA_DIR` | `NasAbgleichTest::testAbgleichenUeberspringtExternePfadeInUnixSystempfaden`, `::testAbgleichenUeberspringtExternePfadeInnerhalbVonAppRootAusserhalbDataDir` | gruen (Windows: `/tmp`-Fall begruendet geskippt) |
+
+**Ausgefuehrt:**
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpunit --filter "NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture"` (SQLite)
+- `powershell -ExecutionPolicy Bypass -File .\scripts\test-pgsql.ps1 -Php <php.exe> -PhpUnitArgs '--filter=NasAbgleichTest|NasJobTest|UeberwachungMeldungsZustellungTest|SystemPlanerApiTest|BackupFixture'` (PostgreSQL, E-064)
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.2-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `docker run --rm -v "${PWD}:/app" -w /app php:8.3-cli php vendor/bin/phpunit --colors=never --filter "NasAbgleichTest|NasJobTest"`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/php-cs-fixer check --diff`
+- `C:\Users\wosch\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe vendor/bin/phpstan analyse --memory-limit=2G`
+
+**Umgebungsstatus:**
+| Umgebung | Status | Details |
+|---|---|---|
+| SQLite (PHP 8.2.31, Windows) | **GRUEN** | 83 Tests, 799 Assertions, 0 Failures, 1 Skip (`/tmp`-Systempfadtest auf Windows) |
+| PostgreSQL (PHP 8.2.31, Windows + E-064 Container) | **GRUEN** | 83 Tests, 799 Assertions, 0 Failures, 1 Skip (wie SQLite) |
+| Linux PHP 8.2 (Container) | **GRUEN** | 30 Tests, 128 Assertions, 0 Failures |
+| Linux PHP 8.3 (Container) | **GRUEN** | 30 Tests, 128 Assertions, 0 Failures |
+| php-cs-fixer | **GRUEN** | `Found 0 of 52 files that can be fixed` |
+| phpstan | **GRUEN** | `[OK] No errors` |
+
 ## 5. Review
 
 ### T1 – Runde 1 (Reviewer, Modell: GPT-5.5 (copilot))
@@ -761,6 +1586,97 @@ visuelle Abnahme, Commit/Release.
 
 **Urteil:** APPROVE – alle 4 Vorbefunde behoben, keine neuen Befunde (`php -l`, PHPStan, 52 gezielte Tests grün).
 
+### T3 – Runde 1 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen
+
+**Urteil:** CHANGES_REQUESTED (2 Major, 9 Minor, 6 Hinweise). `php -l`, PHPStan, `check-versions --strict` und `test:js` 19/19 waren grün; Fixture v3.0.23 korrekt; VERSION unverändert.
+
+- (a) Probe-Baseline: als gemeldete Abweichung vertretbar, aber der Zustand `ok` ohne Ausführung widerspricht E-021 → Befund 5.
+- (b) Watchdog: Antwort von `check` unverändert, Fehler werden nie nach außen gegeben, Drosselung wirksam; die Laufzeit ist nur eingeschränkt begrenzt → Befund 6.
+
+| Nr | Schwere | Fundstelle | Befund | Vorgabe Leitstand für Runde 2 |
+|---|---|---|---|---|
+| 1 | Major | `MeldungsZustellung.php:105-117` | Erst senden, dann bedingtes UPDATE → Planer und Watchdog können doppelt zustellen (AK 6, R7). Vom Leitstand unabhängig ebenfalls gefunden | Vor dem Senden beanspruchen (Lease, `rowCount`); Watchdog stellt nur bei stehendem Planer zu |
+| 2 | Major | `SystemJobActions.php:136` | Zustell-Hinweis zählt auch nie wieder versuchte Einträge über 7 Tage → Dauerbanner | Nur < 7 Tage zählen; ungesendete > 90 Tage löschen |
+| 3 | Minor | `Watchdog.php:70-74` | Tägliche Ausbleiben-Mail trotz gemeldeter Störung | gemeinsame Prüfung „gemeldete Störung“ |
+| 4 | Minor | `Watchdog.php:36-47` | `aktiv=false` ignoriert; Zeitstempel nach `flock` nicht erneut geprüft | beides umsetzen |
+| 5 | Minor | `Planer.php:268-282` | Baseline schreibt `ok` ohne Ausführung (E-021) | Status `uebersprungen`, nur ohne ältere Tagessicherung |
+| 6 | Minor | `MeldungsZustellung.php:103-111` | Timeout je Empfänger und Socket, kein Gesamtbudget (Watchdog ≫ 5 s, Testmail bis ~150 s). Vom Leitstand ebenfalls gefunden | Gesamtbudget; Abbruch nach dem ersten Fehlschlag |
+| 7 | Minor | `SystemJobActions.php:125-131` | Hinweise auch für inaktive Jobs; Rohnamen | inaktive auslassen, lesbare Namen |
+| 8 | Minor | `SystemEinstellungen.php:118` | 25 h → Ausbleiben während der Wiederholungen bzw. 25-h-Tag bei der Zeitumstellung | kein Ausbleiben bei `laufend`/`fehler`; Untergrenze 26 |
+| 9 | Minor | `SystemEinstellungen.php:106` | Eingabe im 400-Text; `"false"` → true | fester Text, strenge bool-Prüfung |
+| 10 | Minor | `script.js`, Anleitung | Testmail ohne Empfänger und Fehlertexte; Fristhinweis fehlt (AK 8, E-081) | UI und Anleitung angleichen |
+| 11 | Minor | `MeldungsZustellung.php:~140` | Fehlercode wird nie ausgegeben (Vertrag 7) | bei passender Regex ausgeben |
+| 12 | Hinweis | `MeldungsZustellung.php:182` | `isLocked` NULL | `COALESCE` |
+| 13 | Hinweis | mehrere | `@`-Operator in neuem Code | explizite Prüfung |
+| 14 | Hinweis | `Planer.php` | Herzschlag nur am Laufanfang → Fehlalarm bei langen Läufen (T4) | Herzschlag je Schritt |
+| 15 | Hinweis | `Ueberwachung.php`, `Watchdog.php` | `strtotime` statt injizierter Uhr; Statuszeilen für inaktive Jobs; Sender nicht injizierbar | anpassen |
+| 16 | Hinweis | `script.js` | `sessionStorage` unterdrückt auch neue Hinweise | Schlüssel je Hinweisliste, beim Logout löschen |
+| 17 | Hinweis | `Ueberwachung.php:150-185` | `aktiv=false` unterdrückt die Entwarnung; sie kommt nach Wiedereinschalten nachträglich | nur dokumentieren |
+
+### T3 – Runde 2 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen
+
+**Urteil:** CHANGES_REQUESTED – Befunde 1–17 bis auf 6 behoben.
+
+Neu:
+- **N1 (Major):** Das Budget galt je Eintrag statt je Empfänger, kein Abbruch nach dem ersten Fehlschlag.
+- **N2:** Eine Ausnahme nach dem Beanspruchen hinterließ eine Lease ohne Backoff.
+- **N3:** Der Watchdog lud die Einstellungen bei jedem `check`.
+- **N4:** UI-Text für `uebersprungen` fehlte.
+- **N5:** Herzschlag bei langen Einzelschritten → durch T4 Punkt 5 gelöst.
+- **N6–N9:** Hinweise.
+
+### T3 – Runde 3 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen
+
+**Urteil:** APPROVE. N1–N4 und N7–N9 sind behoben. Neue Befunde:
+- **R1 (Minor):** Ein dauerhaft abgelehnter erster Empfänger blockiert die übrigen → T4 Punkt 9 (Rotation).
+- **R2 (Minor):** Bei `aktiv=false` liest jeder `check` die Einstellungen.
+- **R3 (Nit):** Text bei aufgebrauchtem Budget → T4 Punkt 9.
+- **R4 (Nit), R5 (Info):** zurückgestellt.
+
+### T4 – Runde 1 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen
+
+**Urteil:** CHANGES_REQUESTED (3 Major, 11 Minor, 1 Hinweis). `php -l`, PHPStan, `check-versions`, `test:js` grün; keine Lecks des Passworts, Minimal-Env, nur `copy`/`mkdir`/`rcat`/`obscure`, Filter exakt nach Vertrag.
+
+| Nr | Schwere | Fundstelle | Befund | Leitstand |
+|---|---|---|---|---|
+| 1 | Major | `NasAbgleich.php:426/465` | `proc_close()` liefert nach `proc_get_status()` auf PHP < 8.3 den Wert `-1` → jeder rclone-Aufruf gilt als fehlgeschlagen | **Bestätigt:** `php:8.2-cli` (8.2.35, Linux) → `NasAbgleichTest` 8/12 rot (`NAS_RCLONE_FEHLT`). Lokal (Windows 8.2) und in der Ende-zu-Ende-Prüfung (Image 8.3) unsichtbar |
+| 2 | Major | `NasAbgleich.php:289-310` | Ausgelagerter Pfad als Vorfahr von `DATA_DIR`/`/etc` → Geheimnisse auf die NAS (Admin-Exfiltration, AK 4) | Vorfahren-/Systempfad-Sperre plus unverankerte Ausschlüsse |
+| 3 | Major | `NasJob.php:91` | Manueller Lauf überschreibt `tageslaufDatum` → automatischer Lauf entfällt oder falsche Fehler-Mail | `start()` ohne Datum |
+| 4–14 | Minor | div. | `NAS_ZEIT` im Verbindungstest; eingefrorene Uhr (F10); ungeschütztes `fwrite`/`mkdir`; Regex ohne `/D`; Nicht-String-Eingaben → 500; Drosselung ohne Sperre; `prompt()` mit Klartext-Passwort; Schlüssel bleibt im DOM; Auto-Speichern verschluckt Eingaben; Groß-/Kleinschreibung bei Fehlermeldungen; Doku (`&amp;`, „Live-Datenbank“, www-data) | alle in Runde 2 |
+| 15 | Hinweis | `NasAbgleich.php` | Verbindungstest auf beliebige Host/Port | akzeptiert (Risikotabelle) |
+
+**Leitstand-Prüfungen zu T4 Runde 1:**
+- Image-Build (`ENABLE_OCR=false`, Debian trixie): `rclone v1.60.1-DEV` installiert, Build-Prüfung `help backend smb` bestanden, Crontab-Zeile `nas:abgleich` vorhanden.
+- Ende-zu-Ende-Prüfung im gebauten Image (PHP 8.3, `www-data`) gegen eine Samba-Freigabe mit echtem App-Code:
+  - falsches Passwort → `NAS_ANMELDUNG`; falscher Host → `NAS_NICHT_ERREICHBAR` (Host im Log als `***`);
+  - richtige Zugangsdaten → Verbindungstest ok, manueller Auftrag → `nas: ok`, Auftrag `fertig`, Statusdatei geschrieben;
+  - Passwort nur verschlüsselt in der DB, nicht in Protokoll/Status;
+  - auf der NAS nur die Positivliste (nicht übertragen: `secret.key`, `database.sqlite`, Startpasswort, Pepper, `.tmp-*`).
+
+### T4 – Runde 2 (Reviewer, Modell: gpt-5.5) – vom Leitstand eingetragen
+
+**Urteil:** CHANGES_REQUESTED. Behoben: 1, 3–14 (Exit-Code jetzt auf Linux 8.2/8.3 belegt); 2 nur teilweise.
+
+| Nr | Schwere | Befund | Leitstand |
+|---|---|---|---|
+| 1 | Major | Die unverankerten Ausschlüsse `**/secret.key` … greifen im **Wurzelordner** des externen Pfads nicht (rclone verlangt bei `**/x` mindestens ein `/`), belegt mit `rclone/rclone:1.60.1`. | **Fehler in der Leitstand-Vorgabe** (Runde 2, Punkt 2b) → Regeln ohne `**/`, Pflicht-Verifikation per `rclone lsf` in Runde 3 |
+| 2 | Minor/Major | Ein manueller Erfolg setzt `tageslaufDatum = heute`, `ok` → der automatische Lauf nach der Sicherung entfällt | nur bei Fälligkeit oder heutigem Fehlschlag |
+| 3 | Minor | Array als `passwort` im Handler → 500 statt 400 | `is_string` |
+| 4 | Hinweis | Sperrliste lückenhaft (`/tmp`, `/home`, `/var/log`, APP_ROOT ohne `data/` …) | erweitern |
+| 5 | Hinweis | `externeUebersprungen` nicht sichtbar | UI und Doku |
+| 6 | Hinweis | Passwort-Modal ohne Sperre gegen Doppelauslösung | „läuft“-Flag |
+
+**Leitstand-Entscheidung zum Tester-Befund (2):** `pfad="a\n"` wird getrimmt und als `a` gespeichert; ein Umbruch innerhalb scheitert an `/D` → gewolltes Verhalten, der Test wird angepasst (E-090).
+
+### T4 – Runde 3 (Reviewer, Modell: gpt-5.5)
+
+**Urteil:** APPROVE – Befunde 1–6 behoben.
+- Filter mit echtem rclone 1.60.1 bis in die 3. Ebene geprüft.
+- Pfadsperre per Reflection mit gut 20 Linux-/Windows-Pfaden geprüft (gesperrt: Vorfahren, APP_ROOT-Unterordner außerhalb `data/`, Systempfade; erlaubt: `/mnt/nas-export`, `/srv/baukalk-uploads` u. a.).
+- Neue Befunde nur Nit/Hinweis: Doku-Formulierung zu `data/` (vom Leitstand korrigiert); Warnzeile nur am letzten Lauf; `/home` und `/tmp` komplett gesperrt (bewusst); `is_string`-400 nach der Drossel.
+
 ## 6. Lernpunkte
 
 - E-021, E-022 (Backup/Migration) aus Review T2 in `erkenntnisse.md`, erstes Auftreten → nur dort.
+- T3/T4: E-023 (Claim vor Zustellung), E-024 (Zeitbudget an der innersten Schleife), E-025 (UI-Hinweise nur aus behebbaren Zuständen), E-026 (Filter gegen echtes Werkzeug prüfen, Pfadsperre), E-027 (Tageslauf nur im Tageslauf-Pfad → `php-backend.instructions.md`, 2. Auftreten), E-067 (Prozess-Code unter Linux mit kleinster PHP-Version testen). E-087 → `AGENTS.md` (2. Auftreten).
+- Kennzahlen T3/T4: je 3 Review-Runden (Schleifenbremse erreicht, nicht überschritten). Rote Testläufe überwiegend aus Leitstand-/Reviewer-Befunden; davon zwei Tests, die einer Vertragsvorgabe widersprachen (E-090).

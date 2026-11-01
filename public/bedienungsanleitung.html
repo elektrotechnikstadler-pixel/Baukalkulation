@@ -84,11 +84,12 @@
     <a href="#dashboard">9. Dashboard</a>
     <a href="#auswertung">10. Auswertung</a>
     <a href="#archiv">11. Archiv</a>
-    <a href="#sicherung">12. Datensicherung</a>
-    <a href="#suche">13. Globale Suche</a>
-    <a href="#module">14. Zusatzmodule</a>
-    <a href="#einstellungen">15. Einstellungen &amp; Rechte</a>
-    <a href="#datensicherheit">16. Datensicherheit</a>
+    <a href="#sicherung">12. Datensicherung &amp; NAS</a>
+    <a href="#ueberwachung">13. Überwachung &amp; Systemmeldungen</a>
+    <a href="#suche">14. Globale Suche</a>
+    <a href="#module">15. Zusatzmodule</a>
+    <a href="#einstellungen">16. Einstellungen &amp; Rechte</a>
+    <a href="#datensicherheit">17. Datensicherheit</a>
   </nav>
 
   <main class="content">
@@ -316,29 +317,115 @@
     </section>
 
     <section id="sicherung">
-      <h2>12. Datensicherung</h2>
+      <h2>12. Datensicherung &amp; NAS</h2>
       <ul>
         <li><strong>Automatische Sicherung:</strong> Status und Zeitpunkt sehen Sie in der Fußzeile.</li>
         <li><strong>Zeitgesteuerte Serversicherung (nur Administratoren):</strong> In „Verwaltung → Allgemein →
-          Datensicherung“ lassen sich Uhrzeit (Standard 02:00 Uhr) und Aufbewahrung (3–90 Tage) der
+          Datensicherung &amp; NAS“ lassen sich Uhrzeit (Standard 02:00 Uhr) und Aufbewahrung (3–90 Tage) der
           täglichen Serversicherung einstellen. Die Karte zeigt den letzten Erfolg, einen etwaigen Fehler, ob der
           Zeitplaner aktiv ist (roter Hinweis, wenn nicht), die letzten Läufe sowie einen Knopf „Tageslauf jetzt
           ausführen“. Schlägt ein Tageslauf fehl, folgen bis zu drei automatische Wiederholungen im
           30-Minuten-Abstand; das bisherige Backup beim ersten Speichern des Tages bleibt zusätzlich als Rückfall
           bestehen.</li>
+        <li><strong>NAS-Abgleich (nur Administratoren):</strong> Im selben Bereich lässt sich ein täglicher Abgleich
+          mit einer SMB/CIFS-Netzwerkfreigabe (NAS) einrichten – Host, Port, Freigabe, Pfad, Benutzer, Passwort,
+          optionale Domäne und eine optionale Bandbreitenbegrenzung. Er läuft als eigener, von der Serversicherung
+          unabhängiger Vorgang direkt im Anschluss an die tägliche Serversicherung (spätestens aber zwei Stunden
+          nach deren eingestellter Uhrzeit), damit auch ein ausbleibender Sicherungslauf den NAS-Abgleich nicht
+          dauerhaft blockiert. Übertragen werden nur die Dateien der Sicherung sowie ausgelagerte Ordner
+          (Hochgeladene Dateien, Bautagebuch, Datanorm, Archiv, Exporte). Die Live-Datenbank
+          (<code>database.sqlite</code>) wird nie übertragen – die Tagessicherungen in <code>backups/</code>
+          enthalten jedoch einen Datenbank-Snapshot. Schlüsseldatei und weitere
+          interne Dateien werden <strong>nie</strong> übertragen; Ordner innerhalb von <code>data/</code>, die nicht
+          auf dieser Positivliste stehen, werden grundsätzlich <strong>nicht</strong> mit übertragen. Zeigt ein
+          ausgelagerter Ordner auf einen Systempfad (z.&nbsp;B. <code>/etc</code>, <code>/tmp</code>,
+          <code>/var/log</code>, <code>/home</code> und Ähnliches), auf einen übergeordneten Ordner von
+          <code>data/</code> bzw. des App-Verzeichnisses oder auf einen Ordner des App-Verzeichnisses außerhalb von
+          <code>data/</code> (z.&nbsp;B. <code>src</code>, <code>vendor</code>), wird dieser Pfad aus Sicherheitsgründen
+          übersprungen und nicht übertragen; die
+          Karte zeigt dann die Warnzeile „N ausgelagerte(r) Speicherpfad(e) wurde(n) aus Sicherheitsgründen nicht
+          übertragen.“ – in diesem Fall die Pfadeinstellungen prüfen und korrigieren. Ordner innerhalb von
+          <code>data/</code> gelten nicht als ausgelagert und folgen ohne Warnzeile der Positivliste.
+          <strong>Auf der NAS wird nie gelöscht</strong> –
+          lokal entfernte Dateien bleiben dort bestehen (für das Aufräumen alter Stände ist ein eigener, manueller
+          Schritt auf der NAS selbst nötig). Der Knopf „Verbindung testen“ prüft Schreibrechte im eingestellten
+          Zielpfad, ohne einen vollständigen Abgleich auszulösen; „Jetzt abgleichen“ stößt einen sofortigen Lauf an.
+          Schlägt ein Tageslauf fehl, gelten dieselben bis zu drei Wiederholungen im 30-Minuten-Abstand wie bei der
+          Serversicherung. <strong>Übergang vom bisherigen Host-Cronjob:</strong> Den bisherigen, außerhalb der App
+          eingerichteten Cronjob (rsync über eine eingehängte SMB-Freigabe) erst abschalten, wenn der App-Abgleich
+          mindestens drei Tage in Folge ohne Fehler gelaufen ist.</li>
+        <li><strong>Schlüssel separat aufbewahren (nur Administratoren):</strong> Verschlüsselte Passwörter (SMTP,
+          NAS, Backup-E-Mail) werden mit einem lokalen Schlüssel (<code>secret.key</code>) geschützt, der bewusst
+          <strong>nicht</strong> auf die NAS übertragen wird. Über den Knopf „Schlüssel anzeigen“ (erneute
+          Passwortabfrage in einem kleinen Dialog, nicht im Browser-Prompt) lässt er sich anzeigen, in die
+          Zwischenablage kopieren oder als Datei
+          herunterladen – zur separaten Aufbewahrung, z.&nbsp;B. in einem Passwort-Tresor. Die Anzeige wird beim
+          Verlassen des Bereichs, bei einer Suche in der Verwaltung oder spätestens nach 60 Sekunden automatisch
+          wieder entfernt. Kommt der Schlüssel stattdessen aus der Umgebungsvariable
+          <code>BK_SECRET_KEY</code>, erscheint statt des Schlüssels der Hinweis „Schlüssel kommt aus der Umgebung“.
+          Ließ sich das NAS-Passwort nach einer Wiederherstellung nicht mit dem aktuellen Schlüssel entschlüsseln
+          (z.&nbsp;B. nach einem Umzug auf eine andere Instanz), wird es automatisch geleert und ein Hinweis bittet
+          um die erneute Eingabe.</li>
         <li><strong>Manuelle Sicherung:</strong> über „Datensicherung" einen Wiederherstellungspunkt anlegen.</li>
         <li><strong>Wiederherstellen / Upload:</strong> Vor jedem Zurückspielen wird automatisch der aktuelle Stand gesichert – jede Wiederherstellung ist damit umkehrbar. Ein von Hand gezippter Sicherungsordner (Dateien in genau einem Unterordner des ZIP) wird ebenfalls erkannt.</li>
       </ul>
       <div class="warn">Ein Backup-ZIP enthält Daten (JSON) und Datenbank, aber <strong>nicht</strong> das Archiv-Verzeichnis. Für vollständige Umzüge zusätzlich das Archiv sichern (Abschnitt 11).</div>
     </section>
 
+    <section id="ueberwachung">
+      <h2>13. Überwachung &amp; Systemmeldungen</h2>
+      <ul>
+        <li><strong>Bereich „Überwachung“ (nur Administratoren):</strong> In „Verwaltung → Allgemein → Überwachung“
+          zeigt eine Ampel je Job (Serversicherung, NAS-Abgleich, Wiederherstellungs-Probe, Speicherplatz, Backup-E-Mail,
+          Zeitplaner (Cron)) den letzten Erfolg und einen etwaigen Fehlercode. Grau bedeutet, dass der Job gerade
+          inaktiv ist (z.&nbsp;B. Backup-E-Mail abgeschaltet), Gelb „noch kein Lauf“, Grün „letzter Lauf
+          erfolgreich“ und Rot eine gemeldete Störung; ein Hinweis über der Tabelle nennt die Frist, ab der ein
+          Ausbleiben gemeldet wird (z.&nbsp;B. „Meldung, wenn &gt; 26 h kein Erfolg“). Darunter lassen sich die
+          Überwachung ein-/ausschalten, die Empfängerliste für Systemmeldungen (ein Eintrag je Zeile, leer = alle
+          Administratoren mit hinterlegter E-Mail-Adresse), die Ausbleiben-Frist (26–168 Stunden) und der
+          Mindest-Speicherplatz (100–1.000.000 MB) einstellen. Solange ein Tageslauf (Serversicherung,
+          Wiederherstellungs-Probe) noch läuft oder gerade einen Fehlversuch wiederholt, wird in dieser Zeit kein
+          zusätzliches Ausbleiben gemeldet.</li>
+        <li><strong>Wiederherstellungs-Probe:</strong> läuft automatisch einmal im Monat (ab 04:00 Uhr) und prüft die
+          neueste Tagessicherung einschließlich eines Datenbank-Integritätstests. Bei einer neu eingerichteten
+          Installation ohne ältere Tagessicherung entfällt die allererste Probe (sie läuft regulär erst im
+          Folgemonat); bestehende Installationen mit bereits vorhandenen Tagessicherungen führen die Probe wie
+          gewohnt zur nächsten Fälligkeit aus. Über den Knopf „Wiederherstellungs-Probe jetzt ausführen“ lässt sie
+          sich jederzeit manuell anstoßen.</li>
+        <li><strong>Testmail:</strong> Der Knopf „Testmail senden“ verschickt eine Testnachricht an die wirksamen
+          Empfänger und zeigt je Empfänger das Ergebnis inkl. Fehlertext an. Gibt es keine wirksamen Empfänger,
+          erscheint der Hinweis „Keine Empfänger – bitte Adressen eintragen oder Admins eine E-Mail hinterlegen.“.
+          Schlägt der Versand an einen Empfänger fehl, werden die übrigen Empfänger nicht mehr versucht (derselbe
+          Mailserver wäre ohnehin betroffen) und als „Nicht versucht“ ausgewiesen.</li>
+        <li><strong>Systemmeldungen:</strong> Bei einem Fehlschlag, einem Ausbleiben (z.&nbsp;B. Zeitplaner läuft
+          nicht) oder einer anschließenden Entwarnung erhalten die Empfänger eine E-Mail mit Fehlercode (z.&nbsp;B.
+          „Fehlercode: SICHERUNG_FEHLER“), fester Fehlerbeschreibung und Handlungsempfehlung; je Job und Tag wird
+          höchstens eine Fehler-Mail verschickt. Erreicht mindestens ein Empfänger die Mail, bevor ein anderer
+          fehlschlägt, gilt die Meldung als zugestellt; für den nicht erreichten Empfänger erfolgt kein erneuter
+          Versandversuch. Nicht zustellbare Meldungen werden nach 7 Tagen nicht mehr
+          versucht und nach 90 Tagen gelöscht. Die Tabelle „Systemmeldungen“ und das Laufprotokoll zeigen den
+          Verlauf.</li>
+        <li><strong>Roter Admin-Hinweis:</strong> Besteht eine Störung bei einem aktiven Job oder läuft der
+          Zeitplaner nicht, erscheint nach der Anmeldung oben ein roter Hinweisbalken mit Kurztext (lesbarer
+          Jobname) und dem Knopf „Überwachung öffnen“. Für abgeschaltete Jobs (z.&nbsp;B. Backup-E-Mail) sowie für
+          länger als 7 Tage unzustellbare Systemmeldungen erscheint kein Dauer-Hinweis mehr. Der Balken lässt sich
+          für die laufende Sitzung schließen; erscheinen neue Hinweise, wird er erneut angezeigt. Beim Abmelden
+          wird die Markierung „geschlossen“ zurückgesetzt.</li>
+      </ul>
+      <div class="warn">Ein vollständiger Ausfall des Containers bzw. Hosts kann von der App selbst nicht erkannt
+        werden – richten Sie dafür zusätzlich eine externe Überwachung ein (siehe <code>docs/installation.md</code>).
+        Ist die Überwachung abgeschaltet (<code>aktiv=false</code>), werden auch Entwarnungen unterdrückt; wird sie
+        später wieder eingeschaltet, kann noch eine Entwarnung zu einer älteren, inzwischen eventuell bereits
+        behobenen Störung eintreffen.</div>
+    </section>
+
     <section id="suche">
-      <h2>13. Globale Suche</h2>
+      <h2>14. Globale Suche</h2>
       <p>Die Suche findet Projekte, Material, Stunden, Pauschalen, Kunden, Rechnungen, Dienstleister, Bautagebuch, Zeiterfassung, Termine und Archiv. Über die Filter-Chips die Bereiche eingrenzen.</p>
     </section>
 
     <section id="module">
-      <h2>14. Zusatzmodule</h2>
+      <h2>15. Zusatzmodule</h2>
       <ul>
         <li><strong>DIN EN 1090:</strong> Schweißdokumentation, WPS, Schweißer, Prüfungen, Checklisten.</li>
         <li><strong>Lager:</strong> Artikel, Lagerorte, Bestände.</li>
@@ -349,19 +436,20 @@
     </section>
 
     <section id="einstellungen">
-      <h2>15. Einstellungen &amp; Rechte</h2>
+      <h2>16. Einstellungen &amp; Rechte</h2>
       <ul>
         <li><strong>Benutzer &amp; Rechte:</strong> Rollen (z.&nbsp;B. Admin/Master) und feingranulare Berechtigungen (z.&nbsp;B. Auswertung sehen, alle Stunden/Termine sehen, Baustelle löschen).</li>
         <li><strong>Sichtbarkeit:</strong> Benutzer können auf bestimmte Projekte eingeschränkt werden.</li>
         <li><strong>Allgemeine Einstellungen:</strong> Firmendaten, Zeiterfassungs-Optionen, Modul-Aktivierung, Erinnerungen.
           <strong>Verwaltung → Allgemein</strong> ist in Bereiche gegliedert (links eine Unternavigation, z.&nbsp;B.
           „Firma &amp; Branding“, „Module“, „Anmeldung &amp; Startseiten“, „Kunden- &amp; Personalnummern“,
-          „Baustellen &amp; Bereiche“, „Zeiterfassung“, „E-Mail (SMTP)“, „Schnittstellen (KI, OCI)“, „Datensicherung“
-          und „System &amp; Update“; nur Bereiche mit sichtbaren Einstellungen erscheinen). Ein Suchfeld oben
+          „Baustellen &amp; Bereiche“, „Zeiterfassung“, „E-Mail (SMTP)“, „Schnittstellen (KI, OCI)“, „Datensicherung &amp; NAS“,
+          „Überwachung &amp; Systemmeldungen“ und „System &amp; Update“; nur Bereiche mit sichtbaren Einstellungen
+          erscheinen). Ein Suchfeld oben
           filtert alle Bereiche nach Titel und Feldbeschriftung und zeigt bei fehlenden Treffern einen Hinweis; eine
           leere Suche kehrt zum zuletzt gewählten Bereich zurück. Der zuletzt geöffnete Bereich wird im Browser
           gemerkt. Unter 768&nbsp;px Bildschirmbreite erscheint die Unternavigation als Auswahlliste (Dropdown)
-          oberhalb der Einstellungen. Die Bereiche „Datensicherung“ und „System &amp; Update“ enthalten zusätzlich
+          oberhalb der Einstellungen. Die Bereiche „Datensicherung &amp; NAS“ und „System &amp; Update“ enthalten zusätzlich
           Knöpfe zu „Wiederherstellungspunkte / Datensicherung“, „Speicherpfade“ (nur Administratoren) und
           „Update &amp; Systeminfo“ (nur Administratoren) – dieselben Dialoge wie gewohnt über das Verwaltungsmenü.
         </li>
@@ -369,7 +457,7 @@
     </section>
 
     <section id="datensicherheit">
-      <h2>16. Hinweise zur Datensicherheit</h2>
+      <h2>17. Hinweise zur Datensicherheit</h2>
       <ul>
         <li>Erfasste Stunden bleiben erhalten, auch wenn Projekte gelöscht/archiviert oder Projektstunden entfernt werden.</li>
         <li>Baustellen mit gebuchten Stunden werden nie hart gelöscht.</li>

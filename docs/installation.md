@@ -281,7 +281,98 @@ sperrt sich gegen Überlappung). Nur bei Installation ohne Docker muss der Plane
 ```
 
 Die Uhrzeit und Aufbewahrung der Serversicherung selbst stellt man in der App unter
-„Verwaltung → Allgemein → Datensicherung“ ein (nur Administratoren).
+„Verwaltung → Allgemein → Datensicherung & NAS“ ein (nur Administratoren).
+
+### NAS-Abgleich per rclone
+
+Der NAS-Abgleich (SMB/CIFS, im Userspace per `rclone`, ohne Mount/Root) läuft als **eigener**
+Prozess, nicht als Planer-Schritt – ein erster Abgleich kann Stunden dauern und darf die
+Serversicherung, Überwachung und Zustellung von Systemmeldungen nicht blockieren. Bei
+Docker-Installationen läuft er automatisch im App-Container (eigene Crontab-Zeile in
+`Dockerfile.app`, Takt 1 Minute, eigene Sperre gegen Überlappung). Nur bei Installation ohne
+Docker muss er zusätzlich zum Zeitplaner eingeplant werden:
+
+```bash
+# NAS-Abgleich ohne Docker (prüft selbst, ob ein Lauf fällig ist) – als Webserver-Benutzer
+# eingeplant (z. B. www-data), sonst gehören neu angelegte Dateien in data/ nicht mehr dem
+# Webserver-Benutzer (E-065), z. B. per: sudo crontab -u www-data -e
+* * * * * php /pfad/zur/app/bin/console nas:abgleich
+```
+
+Host, Freigabe, Pfad, Benutzer, Passwort, optionale Domäne und eine optionale
+Bandbreitenbegrenzung stellt man unter „Verwaltung → Allgemein → Datensicherung & NAS“ ein
+(nur Administratoren); „Verbindung testen“ prüft vorab das Schreibrecht im Zielpfad. Übertragen
+werden ausschließlich die Dateien der Sicherung sowie ausgelagerte Ordner laut
+`paths_config.json` (Uploads, Bautagebuch, Datanorm, Archiv, Exporte) – die Live-Datenbank
+(`database.sqlite`) wird nie übertragen – die Tagessicherungen in `backups/` enthalten jedoch
+einen Datenbank-Snapshot. `secret.key` und weitere interne Dateien werden ebenfalls nie
+übertragen. Ordner innerhalb von `data/`, die nicht auf dieser Positivliste stehen, werden
+grundsätzlich **nicht** mit übertragen. **Auf der NAS wird nie gelöscht**, es wird nur
+hinzugefügt bzw. aktualisiert (lokal entfernte Dateien bleiben dort bestehen, altes Aufräumen ist
+ein eigener, manueller Schritt auf der NAS selbst).
+
+**Gesperrte ausgelagerte Pfade:** Zeigt ein in `paths_config.json` konfigurierter ausgelagerter
+Ordner (Uploads, Bautagebuch, Datanorm, Archiv, Exporte, Backups) auf einen Systempfad (u. a.
+`/etc`, `/proc`, `/sys`, `/dev`, `/root`, `/boot`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`,
+`/var/lib`, `/run`, `/tmp`, `/var/tmp`, `/var/log`, `/var/backups`, `/var/spool`, `/var/mail`,
+`/var/cache`, `/home` bzw. deren Unterordner), auf einen übergeordneten Ordner von `data/` bzw.
+des App-Verzeichnisses (z. B. `/var/www`) oder auf einen Ordner innerhalb des App-Verzeichnisses,
+der nicht innerhalb von `data/` liegt (z. B. `src`, `vendor`), wird dieser Pfad aus
+Sicherheitsgründen übersprungen (kein Export dieses Pfads) und in der NAS-Karte als Warnzeile
+„N ausgelagerte(r) Speicherpfad(e) wurde(n) aus Sicherheitsgründen nicht übertragen.“ angezeigt.
+In diesem Fall `paths_config.json` korrigieren. Ordner **innerhalb** von `data/` gelten nicht als
+ausgelagert: Sie werden ohne Warnzeile nur über die Positivliste der Hauptkopie behandelt.
+
+**Image-Größe:** `rclone` wird im Image per `apt` installiert (≈ 50–60 MB zusätzlich), unabhängig
+von `ENABLE_OCR` – betrifft also auch den minimal-Build (`docker-compose.minimal.yml`).
+
+**Übergang vom bisherigen Host-Cronjob:** Den bisherigen, außerhalb der App eingerichteten
+Cronjob (`rsync` über eine am Host eingehängte SMB-Freigabe) erst abschalten, wenn der
+App-Abgleich mindestens drei Tage in Folge ohne Fehler gelaufen ist (Status in der App prüfen).
+
+**Schlüssel separat aufbewahren:** `secret.key` wird bewusst nicht auf die NAS übertragen. Über
+„Schlüssel anzeigen“ im selben Bereich (erneute Passwortabfrage in einem Dialog) lässt er sich
+separat sichern (z. B. Passwort-Tresor). Nach einer Wiederherstellung mit einem anderen `secret.key` (z. B.
+nach einem Umzug auf eine andere Instanz) wird ein nicht mehr entschlüsselbares NAS-Passwort
+automatisch geleert; die App weist dann darauf hin, es neu einzugeben – ein Export des
+Schlüssels selbst ist dafür **nicht** Teil der Sicherung und muss ggf. separat übertragen werden.
+
+### Überwachung & Systemmeldungen
+
+Derselbe Zeitplaner (`system:planer`) prüft zusätzlich eine monatliche Wiederherstellungs-Probe,
+den freien Speicherplatz und den Zustand aller Jobs (Serversicherung, NAS-Abgleich,
+Wiederherstellungs-Probe, Speicherplatz, Backup-E-Mail, Zeitplaner selbst – der NAS-Abgleich
+meldet seinen eigenen Zustand über denselben Mechanismus, auch wenn er als eigener Prozess
+läuft). Bei einem Fehlschlag, einem Ausbleiben oder einer
+Entwarnung erhalten die unter „Verwaltung → Allgemein → Überwachung“ eingestellten Empfänger
+(Standard: alle Administratoren mit hinterlegter E-Mail-Adresse) eine Mail; höchstens eine Fehler-Mail
+je Job und Tag.
+
+Steht der Container/Zeitplaner, obwohl Apache noch antwortet (z. B. Cron im Container
+abgestürzt), erkennt ein in `check()` eingebauter Healthcheck-Watchdog den fehlenden Herzschlag
+(länger als 15 Minuten) spätestens beim nächsten App-Aufruf und löst selbst eine Ausbleiben-Mail aus
+– unabhängig davon, ob sich ein Administrator einloggt. Zusätzlich erscheint für Administratoren ein
+roter Hinweisbalken.
+
+**Wichtig:** Ein vollständiger Ausfall des gesamten Containers bzw. Hosts (kein Prozess läuft mehr,
+auch kein Apache) kann von der App selbst nicht mehr erkannt werden, da dann auch kein Healthcheck-
+Aufruf mehr ankommt. Richten Sie dafür zusätzlich eine externe Überwachung ein, z. B.:
+
+```bash
+# Externer Healthcheck (z. B. Uptime Kuma, Cron auf einem anderen Host, Monitoring-SaaS):
+# regelmäßig (alle paar Minuten) HTTP-GET auf den Healthcheck-Endpunkt, Alarm bei Fehlschlag/Timeout.
+curl -fsS http://SERVER-IP:8081/api.php?action=check
+```
+
+Details zur Einrichtung einer solchen externen Überwachung (Auswahl, Konfiguration) folgen in einem
+späteren Ausbauschritt; bis dahin ist ein einfacher externer Healthcheck wie oben empfohlen.
+
+Zusätzlich schreibt der NAS-Abgleich nach jedem Lauf eine Statusdatei
+`_baukalkulation_status.json` (Zeitpunkt, Ergebnis, Version, Kennzahlen) direkt auf die
+NAS-Freigabe. Eine NAS-seitige Überwachung (z. B. Synology-Aufgabenplaner, Uptime Kuma mit
+Zugriff auf die Freigabe) kann unabhängig vom App-Container das Alter dieser Datei prüfen und so
+auch einen kompletten Ausfall des Containers bzw. Hosts erkennen, bei dem der NAS-Abgleich seit
+Längerem nicht mehr gelaufen ist.
 
 ---
 

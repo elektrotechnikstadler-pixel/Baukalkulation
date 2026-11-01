@@ -101,4 +101,68 @@ final class PlanerFaelligkeitTest extends TestCase
             'naechsterVersuchAm' => '',
         ], '02:00', $uhr));
     }
+
+    public function testHeuteMitStatusUebersprungenIstNichtMehrFaellig(): void
+    {
+        $status = [
+            'tageslaufDatum' => '2026-10-16',
+            'tageslaufStatus' => 'uebersprungen',
+            'versuche' => 0,
+            'naechsterVersuchAm' => '',
+        ];
+
+        $this->assertNull(Planer::faelligkeit($status, '02:00', new \DateTimeImmutable('2026-10-16 12:00:00')));
+    }
+
+    public function testMonatlicheFaelligkeitVerwendetYMonatUndVierUhrRegeln(): void
+    {
+        $this->assertNull(
+            Planer::faelligkeit([], '04:00', new \DateTimeImmutable('2026-11-01 03:59:59'), 'monat'),
+        );
+        $this->assertSame(
+            'erstversuch',
+            Planer::faelligkeit([], '04:00', new \DateTimeImmutable('2026-11-01 04:00:00'), 'monat'),
+        );
+
+        $status = [
+            'tageslaufDatum' => '2026-11',
+            'tageslaufStatus' => 'fehler',
+            'versuche' => 1,
+            'naechsterVersuchAm' => '2026-11-01 04:30:00',
+        ];
+
+        $this->assertNull(
+            Planer::faelligkeit($status, '04:00', new \DateTimeImmutable('2026-11-01 04:29:59'), 'monat'),
+        );
+        $this->assertSame(
+            'wiederholung',
+            Planer::faelligkeit($status, '04:00', new \DateTimeImmutable('2026-11-01 04:30:00'), 'monat'),
+        );
+        $this->assertNull(Planer::faelligkeit([
+            'tageslaufDatum' => '2026-11',
+            'tageslaufStatus' => 'ok',
+            'versuche' => 0,
+            'naechsterVersuchAm' => '',
+        ], '04:00', new \DateTimeImmutable('2026-11-20 12:00:00'), 'monat'));
+        $this->assertSame(
+            'erstversuch',
+            Planer::faelligkeit($status, '04:00', new \DateTimeImmutable('2026-12-01 08:00:00'), 'monat'),
+        );
+    }
+
+    public function testDreiParameterAufrufBleibtZumTagStandardAequivalent(): void
+    {
+        $status = [
+            'tageslaufDatum' => '2026-10-16',
+            'tageslaufStatus' => 'fehler',
+            'versuche' => 1,
+            'naechsterVersuchAm' => '2026-10-16 12:30:00',
+        ];
+        $jetzt = new \DateTimeImmutable('2026-10-16 12:30:00');
+
+        $this->assertSame(
+            Planer::faelligkeit($status, '02:00', $jetzt, 'tag'),
+            Planer::faelligkeit($status, '02:00', $jetzt),
+        );
+    }
 }

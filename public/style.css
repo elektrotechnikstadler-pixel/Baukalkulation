@@ -4093,3 +4093,29 @@ body.dark-theme .confirm-del-cancel-btn:hover { background: var(--grey-100, #2a2
     display: block;
   }
 }
+
+/* ============================================================
+   ADMIN-HINWEIS ÜBERWACHUNG/SYSTEMMELDUNGEN (AP-20261012-datensicherung-nas, T3)
+   ============================================================ */
+.sys-hinweis-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  background: #C62828;
+  color: #fff;
+  border-radius: 7px;
+  font-size: .88rem;
+}
+.sys-hinweis-banner span {
+  flex: 1;
+}
+.sys-hinweis-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+}

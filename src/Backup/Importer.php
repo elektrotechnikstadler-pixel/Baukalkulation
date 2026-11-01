@@ -91,6 +91,17 @@ final class Importer
                 // PostgreSQL prüft verzögerte Fremdschlüssel erst hier.
                 throw new InvalidBackupException('Sicherung enthält ungültige Verknüpfungen: ' . $e->getMessage());
             }
+
+            // T4-Vertrag Punkt 3 (R12): Ein mit einem fremden secret.key verschlüsseltes
+            // NAS-Passwort muss nach der Wiederherstellung verworfen werden, sonst würde die
+            // App mit einem nicht entschlüsselbaren Passwort weiterlaufen. Eigenes try/catch
+            // (E-022): ein Fehler hier darf den bereits erfolgreichen Import nie rückgängig
+            // machen.
+            try {
+                \App\Services\Jobs\SystemEinstellungen::secretsNachImportPruefen($this->db);
+            } catch (\Throwable $e) {
+                error_log('[Import] NAS-Secret-Prüfung fehlgeschlagen: ' . $e->getMessage());
+            }
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;

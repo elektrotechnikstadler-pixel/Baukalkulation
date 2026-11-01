@@ -45,9 +45,12 @@ ARG ENABLE_OCR=true
 ENV APP_ENABLE_OCR=${ENABLE_OCR}
 
 # System-Dependencies
+# rclone (NAS-Abgleich, AP-20261012-datensicherung-nas T4): Debian-Paket in bookworm/trixie
+# (>= 1.60, SMB-Backend). Die Prüfung unten (rclone version / help backend smb) bricht den
+# Build ab, falls rclone fehlt oder das SMB-Backend nicht verfügbar ist.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev libpq-dev libzip-dev libpng-dev libjpeg62-turbo-dev \
-    libfreetype6-dev libonig-dev libxml2-dev unzip git cron \
+    libfreetype6-dev libonig-dev libxml2-dev unzip git cron rclone \
     && if [ "$ENABLE_OCR" = "true" ]; then \
        apt-get install -y --no-install-recommends \
        tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng poppler-utils; \
@@ -57,6 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo 'Europe/Berlin' > /etc/timezone \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_sqlite pdo_pgsql mbstring fileinfo gd zip xml exif \
+    && rclone version \
+    && rclone help backend smb > /dev/null \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Composer
@@ -119,6 +124,7 @@ RUN printf '%s\n' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console zeit:erinnerung >> /var/www/html/data/cron.log 2>&1' \
     '*/15 * * * * www-data . /etc/baukalkulation.env; php /var/www/html/cron_stundenauswertung_email.php >> /var/www/html/data/cron.log 2>&1' \
     '* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console system:planer >> /var/www/html/data/cron.log 2>&1' \
+    '* * * * * www-data . /etc/baukalkulation.env; php /var/www/html/bin/console nas:abgleich >> /var/www/html/data/cron.log 2>&1' \
     > /etc/cron.d/baukalkulation-cron \
     && chmod 0644 /etc/cron.d/baukalkulation-cron
 

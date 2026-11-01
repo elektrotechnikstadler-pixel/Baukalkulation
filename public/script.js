@@ -264,6 +264,51 @@ function confirmDelete(message, onConfirm, { requireTyping = false } = {}) {
 }
 
 // ============================================================
+// Admin-Hinweise (Überwachung/Systemmeldungen, AP-20261012-datensicherung-nas T3)
+// ============================================================
+async function ladeSystemHinweise() {
+  try {
+    const r = await fetch('api.php?action=system_hinweise');
+    const j = await r.json();
+    if (!j.ok) return;
+    zeigeSystemHinweisBanner(j.hinweise || []);
+  } catch (e) { /* kein Banner bei Netzwerkfehler */ }
+}
+
+// Stabiler Schlüssel aus den aktuellen Hinweisen (Art+Job+Seit je Eintrag), damit ein
+// geschlossener Banner bei neuen/zusätzlichen Hinweisen erneut erscheint (Reviewbefund 16).
+function sysHinweisSchluessel(hinweise) {
+  return hinweise.map(h => (h.art || '') + '|' + (h.job || '') + '|' + (h.seit || '')).sort().join(';');
+}
+
+function zeigeSystemHinweisBanner(hinweise) {
+  const banner = document.getElementById('sysHinweisBanner');
+  if (!banner) return;
+  if (!hinweise.length) { banner.style.display = 'none'; return; }
+
+  const schluessel = sysHinweisSchluessel(hinweise);
+  let geschlossenFuer = '';
+  try { geschlossenFuer = sessionStorage.getItem('bk.sysHinweis.geschlossen') || ''; } catch (e) { /* ignorieren */ }
+  if (geschlossenFuer === schluessel) { banner.style.display = 'none'; return; }
+
+  const text = document.getElementById('sysHinweisText');
+  if (text) text.textContent = hinweise.map(h => h.text).join(' · ');
+  banner.dataset.hinweisSchluessel = schluessel;
+  banner.style.display = '';
+}
+
+function sysHinweisOeffnen() {
+  showAllgemeinSettings().then(() => vwBereichWaehlen('ueberwachung'));
+}
+
+function sysHinweisSchliessen() {
+  const banner = document.getElementById('sysHinweisBanner');
+  const schluessel = banner ? (banner.dataset.hinweisSchluessel || '') : '';
+  if (banner) banner.style.display = 'none';
+  try { sessionStorage.setItem('bk.sysHinweis.geschlossen', schluessel); } catch (e) { /* ignorieren */ }
+}
+
+// ============================================================
 // INIT
 // ============================================================
 async function init() {
@@ -306,6 +351,7 @@ async function init() {
         if (btn3) btn3.style.display = '';
         const btn4 = document.getElementById('btnUpdate');
         if (btn4) btn4.style.display = '';
+        ladeSystemHinweise();
       }
       // Offenes Material Button (konfigurierbar über Berechtigungen)
       if (canDo('canSeeOffenesMaterial')) {
@@ -8321,6 +8367,9 @@ async function doLogout() {
   _stopProjectPresence();
   localStorage.removeItem('bk_user');
   localStorage.removeItem('bk_appData');
+  // Geschlossen-Markierung des Systemhinweis-Banners entfernt (Reviewbefund 16): nach einer
+  // erneuten Anmeldung sollen bestehende Hinweise wieder sichtbar sein.
+  try { sessionStorage.removeItem('bk.sysHinweis.geschlossen'); } catch (e) { /* ignorieren */ }
   try {
     await fetch('api.php?action=logout', { method: 'POST' });
   } catch (e) {
@@ -11198,6 +11247,8 @@ async function showAllgemeinSettings() {
     }
     if (currentRole === 'admin') {
       loadServersicherung();
+      loadNasAbgleich();
+      loadUeberwachung();
     }
   } catch(e) {
     view.innerHTML = '<p style="color:red">Netzwerkfehler.</p>';
@@ -11205,6 +11256,9 @@ async function showAllgemeinSettings() {
 }
 
 function renderAllgemeinSettings(view, s) {
+  // Reviewbefund 11: Schlüssel-Anzeige vor dem Neu-Rendern der Verwaltung aus dem DOM entfernen
+  // (auch der Auto-Hide-Timer wird dabei gelöscht).
+  secretKeyAusBlenden();
   const chk = (key, label) => `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
     <input type="checkbox" ${s[key] ? 'checked' : ''} onchange="updateSetting('${key}',this.checked)" style="width:17px;height:17px;accent-color:var(--primary,#00B4D8)">
     <span style="font-size:.9rem">${label}</span></label>`;
@@ -11587,6 +11641,32 @@ function renderAllgemeinSettings(view, s) {
     </div>
   </div>` : ''}
 
+  ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
+    <h2 style="font-size:1rem;margin-bottom:16px">☁️ NAS-Abgleich</h2>
+    <div id="nasAbgleichCard" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <em>Laden…</em>
+    </div>
+  </div>` : ''}
+
+  ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Schlüssel separat aufbewahren</h3>
+      <p style="font-size:.82rem;color:#555;margin-bottom:12px">Verschlüsselte Passwörter (SMTP, NAS, Backup-Mail …) werden mit einem lokalen Schlüssel (secret.key) geschützt. Dieser Schlüssel liegt bewusst <strong>nicht</strong> im NAS-Abgleich, damit er nicht zusammen mit der Sicherung verloren geht oder gelesen werden kann – bitte separat (z. B. Passwort-Tresor) aufbewahren.</p>
+      <div id="secretKeyForm">
+        <button class="btn btn-secondary btn-sm" id="secretKeyBtn" onclick="secretKeyAnfordern()">🔑 Schlüssel anzeigen</button>
+      </div>
+      <div id="secretKeyAnzeige" class="hidden" style="margin-top:10px">
+        <label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Schlüssel</label>
+        <input type="text" id="secretKeyWert" class="form-control" style="font-size:.85rem;width:100%;font-family:monospace" readonly onclick="this.select()">
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn btn-secondary btn-sm" onclick="secretKeyKopieren()">📋 Kopieren</button>
+          <button class="btn btn-secondary btn-sm" onclick="secretKeyHerunterladen()">⬇ Herunterladen</button>
+        </div>
+      </div>
+      <p id="secretKeyStatus" style="font-size:.78rem;color:#888;margin-top:8px"></p>
+    </div>
+  </div>` : ''}
+
   <div class="vw-karte" data-bereich="datensicherung" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">📦 Automatisches Backup per E-Mail</h2>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
@@ -11629,6 +11709,13 @@ function renderAllgemeinSettings(view, s) {
       </div>
     </div>
   </div>
+
+  ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="ueberwachung" style="padding:20px;border-top:1px solid #e0e0e0">
+    <h2 style="font-size:1rem;margin-bottom:16px">🔔 Überwachung &amp; Systemmeldungen</h2>
+    <div id="ueberwachungCard" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <em>Laden…</em>
+    </div>
+  </div>` : ''}
 
   <div class="vw-karte" data-bereich="zeiterfassung" style="padding:20px;border-top:1px solid #e0e0e0">
     <h2 style="font-size:1rem;margin-bottom:16px">📊 Monatliche Stundenauswertung per E-Mail</h2>
@@ -11698,6 +11785,9 @@ function initVerwaltungNav(view) {
 
 function vwBereichWaehlen(id) {
   if (!id) return;
+  // F9: Der angezeigte secret.key-Wert wird beim Verlassen des Bereichs entfernt (nicht
+  // dauerhaft im DOM sichtbar lassen).
+  if (id !== 'datensicherung') secretKeyAusBlenden();
   const suche = document.getElementById('vwSuche');
   if (suche) suche.value = '';
   document.querySelectorAll('.vw-nav-btn').forEach(btn => {
@@ -11714,6 +11804,9 @@ function vwBereichWaehlen(id) {
 }
 
 function vwSucheEingabe(wert) {
+  // Reviewbefund 11: Schlüssel-Anzeige auch bei einer Suche aus dem DOM entfernen, nicht nur
+  // beim expliziten Bereichswechsel.
+  secretKeyAusBlenden();
   const begriff = (wert || '').trim();
   const karten = Array.from(document.querySelectorAll('#vwInhalt .vw-karte[data-bereich]'));
   const hinweis = document.getElementById('vwKeineTreffer');
@@ -20491,6 +20584,557 @@ async function servJetztPollen(id, startZeit) {
     }
   } catch (e) { /* nächster Versuch folgt per Timer */ }
   servJetztTimer = setTimeout(() => servJetztPollen(id, startZeit), 3000);
+}
+
+// -- NAS-Abgleich per rclone (AP-20261012-datensicherung-nas T4) --------------
+function nasZahlEingabe(wert, standard) {
+  const text = String(wert ?? '').trim();
+  return /^-?\d+$/.test(text) ? parseInt(text, 10) : standard;
+}
+
+const NAS_FEHLER_TEXT = {
+  ok: 'Verbindung erfolgreich – Schreibrecht bestätigt.',
+  NAS_KONFIGURATION: 'NAS-Einstellungen sind unvollständig oder ungültig.',
+  NAS_RCLONE_FEHLT: 'rclone ist auf dem Server nicht verfügbar.',
+  NAS_ANMELDUNG: 'Anmeldung an der NAS-Freigabe fehlgeschlagen – bitte Benutzer/Passwort prüfen.',
+  NAS_NICHT_ERREICHBAR: 'Die NAS ist nicht erreichbar – bitte Host, Port und Netzwerk prüfen.',
+  NAS_KEINE_SCHREIBRECHTE: 'Keine Schreibrechte auf der NAS-Freigabe.',
+  NAS_VERBINDUNG: 'Verbindung zur NAS fehlgeschlagen.',
+  NAS_ZEIT: 'Zeitüberschreitung beim NAS-Zugriff – bitte später erneut versuchen.',
+  NAS_TRANSFER: 'Der Dateiabgleich mit der NAS ist fehlgeschlagen.',
+};
+
+function nasLaufZeile(lauf) {
+  const icon = lauf.status === 'erfolg' ? '✔' : (lauf.status === 'fehler' ? '✘' : (lauf.status === 'abgebrochen' ? '⚠' : '…'));
+  const hinweis = lauf.status === 'fehler' ? (lauf.meldung || lauf.fehlerCode || 'Fehler') : (lauf.ausloeser || '');
+  const kz = lauf.kennzahlen || {};
+  const kennzahlenText = lauf.status === 'erfolg'
+    ? `${kz.transfers != null ? kz.transfers : 0} Dateien, ${kz.bytes != null ? kz.bytes : 0} Byte`
+    : '';
+  return `<tr><td style="padding:3px 8px">${esc(servFormatZeitpunkt(lauf.gestartetAm))}</td>`
+       + `<td style="padding:3px 8px">${icon}</td>`
+       + `<td style="padding:3px 8px">${esc(hinweis)}${kennzahlenText ? ' ' + esc(kennzahlenText) : ''}</td></tr>`;
+}
+
+function renderNasAbgleich(card, j) {
+  const nas = (j.einstellungen && j.einstellungen.nas) || {};
+  const statusNas = (j.status && j.status.nas) || {};
+  const laeufe = (j.laeufe || []).filter(l => l.job === 'nas');
+
+  const passwortHinweis = nas.passwortNeuEingeben
+    ? '<p style="color:#c62828;font-weight:600;margin:8px 0">⚠ Das NAS-Passwort konnte nach einer Wiederherstellung nicht entschlüsselt werden – bitte neu eingeben.</p>'
+    : '';
+  const fehlerZeile = statusNas.fehlerCode
+    ? `<p style="color:#c62828;margin:4px 0">Letzter Fehler: ${esc(NAS_FEHLER_TEXT[statusNas.fehlerCode] || statusNas.fehlerCode)} (${esc(servFormatZeitpunkt(statusNas.letzterFehlerAm))})</p>`
+    : '';
+  const letzterNasLauf = laeufe[0] || null;
+  const externeUebersprungen = (letzterNasLauf && letzterNasLauf.kennzahlen && letzterNasLauf.kennzahlen.externeUebersprungen) || 0;
+  const externeUebersprungenZeile = externeUebersprungen > 0
+    ? `<p style="color:#e65100;font-weight:600;margin:8px 0">⚠ ${externeUebersprungen} ausgelagerte(r) Speicherpfad(e) wurde(n) aus Sicherheitsgründen nicht übertragen.</p>`
+    : '';
+
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="nasAktiv" ${nas.aktiv ? 'checked' : ''}>
+        <span style="font-size:.9rem;font-weight:600">NAS-Abgleich aktivieren</span>
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:12px">
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Host</label>
+        <input id="nasHost" class="form-control" style="font-size:.85rem;width:100%" value="${esc(nas.host || '')}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Port</label>
+        <input type="number" id="nasPort" class="form-control" style="font-size:.85rem;width:100%" min="1" max="65535" value="${esc(String(nas.port != null ? nas.port : 445))}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Freigabe</label>
+        <input id="nasFreigabe" class="form-control" style="font-size:.85rem;width:100%" value="${esc(nas.freigabe || '')}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Pfad</label>
+        <input id="nasPfad" class="form-control" style="font-size:.85rem;width:100%" value="${esc(nas.pfad || 'baukalkulation')}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Benutzer</label>
+        <input id="nasBenutzer" class="form-control" style="font-size:.85rem;width:100%" value="${esc(nas.benutzer || '')}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Passwort</label>
+        <input type="password" id="nasPasswort" class="form-control" style="font-size:.85rem;width:100%" autocomplete="new-password" placeholder="${nas.passwortGesetzt ? 'gespeichert – neu eingeben zum Ändern' : 'Passwort eingeben'}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Domäne (optional)</label>
+        <input id="nasDomaene" class="form-control" style="font-size:.85rem;width:100%" value="${esc(nas.domaene || '')}"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Bandbreite (KB/s, 0 = frei)</label>
+        <input type="number" id="nasBandbreite" class="form-control" style="font-size:.85rem;width:100%" min="0" max="1000000" value="${esc(String(nas.bandbreiteKBs != null ? nas.bandbreiteKBs : 0))}"></div>
+    </div>
+    ${passwortHinweis}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-secondary btn-sm" onclick="speichereNas()">💾 Speichern</button>
+      <button class="btn btn-secondary btn-sm" id="nasTestBtn" onclick="nasVerbindungTesten()">🔌 Verbindung testen</button>
+      <button class="btn btn-secondary btn-sm" id="nasJetztBtn" onclick="nasAbgleichJetzt()">▶ Jetzt abgleichen</button>
+    </div>
+    <p id="nasAktionStatus" style="font-size:.78rem;color:#888;margin:-4px 0 10px"></p>
+    <p style="font-size:.82rem;color:#555;margin:4px 0">Letzter Erfolg: ${esc(servFormatZeitpunkt(statusNas.letzterErfolgAm))}</p>
+    ${fehlerZeile}
+    ${externeUebersprungenZeile}
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-top:10px">
+      <thead><tr style="text-align:left;color:#666"><th style="padding:3px 8px">Gestartet</th><th style="padding:3px 8px">Status</th><th style="padding:3px 8px">Auslöser/Kennzahlen</th></tr></thead>
+      <tbody>${laeufe.length ? laeufe.map(nasLaufZeile).join('') : '<tr><td colspan="3" style="padding:6px 8px;color:#888">Noch keine Läufe.</td></tr>'}</tbody>
+    </table>
+    <p style="font-size:.75rem;color:#888;margin-top:10px">Hinweis: Auf der NAS wird nie gelöscht, nur hinzugefügt bzw. aktualisiert. Für eine zusätzliche Offsite-Sicherung bzw. eine monatliche Wiederherstellungs-Probe siehe Bedienungsanleitung. Den bisherigen Host-Cronjob erst abschalten, wenn der App-Abgleich mindestens 3 Tage grün war.</p>
+  `;
+}
+
+async function loadNasAbgleich() {
+  const card = document.getElementById('nasAbgleichCard');
+  if (!card) return;
+  try {
+    const r = await fetch('api.php?action=system_jobs_status');
+    const j = await r.json();
+    if (!j.ok) { card.innerHTML = '<p style="color:#c62828">Fehler beim Laden.</p>'; return; }
+    renderNasAbgleich(card, j);
+  } catch (e) {
+    card.innerHTML = '<p style="color:#c62828">Netzwerkfehler.</p>';
+  }
+}
+
+async function speichereNas() {
+  const payload = {
+    aktiv: !!document.getElementById('nasAktiv')?.checked,
+    host: document.getElementById('nasHost')?.value || '',
+    port: nasZahlEingabe(document.getElementById('nasPort')?.value, 445),
+    freigabe: document.getElementById('nasFreigabe')?.value || '',
+    pfad: document.getElementById('nasPfad')?.value || '',
+    benutzer: document.getElementById('nasBenutzer')?.value || '',
+    domaene: document.getElementById('nasDomaene')?.value || '',
+    bandbreiteKBs: nasZahlEingabe(document.getElementById('nasBandbreite')?.value, 0),
+    passwort: document.getElementById('nasPasswort')?.value || '',
+  };
+  try {
+    const r = await fetch('api.php?action=system_einstellungen_speichern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nas: payload }),
+    });
+    const j = await r.json();
+    if (j.error) { showNotification(j.error, 'error'); return; }
+    showNotification('NAS-Einstellungen gespeichert');
+    loadNasAbgleich();
+  } catch (e) {
+    showNotification('Fehler beim Speichern', 'error');
+  }
+}
+
+async function nasVerbindungTesten() {
+  const btn = document.getElementById('nasTestBtn');
+  const status = document.getElementById('nasAktionStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Verbindung wird getestet…';
+  const body = {
+    host: document.getElementById('nasHost')?.value || '',
+    port: nasZahlEingabe(document.getElementById('nasPort')?.value, 445),
+    freigabe: document.getElementById('nasFreigabe')?.value || '',
+    pfad: document.getElementById('nasPfad')?.value || '',
+    benutzer: document.getElementById('nasBenutzer')?.value || '',
+    domaene: document.getElementById('nasDomaene')?.value || '',
+    passwort: document.getElementById('nasPasswort')?.value || '',
+  };
+  try {
+    const r = await fetch('api.php?action=nas_verbindung_testen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (status) {
+      if (j.ok) status.textContent = NAS_FEHLER_TEXT.ok;
+      else if (j.fehlerCode) status.textContent = NAS_FEHLER_TEXT[j.fehlerCode] || 'Verbindung fehlgeschlagen.';
+      else status.textContent = j.error || 'Verbindung fehlgeschlagen.';
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Netzwerkfehler.';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+let nasJetztTimer = null;
+async function nasAbgleichJetzt() {
+  clearTimeout(nasJetztTimer);
+  const btn = document.getElementById('nasJetztBtn');
+  const status = document.getElementById('nasAktionStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Wird angefordert…';
+  try {
+    const r = await fetch('api.php?action=job_anfordern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job: 'nas' }),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      if (status) status.textContent = j.error || 'Fehler.';
+      if (btn) btn.disabled = false;
+      return;
+    }
+    nasJetztPollen(j.id, Date.now());
+  } catch (e) {
+    if (status) status.textContent = 'Netzwerkfehler.';
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function nasJetztPollen(id, startZeit) {
+  const btn = document.getElementById('nasJetztBtn');
+  const status = document.getElementById('nasAktionStatus');
+  if (Date.now() - startZeit > 120000) {
+    if (status) status.textContent = 'Zeitüberschreitung – der Abgleich läuft im Hintergrund weiter, bitte Laufprotokoll prüfen.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+  try {
+    const r = await fetch('api.php?action=job_auftrag_status&id=' + encodeURIComponent(id));
+    const j = await r.json();
+    if (j.ok && (j.status === 'fertig' || j.status === 'fehlgeschlagen' || j.status === 'abgelaufen')) {
+      if (status) status.textContent = j.status === 'fertig' ? 'NAS-Abgleich abgeschlossen.' : 'NAS-Abgleich fehlgeschlagen.';
+      if (btn) btn.disabled = false;
+      loadNasAbgleich();
+      return;
+    }
+  } catch (e) { /* nächster Versuch folgt per Timer */ }
+  nasJetztTimer = setTimeout(() => nasJetztPollen(id, startZeit), 3000);
+}
+
+// -- Schlüssel separat aufbewahren (F9, AP-20261012-datensicherung-nas T4) ----
+let secretKeyAutoHideTimer = null;
+// Review Runde 3: Enter (Eingabefeld) und Klick (Button) können secretKeyPasswortBestaetigen()
+// sonst doppelt auslösen (zwei gleichzeitige Anfragen) – „läuft“-Flag verhindert das.
+let secretKeyPasswortLaeuft = false;
+
+// Reviewbefund 10: kleines Modal mit <input type="password"> statt window.prompt() (Klartext
+// im Prompt-Verlauf/Screenreader-Log vermeiden).
+function secretKeyAnfordern() {
+  const eingabe = document.getElementById('secretKeyPasswortEingabe');
+  const fehler = document.getElementById('secretKeyPasswortFehler');
+  if (eingabe) eingabe.value = '';
+  if (fehler) fehler.textContent = '';
+  show('secretKeyPasswortModal');
+  setTimeout(() => eingabe?.focus(), 50);
+}
+
+function secretKeyPasswortAbbrechen() {
+  hide('secretKeyPasswortModal');
+  const eingabe = document.getElementById('secretKeyPasswortEingabe');
+  if (eingabe) eingabe.value = '';
+}
+
+async function secretKeyPasswortBestaetigen() {
+  if (secretKeyPasswortLaeuft) return;
+  const passwort = document.getElementById('secretKeyPasswortEingabe')?.value || '';
+  const fehlerFeld = document.getElementById('secretKeyPasswortFehler');
+  if (!passwort) {
+    if (fehlerFeld) fehlerFeld.textContent = 'Bitte Passwort eingeben.';
+    return;
+  }
+  secretKeyPasswortLaeuft = true;
+  const btn = document.getElementById('secretKeyBtn');
+  const status = document.getElementById('secretKeyStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Wird geprüft…';
+  try {
+    const r = await fetch('api.php?action=secret_key_anzeigen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passwort }),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      if (fehlerFeld) fehlerFeld.textContent = j.error || 'Fehler.';
+      if (status) status.textContent = '';
+      return;
+    }
+    secretKeyPasswortAbbrechen();
+    if (j.ausUmgebung) {
+      if (status) status.textContent = 'Schlüssel kommt aus der Umgebung (BK_SECRET_KEY) – kein Export nötig.';
+      return;
+    }
+    const feld = document.getElementById('secretKeyWert');
+    if (feld) feld.value = j.schluessel || '';
+    show('secretKeyAnzeige');
+    if (status) status.textContent = 'Schlüssel wird beim Verlassen dieses Bereichs, bei einer Suche oder spätestens nach 60 s wieder entfernt.';
+    // Reviewbefund 11: zusätzlich automatisch nach 60 s entfernen, nicht nur beim Verlassen.
+    clearTimeout(secretKeyAutoHideTimer);
+    secretKeyAutoHideTimer = setTimeout(secretKeyAusBlenden, 60000);
+  } catch (e) {
+    if (fehlerFeld) fehlerFeld.textContent = 'Netzwerkfehler.';
+  } finally {
+    if (btn) btn.disabled = false;
+    secretKeyPasswortLaeuft = false;
+  }
+}
+
+function secretKeyKopieren() {
+  const feld = document.getElementById('secretKeyWert');
+  if (!feld || !feld.value) return;
+  feld.select();
+  navigator.clipboard?.writeText(feld.value).catch(() => {});
+  showNotification('Schlüssel in die Zwischenablage kopiert');
+}
+
+function secretKeyHerunterladen() {
+  const feld = document.getElementById('secretKeyWert');
+  if (!feld || !feld.value) return;
+  const blob = new Blob([feld.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'baukalkulation-secret.key';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Schlüssel aus dem DOM entfernen, sobald die Verwaltung verlassen bzw. ein anderer Bereich
+// gewählt wird (F9: nicht dauerhaft sichtbar lassen) – ebenso bei einer Suche (vwSucheEingabe),
+// einem Neu-Rendern der Verwaltung und automatisch nach 60 s (Reviewbefund 11).
+function secretKeyAusBlenden() {
+  clearTimeout(secretKeyAutoHideTimer);
+  secretKeyAutoHideTimer = null;
+  const feld = document.getElementById('secretKeyWert');
+  if (feld) feld.value = '';
+  hide('secretKeyAnzeige');
+}
+
+// -- Überwachung & Systemmeldungen (AP-20261012-datensicherung-nas T3) --------
+const UEB_JOB_LABEL = {
+  sicherung: 'Serversicherung',
+  probe_wiederherstellung: 'Wiederherstellungs-Probe',
+  speicherplatz: 'Speicherplatz',
+  backupmail: 'Backup-E-Mail',
+  planer: 'Zeitplaner (Cron)',
+  nas: 'NAS-Abgleich',
+};
+
+function uebFormatZeitpunkt(wert) {
+  return wert ? String(wert) : '–';
+}
+
+// Ampel (grün/gelb/rot/grau): grau = Job inaktiv (z.B. Backup-E-Mail abgeschaltet), gelb =
+// noch kein Lauf, rot = gemeldete Störung, grün = letzter Lauf erfolgreich (Reviewbefund 10;
+// Details siehe Laufprotokoll).
+function uebAmpelSymbol(job, status) {
+  const s = status || {};
+  if (s.aktiv === false) return '⚪';
+  const erfolg = job === 'planer' ? s.letzterLaufAm : s.letzterErfolgAm;
+  if (s.stoerungSeit) return '🔴';
+  if (!erfolg) return '🟡';
+  return '🟢';
+}
+
+function uebAmpelText(job, status) {
+  const s = status || {};
+  if (s.aktiv === false) return 'inaktiv';
+  const erfolg = job === 'planer' ? s.letzterLaufAm : s.letzterErfolgAm;
+  if (s.stoerungSeit) return 'Störung';
+  if (s.tageslaufStatus === 'uebersprungen') return 'Probe ab nächstem Monat';
+  if (!erfolg) return 'noch kein Lauf';
+  return 'ok';
+}
+
+function uebJobZeile(job, status) {
+  const s = status || {};
+  const erfolg = job === 'planer' ? s.letzterLaufAm : s.letzterErfolgAm;
+  const fehlerText = s.tageslaufStatus === 'uebersprungen' ? 'Probe ab nächstem Monat' : (s.fehlerCode ? esc(s.fehlerCode) : '');
+  return `<tr>
+    <td style="padding:3px 8px" title="${esc(uebAmpelText(job, s))}">${uebAmpelSymbol(job, s)}</td>
+    <td style="padding:3px 8px">${esc(UEB_JOB_LABEL[job] || job)}</td>
+    <td style="padding:3px 8px">${esc(uebFormatZeitpunkt(erfolg))}</td>
+    <td style="padding:3px 8px;color:#c62828">${fehlerText}</td>
+  </tr>`;
+}
+
+function uebMeldungZeile(m) {
+  const typLabel = { fehler: 'Störung', ausbleiben: 'Ausgeblieben', entwarnung: 'Entwarnung' }[m.typ] || m.typ;
+  const zustellStatus = m.gesendetAm ? 'gesendet' : (m.zustellbar ? 'offen' : 'nicht zustellbar');
+  return `<tr>
+    <td style="padding:3px 8px">${esc(uebFormatZeitpunkt(m.erstelltAm))}</td>
+    <td style="padding:3px 8px">${esc(UEB_JOB_LABEL[m.job] || m.job)}</td>
+    <td style="padding:3px 8px">${esc(typLabel)}</td>
+    <td style="padding:3px 8px">${esc(zustellStatus)}</td>
+  </tr>`;
+}
+
+function uebLaufZeile(lauf) {
+  const icon = lauf.status === 'erfolg' ? '✔' : (lauf.status === 'fehler' ? '✘' : (lauf.status === 'abgebrochen' ? '⚠' : '…'));
+  const hinweis = lauf.status === 'fehler' ? (lauf.meldung || lauf.fehlerCode || 'Fehler') : (lauf.ausloeser || '');
+  return `<tr>
+    <td style="padding:3px 8px">${esc(uebFormatZeitpunkt(lauf.gestartetAm))}</td>
+    <td style="padding:3px 8px">${esc(UEB_JOB_LABEL[lauf.job] || lauf.job)}</td>
+    <td style="padding:3px 8px">${icon}</td>
+    <td style="padding:3px 8px">${esc(hinweis)}</td>
+  </tr>`;
+}
+
+function renderUeberwachung(card, j) {
+  const ue = (j.einstellungen && j.einstellungen.ueberwachung) || {};
+  const status = j.status || {};
+  const jobs = ['sicherung', 'probe_wiederherstellung', 'speicherplatz', 'backupmail', 'planer', 'nas'];
+  const empfaengerWirksam = j.empfaengerWirksam || [];
+  const meldungen = j.meldungen || [];
+  const laeufe = j.laeufe || [];
+
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="uebAktiv" ${ue.aktiv !== false ? 'checked' : ''} onchange="speichereUeberwachung()">
+        <span style="font-size:.9rem;font-weight:600">Überwachung aktivieren</span>
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:12px">
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Ausbleiben-Frist (Std., 26–168)</label>
+        <input type="number" id="uebAusbleibenStunden" class="form-control" style="font-size:.85rem;width:100%" min="26" max="168" value="${esc(String(ue.ausbleibenStunden != null ? ue.ausbleibenStunden : 26))}" onchange="speichereUeberwachung()"></div>
+      <div><label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Mindest-Speicher (MB)</label>
+        <input type="number" id="uebSpeicherMinMb" class="form-control" style="font-size:.85rem;width:100%" min="100" max="1000000" value="${esc(String(ue.speicherMinMb != null ? ue.speicherMinMb : 1024))}" onchange="speichereUeberwachung()"></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.78rem;color:#666;display:block;margin-bottom:2px">Empfänger Systemmeldungen (ein Eintrag je Zeile, leer = alle Admins)</label>
+      <textarea id="uebEmpfaenger" class="form-control" rows="3" style="font-size:.85rem;width:100%" onchange="speichereUeberwachung()">${esc((ue.empfaenger || []).join('\n'))}</textarea>
+      <p style="font-size:.75rem;color:#888;margin:4px 0 0">Wirksame Empfänger: ${empfaengerWirksam.length ? esc(empfaengerWirksam.join(', ')) : 'keine (bitte Empfänger oder Admin-E-Mail hinterlegen)'}</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-secondary btn-sm" id="uebTestmailBtn" onclick="uebTestmail()">✉ Testmail senden</button>
+      <button class="btn btn-secondary btn-sm" id="uebProbeBtn" onclick="uebProbeJetzt()">▶ Wiederherstellungs-Probe jetzt ausführen</button>
+    </div>
+    <p id="uebAktionStatus" style="font-size:.78rem;color:#888;margin:-6px 0 10px"></p>
+    <p style="font-size:.72rem;color:#888;margin:0 0 6px">⚪ inaktiv · 🟡 noch kein Lauf · 🟢 ok · 🔴 Störung – Meldung, wenn mehr als ${esc(String(ue.ausbleibenStunden != null ? ue.ausbleibenStunden : 26))} h kein Erfolg (Serversicherung; andere Jobs: eigene Frist, siehe Anleitung).</p>
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:14px">
+      <thead><tr style="text-align:left;color:#666"><th style="padding:3px 8px"></th><th style="padding:3px 8px">Job</th><th style="padding:3px 8px">Letzter Erfolg</th><th style="padding:3px 8px">Fehlercode</th></tr></thead>
+      <tbody>${jobs.map(job => uebJobZeile(job, status[job])).join('')}</tbody>
+    </table>
+    <h4 style="font-size:.85rem;margin:0 0 6px">Systemmeldungen</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:14px">
+      <thead><tr style="text-align:left;color:#666"><th style="padding:3px 8px">Zeitpunkt</th><th style="padding:3px 8px">Job</th><th style="padding:3px 8px">Ereignis</th><th style="padding:3px 8px">Status</th></tr></thead>
+      <tbody>${meldungen.length ? meldungen.map(uebMeldungZeile).join('') : '<tr><td colspan="4" style="padding:6px 8px;color:#888">Keine Meldungen.</td></tr>'}</tbody>
+    </table>
+    <h4 style="font-size:.85rem;margin:0 0 6px">Laufprotokoll</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+      <thead><tr style="text-align:left;color:#666"><th style="padding:3px 8px">Gestartet</th><th style="padding:3px 8px">Job</th><th style="padding:3px 8px">Status</th><th style="padding:3px 8px">Auslöser/Hinweis</th></tr></thead>
+      <tbody>${laeufe.length ? laeufe.map(uebLaufZeile).join('') : '<tr><td colspan="4" style="padding:6px 8px;color:#888">Noch keine Läufe.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+async function loadUeberwachung() {
+  const card = document.getElementById('ueberwachungCard');
+  if (!card) return;
+  try {
+    const r = await fetch('api.php?action=system_jobs_status');
+    const j = await r.json();
+    if (!j.ok) { card.innerHTML = '<p style="color:#c62828">Fehler beim Laden.</p>'; return; }
+    renderUeberwachung(card, j);
+  } catch (e) {
+    card.innerHTML = '<p style="color:#c62828">Netzwerkfehler.</p>';
+  }
+}
+
+// Gültige Ganzzahl-Eingabe wird als Zahl gesendet; ungültige/leere Eingaben werden
+// unverändert (als Text) gesendet, statt sie still durch einen Standardwert zu ersetzen –
+// so zeigt der Server-400-Fehler die fehlerhafte Eingabe an statt sie zu verschweigen
+// (Reviewbefund N8).
+function uebZahlEingabe(wert) {
+  const text = String(wert ?? '').trim();
+  return /^-?\d+$/.test(text) ? parseInt(text, 10) : text;
+}
+
+async function speichereUeberwachung() {
+  const aktiv = !!document.getElementById('uebAktiv')?.checked;
+  const ausbleibenStunden = uebZahlEingabe(document.getElementById('uebAusbleibenStunden')?.value);
+  const speicherMinMb = uebZahlEingabe(document.getElementById('uebSpeicherMinMb')?.value);
+  const empfaenger = (document.getElementById('uebEmpfaenger')?.value || '')
+    .split('\n').map(s => s.trim()).filter(Boolean);
+  try {
+    const r = await fetch('api.php?action=system_einstellungen_speichern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ueberwachung: { aktiv, empfaenger, ausbleibenStunden, speicherMinMb } }),
+    });
+    const j = await r.json();
+    if (j.error) { showNotification(j.error, 'error'); return; }
+    showNotification('Überwachung-Einstellungen gespeichert');
+    loadUeberwachung();
+  } catch (e) {
+    showNotification('Fehler beim Speichern', 'error');
+  }
+}
+
+async function uebTestmail() {
+  const btn = document.getElementById('uebTestmailBtn');
+  const status = document.getElementById('uebAktionStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Testmail wird gesendet…';
+  try {
+    const r = await fetch('api.php?action=ueberwachung_testmail', { method: 'POST' });
+    const j = await r.json();
+    if (!j.ok) {
+      if (status) status.textContent = j.error || 'Fehler beim Versand.';
+    } else {
+      const ergebnisse = j.ergebnisse || [];
+      if (!ergebnisse.length) {
+        // 0 wirksame Empfänger (Reviewbefund 10).
+        if (status) status.textContent = 'Keine Empfänger – bitte Adressen eintragen oder Admins eine E-Mail hinterlegen.';
+      } else if (status) {
+        // Je Empfänger Ergebnis inkl. Fehlertext anzeigen (Reviewbefund 10).
+        status.innerHTML = ergebnisse.map(e => {
+          const symbol = e.ok ? '✔' : '✘';
+          const fehler = !e.ok && e.fehler ? ' – ' + esc(String(e.fehler)) : '';
+          return esc(symbol + ' ' + (e.empfaenger || '')) + fehler;
+        }).join('<br>');
+      }
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Netzwerkfehler.';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+let uebProbeTimer = null;
+async function uebProbeJetzt() {
+  clearTimeout(uebProbeTimer);
+  const btn = document.getElementById('uebProbeBtn');
+  const status = document.getElementById('uebAktionStatus');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Wird angefordert…';
+  try {
+    const r = await fetch('api.php?action=job_anfordern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job: 'probe_wiederherstellung' }),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      if (status) status.textContent = j.error || 'Fehler.';
+      if (btn) btn.disabled = false;
+      return;
+    }
+    uebProbePollen(j.id, Date.now());
+  } catch (e) {
+    if (status) status.textContent = 'Netzwerkfehler.';
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function uebProbePollen(id, startZeit) {
+  const btn = document.getElementById('uebProbeBtn');
+  const status = document.getElementById('uebAktionStatus');
+  if (Date.now() - startZeit > 120000) {
+    if (status) status.textContent = 'Zeitüberschreitung – bitte Laufprotokoll prüfen.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+  try {
+    const r = await fetch('api.php?action=job_auftrag_status&id=' + encodeURIComponent(id));
+    const j = await r.json();
+    if (j.ok && (j.status === 'fertig' || j.status === 'fehlgeschlagen' || j.status === 'abgelaufen')) {
+      if (status) status.textContent = j.status === 'fertig' ? 'Wiederherstellungs-Probe abgeschlossen.' : 'Wiederherstellungs-Probe fehlgeschlagen.';
+      if (btn) btn.disabled = false;
+      loadUeberwachung();
+      return;
+    }
+  } catch (e) { /* nächster Versuch folgt per Timer */ }
+  uebProbeTimer = setTimeout(() => uebProbePollen(id, startZeit), 3000);
 }
 
 // -- Erinnerung-Einstellungen ---------------------------------

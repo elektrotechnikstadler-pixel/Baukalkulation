@@ -22,6 +22,10 @@ class MailService
      * @param string|null $attachBytes Binärdaten des Anhangs (null = kein Anhang)
      * @param string|null $attachName  Dateiname des Anhangs (z. B. "Protokoll.pdf")
      *
+     * $cfg['smtp_timeout'] (optional, Sekunden) begrenzt die Verbindungsdauer (T3,
+     * AP-20261012-datensicherung-nas). Ohne diesen Schlüssel bleibt das Verhalten für alle
+     * bestehenden Aufrufer unverändert (PHPMailer-Standard 300 s).
+     *
      * @throws \RuntimeException Bei Verbindungs- oder Sendefehlern
      */
     public static function send(
@@ -40,6 +44,9 @@ class MailService
             $mail->Host    = $cfg['smtp_host'] ?? '';
             $mail->Port    = (int)($cfg['smtp_port'] ?? 587);
             $mail->CharSet = 'UTF-8';
+            if (isset($cfg['smtp_timeout'])) {
+                $mail->Timeout = (int)$cfg['smtp_timeout'];
+            }
 
             $smtpUser = $cfg['smtp_user'] ?? '';
             if ($smtpUser !== '') {

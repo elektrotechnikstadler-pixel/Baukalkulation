@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>Planning Dashboard – Baukalkulation</title>
-  <link rel="stylesheet" href="style.css?v=146">
+  <link rel="stylesheet" href="style.css?v=147">
   <script>
     // M5 (v1.8.0): Mobile-Redirect respektiert User-Override.
     // Nutzer (z. B. auf Tablet) können per ?desktop=1 oder Flag im
@@ -179,6 +179,12 @@
 
     <!-- Main Content -->
     <main class="main-content" id="mainContent" role="main" tabindex="-1">
+      <!-- Admin-Hinweis Überwachung/Systemmeldungen (AP-20261012-datensicherung-nas, T3) -->
+      <div id="sysHinweisBanner" class="sys-hinweis-banner" style="display:none" role="alert">
+        <span id="sysHinweisText"></span>
+        <button type="button" class="btn btn-sm" onclick="sysHinweisOeffnen()">Überwachung öffnen</button>
+        <button type="button" class="sys-hinweis-close" onclick="sysHinweisSchliessen()" aria-label="Hinweis schließen">✕</button>
+      </div>
       <!-- Empty State -->
       <div id="emptyState" class="empty-state">
         <div class="empty-icon" data-ico="building" data-ico-cls="ico-2xl"></div>
@@ -1003,6 +1009,25 @@
     </div>
   </div>
 
+  <!-- ===== MODAL: Passwortabfrage „Schlüssel anzeigen“ (F9, Reviewbefund 10) ===== -->
+  <div id="secretKeyPasswortModal" class="modal-overlay hidden" onclick="if(event.target===this)secretKeyPasswortAbbrechen()">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>🔑 Schlüssel anzeigen</h2>
+        <button class="close-btn" onclick="secretKeyPasswortAbbrechen()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:.85rem;color:#555;margin-bottom:10px">Bitte Ihr Anmeldepasswort zur Bestätigung eingeben.</p>
+        <input type="password" id="secretKeyPasswortEingabe" class="form-control" autocomplete="current-password" onkeydown="if(event.key==='Enter')secretKeyPasswortBestaetigen()">
+        <p id="secretKeyPasswortFehler" style="font-size:.78rem;color:#c62828;margin-top:8px"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="secretKeyPasswortAbbrechen()">Abbrechen</button>
+        <button class="btn btn-primary" onclick="secretKeyPasswortBestaetigen()">Bestätigen</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Versions-Anzeige erfolgt in der Fußzeile (#footerAppVersion) -->
 
   <!-- ===== SCRIPTS ===== -->
@@ -1010,8 +1035,8 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/chart.umd.min.js"></script>
   <script src="sollzeit.js?v=232"></script>
-  <script src="verwaltung-nav.js?v=1"></script>
-  <script src="script.min.js?v=239"></script>
+  <script src="verwaltung-nav.js?v=3"></script>
+  <script src="script.min.js?v=245"></script>
   <!-- Phase 5: ES-Modul-Bootstrap (Companion-Modus, läuft parallel zu script.js) -->
   <!-- ROLLBACK: diese Zeile entfernen → vollständiger Rollback auf v2.9.8 -->
   <script type="module" src="dist/core.js?v=100"></script>

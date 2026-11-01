@@ -8,6 +8,7 @@ use App\Console\Command\BackupImportCommand;
 use App\Console\Command\DbMigrateCommand;
 use App\Console\Command\DbStatusCommand;
 use App\Console\Command\DbTransferCommand;
+use App\Console\Command\NasAbgleichCommand;
 use App\Console\Command\SicherungErstellenCommand;
 use App\Console\Command\SystemPlanerCommand;
 use App\Console\Command\UserResetPasswordCommand;
@@ -31,6 +32,7 @@ final class Kernel extends Application
             new ZeitErinnerungCommand(),
             new SystemPlanerCommand(),
             new SicherungErstellenCommand(),
+            new NasAbgleichCommand(),
         ]);
     }
 
