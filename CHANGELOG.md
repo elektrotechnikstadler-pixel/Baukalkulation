@@ -37,7 +37,7 @@
 
 ---
 
-## Unveröffentlicht
+## v3.0.25 – Gefilterte Summen, Kundendetail, Notizen und Stunden bearbeiten
 
 ### Behoben
 - **Gesamtübersicht:** Die Zeile „Gesamt" und die Kennzahlen-Karten zeigen bei aktivem Filter/Suche
