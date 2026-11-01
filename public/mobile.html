@@ -7628,6 +7628,8 @@ async function saveSchnellnotiz() {
 }
 
 // ── Schnellnotizen View (Admin/Master – Mobile) ──────────────
+let _schnellnotizenMobileCache = [];
+
 async function showSchnellnotizenMobile() {
   showView('viewSchnellnotizen');
   const sv = document.getElementById('schnellnotizenMobileScrollView');
@@ -7638,6 +7640,7 @@ async function showSchnellnotizenMobile() {
     const j = await r.json();
     if (!j.ok) { sv.innerHTML = '<div class="empty-state"><h3>Fehler</h3></div>'; return; }
     const notes = j.notes || [];
+    _schnellnotizenMobileCache = notes;
     const active = notes.filter(n => !n.archiviert).sort((a,b) => (b.datum||'').localeCompare(a.datum||''));
     const archived = notes.filter(n => n.archiviert).sort((a,b) => (b.archiviertAm||b.datum||'').localeCompare(a.archiviertAm||a.datum||''));
 
@@ -7659,6 +7662,7 @@ async function showSchnellnotizenMobile() {
             </div>
             <div style="font-size:0.9rem;line-height:1.5;white-space:pre-wrap">${esc(n.text)}</div>
             <div style="display:flex;gap:6px;margin-top:4px">
+              <button class="btn btn-sm btn-secondary" onclick="editSchnellnotizMobile(${n.id})">Bearbeiten</button>
               <button class="btn btn-sm btn-secondary" onclick="archiveSchnellnotizMobile(${n.id})">Archivieren</button>
               <button class="btn btn-sm btn-secondary" style="color:var(--danger)" onclick="deleteSchnellnotizMobile(${n.id})">Löschen</button>
             </div>
@@ -7696,6 +7700,26 @@ async function archiveSchnellnotizMobile(id) {
     showToast('✓ Archiviert');
     showSchnellnotizenMobile();
   } catch(e) { showToast('Fehler'); }
+}
+
+async function editSchnellnotizMobile(id) {
+  const note = (_schnellnotizenMobileCache || []).find(n => n.id === id);
+  if (!note) return;
+  const newText = prompt('Notiz bearbeiten:', note.text || '');
+  if (newText === null) return;
+  const text = newText.trim();
+  if (!text) { showToast('Bitte Notiz eingeben.'); return; }
+  try {
+    const r = await fetch('api.php?action=update_schnellnotiz', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, text })
+    });
+    const j = await r.json();
+    if (j.ok) {
+      showToast('✓ Aktualisiert');
+      showSchnellnotizenMobile();
+    } else { showToast(j.error || 'Fehler beim Speichern'); }
+  } catch(e) { showToast('Netzwerkfehler'); }
 }
 
 async function archiveAllSchnellnotizenMobile() {

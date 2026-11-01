@@ -119,6 +119,9 @@ class BaustelleActions
                 'archiveGroup' => $snap['archiveGroup'] ?? null,
                 'parentId'     => $snap['baustelle']['parentId'] ?? null,
                 'projektNr'    => $snap['baustelle']['projektNr'] ?? '',
+                'kundeId'      => isset($snap['baustelle']['kundeId']) && $snap['baustelle']['kundeId'] !== ''
+                    ? (int)$snap['baustelle']['kundeId']
+                    : null,
             ];
         }
         jsonOut(['ok' => true, 'archives' => $archives]);

@@ -32,6 +32,10 @@ function _debounce(fn, ms) {
 }
 const _debouncedFilterMat = _debounce(v => filterMatRows(v), 250);
 const _debouncedFilterOv  = _debounce(v => filterUebersichtRows(v), 250);
+// Zeilen der Gesamtübersicht (zuletzt gerendert), fuer Summen-Neuberechnung
+// bei aktivem Filter (AP-20261101-gesamtuebersicht-filter). Siehe
+// public/uebersicht-summen.js::bkUebersichtSummen.
+let _ovRows = [];
 const _debouncedFilterAz  = _debounce(v => filterAzRows(v), 250);
 window.onunhandledrejection = function(e) {
   console.error('Unhandled rejection:', e.reason);
@@ -3029,7 +3033,6 @@ function renderUebersicht() {
     return;
   }
 
-  let totalMat = 0, totalAz = 0, totalP = 0, totalAbschlag = 0, totalGewinn = 0;
   const parentMap = Object.fromEntries((appData.baustellen || []).map(b => [b.id, b]));
   const rows = appData.baustellen.map(b => {
     const excluded = !!b.excludeFromOverview;
@@ -3079,14 +3082,6 @@ function renderUebersicht() {
   });
   // offen nach Aggregation neu berechnen
   rows.forEach(r => { if (!r.isSub) r.offen = r.g - r.abs; });
-  // Gesamtsummen: nur Oberprojekte + eigenständige Baustellen (keine Unterprojekte), um Doppelzählung zu vermeiden
-  rows.filter(r => !r.isSub && !r.excluded).forEach(r => {
-    totalMat      += r.ms;
-    totalAz       += r.as;
-    totalP        += r.ps;
-    totalAbschlag += r.abs;
-    totalGewinn   += r.gewinn;
-  });
   // Sortiere: Hauptprojekte alphabetisch nach Projekt-Nr, Unterprojekte direkt unter ihrem Parent
   const subsByParent = {};
   rows.forEach(r => { if (r.isSub) (subsByParent[r.parentId] ||= []).push(r); });
@@ -3105,8 +3100,10 @@ function renderUebersicht() {
   rows.forEach(r => { if (r.isSub && !topRows.find(t => t.id === r.parentId)) sortedRows.push(r); });
   rows.length = 0;
   rows.push(...sortedRows);
-  const grand = totalMat + totalAz + totalP;
-  const grandOffen = grand - totalAbschlag;
+  _ovRows = rows;
+  // Gesamtsummen: nur Oberprojekte + eigenständige Baustellen (keine Unterprojekte), um Doppelzählung zu vermeiden
+  const summen = bkUebersichtSummen(rows, null);
+  const { anzahl, totalMat, totalAz, totalP, totalAbschlag, totalGewinn, grand, grandOffen } = summen;
   const maxG = Math.max(...rows.map(r => r.g), 1);
 
   el.innerHTML = `
@@ -3122,56 +3119,56 @@ function renderUebersicht() {
         <span class="kpi-icon">${ico('building')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Baustellen</span>
-          <span class="kpi-value">${appData.baustellen.length}</span>
+          <span class="kpi-value" id="ovKpiBaustellen">${anzahl}</span>
         </div>
       </div>
       <div class="kpi-card price-sensitive">
         <span class="kpi-icon">${ico('wrench')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Material gesamt</span>
-          <span class="kpi-value">${fmt(totalMat)}</span>
+          <span class="kpi-value" id="ovKpiMat">${fmt(totalMat)}</span>
         </div>
       </div>
       <div class="kpi-card price-sensitive">
         <span class="kpi-icon">${ico('clock')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Arbeitszeit gesamt</span>
-          <span class="kpi-value">${fmt(totalAz)}</span>
+          <span class="kpi-value" id="ovKpiAz">${fmt(totalAz)}</span>
         </div>
       </div>
       <div class="kpi-card price-sensitive">
         <span class="kpi-icon">${ico('clipboard')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Pauschalen gesamt</span>
-          <span class="kpi-value">${fmt(totalP)}</span>
+          <span class="kpi-value" id="ovKpiP">${fmt(totalP)}</span>
         </div>
       </div>
       <div class="kpi-card kpi-grand price-sensitive">
         <span class="kpi-icon">${ico('coins')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Gesamtsumme</span>
-          <span class="kpi-value">${fmt(grand)}</span>
+          <span class="kpi-value" id="ovKpiGrand">${fmt(grand)}</span>
         </div>
       </div>
       <div class="kpi-card kpi-abschlag price-sensitive">
         <span class="kpi-icon">${ico('creditCard')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Abschläge gesamt</span>
-          <span class="kpi-value">${fmt(totalAbschlag)}</span>
+          <span class="kpi-value" id="ovKpiAbschlag">${fmt(totalAbschlag)}</span>
         </div>
       </div>
       <div class="kpi-card kpi-offen price-sensitive">
         <span class="kpi-icon">${ico('alert')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Offener Betrag</span>
-          <span class="kpi-value">${fmt(grandOffen)}</span>
+          <span class="kpi-value" id="ovKpiOffen">${fmt(grandOffen)}</span>
         </div>
       </div>
       <div class="kpi-card price-sensitive gewinn-sensitive" style="border-left:3px solid var(--success,#198754);">
         <span class="kpi-icon">${ico('coins')}</span>
         <div class="kpi-body">
           <span class="kpi-label">Gewinn gesamt</span>
-          <span class="kpi-value" style="color:${totalGewinn >= 0 ? 'var(--success,#198754)' : 'var(--danger,#dc3545)'}">${fmt(totalGewinn)}</span>
+          <span class="kpi-value" id="ovKpiGewinn" style="color:${totalGewinn >= 0 ? 'var(--success,#198754)' : 'var(--danger,#dc3545)'}">${fmt(totalGewinn)}</span>
         </div>
       </div>
     </div>
@@ -3212,7 +3209,7 @@ function renderUebersicht() {
           </thead>
           <tbody id="ovBody">
             ${rows.map(r => `
-              <tr class="ov-row${r.excluded ? ' ov-excluded' : ''}${r.isSub ? ' ov-sub' : ''}" onclick="selectBaustelle(${r.id})" title="${r.excluded ? 'Ausgeschlossen - ' : ''}${r.isSub ? `Unterprojekt von ${r.parentProjektNr || ''} ${r.parentName || ''} - ` : ''}Baustelle öffnen" style="${r.excluded ? 'opacity:.45;' : ''}">
+              <tr class="ov-row${r.excluded ? ' ov-excluded' : ''}${r.isSub ? ' ov-sub' : ''}" data-id="${r.id}" onclick="selectBaustelle(${r.id})" title="${r.excluded ? 'Ausgeschlossen - ' : ''}${r.isSub ? `Unterprojekt von ${r.parentProjektNr || ''} ${r.parentName || ''} - ` : ''}Baustelle öffnen" style="${r.excluded ? 'opacity:.45;' : ''}">
                 <td class="ov-pnr" style="font-weight:600;font-size:.82rem;color:var(--primary);">${esc(r.projektNr)}</td>
                 <td class="ov-name">${r.isSub ? '<span class="ov-sub-marker">↳</span>' : '<span class="ov-dot"></span>'}${esc(r.name)}${r.isSub && r.parentProjektNr ? `<span class="ov-sub-badge" title="Unterprojekt von ${esc(r.parentName || '')}">UP · ${esc(r.parentProjektNr)}</span>` : ''}${!r.isSub && r.hasSubs ? '<span class="ov-agg-badge" title="Summe inkl. aller Unterprojekte">∑ Gruppe</span>' : ''}${r.excluded ? ' <small style="color:var(--grey-400);font-weight:400">(ausgeschl.)</small>' : ''}</td>
                 <td class="text-right price-sensitive">${fmt(r.ms)}</td>
@@ -3234,13 +3231,13 @@ function renderUebersicht() {
             <tr class="total-row">
               <td></td>
               <td><strong>Gesamt</strong></td>
-              <td class="text-right calc-cell price-sensitive">${fmt(totalMat)}</td>
-              <td class="text-right calc-cell price-sensitive">${fmt(totalAz)}</td>
-              <td class="text-right calc-cell price-sensitive">${fmt(totalP)}</td>
-              <td class="text-right calc-cell price-sensitive">${fmt(grand)}</td>
-              <td class="text-right calc-cell price-sensitive">${fmt(totalAbschlag)}</td>
-              <td class="text-right calc-cell ov-offen price-sensitive">${fmt(grandOffen)}</td>
-              <td class="text-right calc-cell price-sensitive gewinn-sensitive" style="color:${totalGewinn >= 0 ? 'var(--success,#198754)' : 'var(--danger,#dc3545)'}">${fmt(totalGewinn)}</td>
+              <td class="text-right calc-cell price-sensitive" id="ovFootMat">${fmt(totalMat)}</td>
+              <td class="text-right calc-cell price-sensitive" id="ovFootAz">${fmt(totalAz)}</td>
+              <td class="text-right calc-cell price-sensitive" id="ovFootP">${fmt(totalP)}</td>
+              <td class="text-right calc-cell price-sensitive" id="ovFootGrand">${fmt(grand)}</td>
+              <td class="text-right calc-cell price-sensitive" id="ovFootAbschlag">${fmt(totalAbschlag)}</td>
+              <td class="text-right calc-cell ov-offen price-sensitive" id="ovFootOffen">${fmt(grandOffen)}</td>
+              <td class="text-right calc-cell price-sensitive gewinn-sensitive" id="ovFootGewinn" style="color:${totalGewinn >= 0 ? 'var(--success,#198754)' : 'var(--danger,#dc3545)'}">${fmt(totalGewinn)}</td>
               <td class="price-sensitive">
                 <div class="ov-bar-wrap">
                   <div class="ov-bar ${grand > 0 && totalAbschlag >= grand ? 'ov-bar-paid' : ''}" style="width:${grand > 0 ? Math.min(Math.round(totalAbschlag / grand * 100), 100) : 0}%"></div>
@@ -3256,12 +3253,45 @@ function renderUebersicht() {
 
 function filterUebersichtRows(q) {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(t => t);
-  const rows = document.querySelectorAll('#ovBody tr.ov-row');
-  rows.forEach(tr => {
-    if (terms.length === 0) { tr.style.display = ''; return; }
-    const text = tr.textContent.toLowerCase();
-    tr.style.display = terms.every(t => text.includes(t)) ? '' : 'none';
+  const trs = document.querySelectorAll('#ovBody tr.ov-row');
+  const sichtbareIds = [];
+  trs.forEach(tr => {
+    const sichtbar = terms.length === 0 || terms.every(t => tr.textContent.toLowerCase().includes(t));
+    tr.style.display = sichtbar ? '' : 'none';
+    if (sichtbar) {
+      const id = tr.dataset.id;
+      if (id !== undefined && id !== '') sichtbareIds.push(id);
+    }
   });
+  _ovAktualisiereSummen(sichtbareIds);
+}
+
+// Aktualisiert Fußzeile + KPI-Karten der Gesamtübersicht anhand der
+// sichtbaren Zeilen-IDs (AP-20261101-gesamtuebersicht-filter).
+function _ovAktualisiereSummen(sichtbareIds) {
+  if (!Array.isArray(_ovRows) || typeof bkUebersichtSummen !== 'function') return;
+  const s = bkUebersichtSummen(_ovRows, sichtbareIds);
+  const setTxt = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  const gewinnFarbe = s.totalGewinn >= 0 ? 'var(--success,#198754)' : 'var(--danger,#dc3545)';
+  setTxt('ovKpiBaustellen', String(s.anzahl));
+  setTxt('ovKpiMat', fmt(s.totalMat));
+  setTxt('ovKpiAz', fmt(s.totalAz));
+  setTxt('ovKpiP', fmt(s.totalP));
+  setTxt('ovKpiGrand', fmt(s.grand));
+  setTxt('ovKpiAbschlag', fmt(s.totalAbschlag));
+  setTxt('ovKpiOffen', fmt(s.grandOffen));
+  setTxt('ovKpiGewinn', fmt(s.totalGewinn));
+  const kpiGewinn = document.getElementById('ovKpiGewinn');
+  if (kpiGewinn) kpiGewinn.style.color = gewinnFarbe;
+  setTxt('ovFootMat', fmt(s.totalMat));
+  setTxt('ovFootAz', fmt(s.totalAz));
+  setTxt('ovFootP', fmt(s.totalP));
+  setTxt('ovFootGrand', fmt(s.grand));
+  setTxt('ovFootAbschlag', fmt(s.totalAbschlag));
+  setTxt('ovFootOffen', fmt(s.grandOffen));
+  setTxt('ovFootGewinn', fmt(s.totalGewinn));
+  const footGewinn = document.getElementById('ovFootGewinn');
+  if (footGewinn) footGewinn.style.color = gewinnFarbe;
 }
 
 function sortUebersichtRows(mode) {
@@ -15581,6 +15611,9 @@ function _toggleSeWarnCollapse() {
 let zeitEntriesDesktop = [];
 let _zeitLoaded = false; // true erst nach erfolgreichem Laden -> Schutz gegen Overwrite mit leerem/veraltetem Stand
 let _zeitRev = null;     // serverseitige Revision der eigenen Zeiterfassung (Optimistic Locking)
+// id des gerade im Formular bearbeiteten Eintrags (AP-20261101-stundenerfassung-bearbeiten);
+// null = normaler "Erfassen"-Modus.
+let _seDesktopEditingId = null;
 
 // Geräteübergreifend stabile Identität eines Zeiteintrags. Die fortlaufende
 // entryId wird pro Gerät vergeben und kollidiert offline zwangsläufig.
@@ -15594,13 +15627,21 @@ let seDesktopUser = { sollstundenTag: 8, sollTageWoche: 5, arbeitstage: '1,2,3,4
 let seDesktopUrlaubProJahr = {};
 let seDesktopGleitzeitBuchungen = [];
 
-async function openStundenerfassungModal() {
-  // User-Name anzeigen
-  const nameEl = document.getElementById('seUserName');
-  if (nameEl) nameEl.textContent = currentUser || '';
+// Setzt das Erfassungsformular in den normalen "Neu erfassen"-Modus zurück
+// (kein Edit-Rest von vorher). Wird beim Öffnen des Modals UND beim Abbrechen
+// einer Bearbeitung (cancelSeDesktopEdit) verwendet (AP-20261101-stundenerfassung-bearbeiten).
+function _resetSeDesktopForm() {
+  _seDesktopEditingId = null;
+  const submitBtn0 = document.getElementById('seDesktopSubmitBtn');
+  if (submitBtn0) submitBtn0.textContent = '+ Erfassen';
+  const cancelBtn0 = document.getElementById('seDesktopCancelEditBtn');
+  if (cancelBtn0) cancelBtn0.style.display = 'none';
+  const hint0 = document.getElementById('seDesktopEditHint');
+  if (hint0) hint0.style.display = 'none';
 
   // Datum auf heute setzen
   document.getElementById('seDesktopDatum').value = new Date().toISOString().split('T')[0];
+  document.getElementById('seDesktopDatumBis').value = '';
   _fillSeTypSelect('seDesktopTyp', 'arbeit');
   document.getElementById('seDesktopStunden').value = '';
   document.getElementById('seDesktopBemerkung').value = '';
@@ -15609,6 +15650,8 @@ async function openStundenerfassungModal() {
   document.getElementById('seDesktopVon').value = '';
   document.getElementById('seDesktopBis').value = '';
   document.getElementById('seDesktopPause').value = '';
+  const sonstigRadios0 = document.querySelectorAll('input[name="seDesktopSonstigModus"]');
+  sonstigRadios0.forEach(r => { r.checked = (r.value === 'ganztag'); });
   // Stundenkategorie-Select befüllen und ggf. Vorbelegung des Users
   const _katSelect = document.getElementById('seDesktopStundenKat');
   const _katalog = appData.stundenKatalog || [];
@@ -15617,6 +15660,14 @@ async function openStundenerfassungModal() {
   const _matchKat = _katalog.find(k => k.kategorie === currentStundenKategorie);
   _katSelect.value = _matchKat ? _matchKat.id : '';
   toggleSeDesktopFields();
+}
+
+async function openStundenerfassungModal() {
+  // User-Name anzeigen
+  const nameEl = document.getElementById('seUserName');
+  if (nameEl) nameEl.textContent = currentUser || '';
+
+  _resetSeDesktopForm();
 
   // Einträge + Sollstunden + Gleitzeitkonto parallel laden
   _zeitLoaded = false;
@@ -15861,8 +15912,8 @@ function renderSeDesktop() {
   const thead = document.getElementById('seDesktopThead');
   if (thead) {
     thead.innerHTML = erweitert
-      ? `<tr><th style="width:100px">Datum</th><th style="width:90px">Typ</th><th style="width:55px">Von</th><th style="width:55px">Bis</th><th style="width:50px">Pause</th><th style="width:60px">Stunden</th><th>Baustelle</th><th>Bemerkung</th><th style="width:42px"></th></tr>`
-      : `<tr><th style="width:120px">Datum</th><th style="width:100px">Typ</th><th style="width:80px">Stunden</th><th>Baustelle</th><th>Bemerkung</th><th style="width:42px"></th></tr>`;
+      ? `<tr><th style="width:100px">Datum</th><th style="width:90px">Typ</th><th style="width:55px">Von</th><th style="width:55px">Bis</th><th style="width:50px">Pause</th><th style="width:60px">Stunden</th><th>Baustelle</th><th>Bemerkung</th><th style="width:72px"></th></tr>`
+      : `<tr><th style="width:120px">Datum</th><th style="width:100px">Typ</th><th style="width:80px">Stunden</th><th>Baustelle</th><th>Bemerkung</th><th style="width:72px"></th></tr>`;
   }
 
   // Tabelle - aktueller Monat zuerst, dann ab heute in die Zukunft, davor Vergangenes aufsteigend
@@ -15921,7 +15972,7 @@ function renderSeDesktop() {
         <td class="text-right">${(e.stunden||0).toFixed(2)} h</td>
         <td>${isVirtual ? '' : esc(e.baustelleName || (e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name||'') : ''))}</td>
         <td>${isVirtual ? '<em style="font-size:.78rem;color:#888">auto</em>' : esc(e.bemerkung||'')}</td>
-        <td>${canEdit ? `<button class="icon-btn danger" onclick="delSeDesktop(${e.id})">${ico('trash')}</button>` : ''}</td>`;
+        <td>${canEdit ? `<button class="icon-btn" onclick="editSeDesktop(${e.id})" title="Bearbeiten">${ico('edit')}</button><button class="icon-btn danger" onclick="delSeDesktop(${e.id})">${ico('trash')}</button>` : ''}</td>`;
     } else {
       tr.innerHTML = `
         <td>${esc(e.datum)}</td>
@@ -15929,7 +15980,7 @@ function renderSeDesktop() {
         <td class="text-right">${(e.stunden||0).toFixed(2)} h</td>
         <td>${isVirtual ? '' : esc(e.baustelleName || (e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name||'') : ''))}</td>
         <td>${isVirtual ? '<em style="font-size:.78rem;color:#888">auto</em>' : esc(e.bemerkung||'')}</td>
-        <td>${canEdit ? `<button class="icon-btn danger" onclick="delSeDesktop(${e.id})">${ico('trash')}</button>` : ''}</td>`;
+        <td>${canEdit ? `<button class="icon-btn" onclick="editSeDesktop(${e.id})" title="Bearbeiten">${ico('edit')}</button><button class="icon-btn danger" onclick="delSeDesktop(${e.id})">${ico('trash')}</button>` : ''}</td>`;
     }
     tbody.appendChild(tr);
   });
@@ -15940,6 +15991,9 @@ function renderSeDesktop() {
 
 function addStundenerfassungDesktop() {
   if (!_zeitLoaded) { showNotification('Die Stundenerfassung wurde nicht vollständig geladen – zum Schutz deiner Daten kann nicht gespeichert werden. Bitte den Dialog schließen und erneut öffnen.', 'error'); return; }
+  // Im Bearbeiten-Modus (editSeDesktop) wird ein bestehender Eintrag geändert,
+  // kein neuer angelegt (AP-20261101-stundenerfassung-bearbeiten).
+  if (_seDesktopEditingId != null) { _saveSeDesktopEdit(); return; }
   const datum = document.getElementById('seDesktopDatum').value;
   const typ = document.getElementById('seDesktopTyp').value;
   const erweitert = !!appSettings.erweiterte_zeiterfassung;
@@ -16211,6 +16265,195 @@ function delSeDesktop(id) {
       renderSeDesktop();
     });
   renderSeDesktop();
+}
+
+// Lädt einen bestehenden Eintrag ins Erfassungsformular (Bearbeiten-Modus).
+// Gleiche "canEdit"-Regel wie in renderSeDesktop(): nicht virtuell, Datum der
+// letzten 5 Tage (inkl. Zukunft) (AP-20261101-stundenerfassung-bearbeiten).
+function editSeDesktop(id) {
+  if (!_zeitLoaded) { showNotification('Stundenerfassung nicht geladen – Bearbeiten gesperrt. Bitte den Dialog schließen und erneut öffnen.', 'error'); return; }
+  const entry = zeitEntriesDesktop.find(e => e.id === id);
+  if (!entry) { showNotification('Eintrag nicht gefunden.', 'error'); return; }
+  const entryDate = entry.datum ? new Date(entry.datum + 'T00:00:00') : null;
+  const fiveDaysAgo = new Date(); fiveDaysAgo.setHours(0,0,0,0); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+  if (entry._virtual || !entryDate || entryDate < fiveDaysAgo) {
+    showNotification('Dieser Eintrag kann nicht mehr bearbeitet werden.', 'error');
+    return;
+  }
+
+  _seDesktopEditingId = id;
+
+  document.getElementById('seDesktopDatum').value = entry.datum || '';
+  document.getElementById('seDesktopDatumBis').value = '';
+  _fillSeTypSelect('seDesktopTyp', entry.typ || 'arbeit');
+  document.getElementById('seDesktopStunden').value = entry.stunden != null ? entry.stunden : '';
+  document.getElementById('seDesktopVon').value = entry.von || '';
+  document.getElementById('seDesktopBis').value = entry.bis || '';
+  document.getElementById('seDesktopPause').value = entry.pause != null ? entry.pause : '';
+  document.getElementById('seDesktopBemerkung').value = entry.bemerkung || '';
+  document.getElementById('seDesktopBaustelle').value = entry.baustelleId != null ? entry.baustelleId : '';
+  document.getElementById('seDesktopBaustelleSearch').value = entry.baustelleName || '';
+  const katSelect = document.getElementById('seDesktopStundenKat');
+  if (katSelect) katSelect.value = entry.stundenKatId != null ? entry.stundenKatId : '';
+  // Sonstig: Zeitspanne-Modus reaktivieren, falls Von/Bis gesetzt waren
+  const wasZeitspanne = entry.typ === 'sonstig' && !!entry.von && !!entry.bis;
+  document.querySelectorAll('input[name="seDesktopSonstigModus"]').forEach(r => {
+    r.checked = (r.value === (wasZeitspanne ? 'zeitspanne' : 'ganztag'));
+  });
+
+  toggleSeDesktopFields();
+  // Bearbeiten betrifft immer nur den einen Eintrag – kein Datumsbereich.
+  const datumBisWrap = document.getElementById('seDesktopDatumBisWrap');
+  if (datumBisWrap) datumBisWrap.style.display = 'none';
+
+  const submitBtn = document.getElementById('seDesktopSubmitBtn');
+  if (submitBtn) submitBtn.textContent = 'Änderung speichern';
+  const cancelBtn = document.getElementById('seDesktopCancelEditBtn');
+  if (cancelBtn) cancelBtn.style.display = '';
+  const hint = document.getElementById('seDesktopEditHint');
+  if (hint) hint.style.display = '';
+
+  const datumField = document.getElementById('seDesktopDatum');
+  if (datumField && datumField.scrollIntoView) datumField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Bricht die Bearbeitung ab und setzt das Formular auf den Neu-Modus zurück.
+function cancelSeDesktopEdit() {
+  _resetSeDesktopForm();
+}
+
+// Speichert die Änderungen eines im Bearbeiten-Modus geöffneten Eintrags.
+// Validiert wie addStundenerfassungDesktop (für EIN Datum, ohne Datumsbereich),
+// jeweils OHNE den bearbeiteten Eintrag selbst mitzuzählen (Überschneidung,
+// Urlaubslimit, Gleitzeit max. 1/Tag). Bei Fehler Rollback auf den Altwert
+// (AP-20261101-stundenerfassung-bearbeiten).
+function _saveSeDesktopEdit() {
+  if (!_zeitLoaded) { showNotification('Stundenerfassung nicht geladen – Speichern gesperrt. Bitte den Dialog schließen und erneut öffnen.', 'error'); return; }
+  const id = _seDesktopEditingId;
+  const idx = zeitEntriesDesktop.findIndex(e => e.id === id);
+  if (idx === -1) { showNotification('Eintrag nicht gefunden.', 'error'); cancelSeDesktopEdit(); return; }
+  const original = zeitEntriesDesktop[idx];
+  const snapshot = { ...original };
+  const others = zeitEntriesDesktop.filter(e => e.id !== id);
+
+  const datum = document.getElementById('seDesktopDatum').value;
+  const typ = document.getElementById('seDesktopTyp').value;
+  const erweitert = !!appSettings.erweiterte_zeiterfassung;
+  let von = '', bis = '', pauseMin = 0;
+  let stunden;
+  const sonstigZeitspanne = (typ === 'sonstig' && (document.querySelector('input[name="seDesktopSonstigModus"]:checked')?.value === 'zeitspanne'));
+
+  if (typ === 'arbeit' && erweitert) {
+    von = document.getElementById('seDesktopVon').value;
+    bis = document.getElementById('seDesktopBis').value;
+    pauseMin = parseFloat(document.getElementById('seDesktopPause').value) || 0;
+    if (!von || !bis) { showNotification('Bitte Von und Bis eingeben.'); return; }
+    calcSeDesktopStunden();
+    stunden = parseFloat(document.getElementById('seDesktopStunden').value) || 0;
+    if (stunden > 10) {
+      if (!confirm(`Achtung: ${stunden.toFixed(1)}h überschreiten die max. 10h/Tag (§ 3 ArbZG). Trotzdem erfassen?`)) return;
+    }
+    if (stunden > 6 && pauseMin < 30) {
+      showNotification('Pausenpflicht: Ab 6h Arbeitszeit mind. 30 Min Pause (§ 4 ArbZG).', 'warning');
+    }
+    if (stunden > 9 && pauseMin < 45) {
+      showNotification('Pausenpflicht: Ab 9h Arbeitszeit mind. 45 Min Pause (§ 4 ArbZG).', 'warning');
+    }
+    const conflicting = others.find(e =>
+      e.datum === datum && e.typ === 'arbeit' && e.von && e.bis &&
+      von < e.bis && bis > e.von
+    );
+    if (conflicting) {
+      showNotification(`Zeitüberschneidung mit vorhandenem Eintrag ${conflicting.von}–${conflicting.bis}.`, 'error');
+      return;
+    }
+  } else {
+    if (sonstigZeitspanne) {
+      von = document.getElementById('seDesktopVon').value;
+      bis = document.getElementById('seDesktopBis').value;
+      if (!von || !bis) { showNotification('Bitte Von und Bis eingeben.'); return; }
+      calcSeDesktopStunden();
+      stunden = parseFloat(document.getElementById('seDesktopStunden').value) || 0;
+    } else {
+      const _isManualCustomArbeit = isArbeitTyp(typ) && typ !== 'arbeit' && !seTypIstGleichSoll(typ);
+      stunden = (typ === 'arbeit' || isAbwesendTyp(typ) || _isManualCustomArbeit)
+        ? (parseFloat(document.getElementById('seDesktopStunden').value) || 0)
+        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) : 0);
+    }
+    if (typ === 'arbeit') {
+      const tagSumme = others.filter(e => e.datum === datum && e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0);
+      if (tagSumme + stunden > 10) {
+        showNotification(`Hinweis: Insgesamt ${(tagSumme + stunden).toFixed(1)}h für ${datum} – mehr als 10h (§ 3 ArbZG).`, 'warning');
+      }
+    }
+  }
+
+  const baustelleId = typ === 'arbeit' ? (parseInt(document.getElementById('seDesktopBaustelle').value) || null) : null;
+  const bemerkung = document.getElementById('seDesktopBemerkung').value.trim();
+
+  if (!datum) { showNotification('Bitte Datum eingeben.'); return; }
+  if ((typ === 'arbeit' || (isArbeitTyp(typ) && typ !== 'arbeit' && !seTypIstGleichSoll(typ))) && stunden <= 0) { showNotification('Bitte Stunden eingeben.'); return; }
+  if (isAbwesendTyp(typ)) {
+    if (stunden <= 0) { showNotification('Bitte Stunden der Abwesenheit eingeben.'); return; }
+    if (!bemerkung)   { showNotification('Bitte einen Grund für die Abwesenheit angeben.'); return; }
+  }
+
+  const baustelleName = baustelleId ? (appData.baustellen.find(b => b.id === baustelleId)?.name || '') : '';
+  const stundenKatId = typ === 'arbeit' ? (parseInt(document.getElementById('seDesktopStundenKat').value) || null) : null;
+
+  if (typ === 'gleitzeit') {
+    const exists = others.some(e => e.typ === 'gleitzeit' && e.datum === datum);
+    if (exists) { showNotification('Gleitzeit für diesen Tag bereits eingetragen.'); return; }
+    stunden = 0;
+  } else if (typ !== 'arbeit' && !isAbwesendTyp(typ)) {
+    // Mehrfacherfassung pro Tag nur bei Arbeit und Abwesenheit sinnvoll (wie addStundenerfassungDesktop).
+    const dupe = others.some(e => e.typ === typ && e.datum === datum);
+    if (dupe) { showNotification('Für diesen Tag und Typ existiert bereits ein Eintrag.'); return; }
+  }
+
+  // Urlaubslimit prüfen (ohne den bearbeiteten Eintrag selbst)
+  if (typ === 'urlaub') {
+    const y = datum.slice(0, 4);
+    const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, y);
+    const existing = others.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y)).length;
+    if (existing + 1 > limit) {
+      showNotification(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error');
+      return;
+    }
+  }
+
+  const updated = {
+    datum, typ, stunden, baustelleId, baustelleName, bemerkung,
+    von: (typ === 'arbeit' || sonstigZeitspanne) ? von : '',
+    bis: (typ === 'arbeit' || sonstigZeitspanne) ? bis : '',
+    pause: typ === 'arbeit' ? pauseMin : 0,
+    stundenKatId: typ === 'arbeit' ? stundenKatId : null,
+  };
+
+  if (typ === 'arbeit') {
+    const overlap = findSeDesktopOverlap(others, [{ ...original, ...updated }]);
+    if (overlap) {
+      showNotification(overlap, 'warning');
+      return;
+    }
+  }
+
+  Object.assign(zeitEntriesDesktop[idx], updated);
+  renderSeDesktop();
+
+  saveSeDesktopEntries()
+    .then(() => {
+      showNotification('Eintrag aktualisiert.');
+      cancelSeDesktopEdit();
+      renderSeDesktop();
+    })
+    .catch(message => {
+      // Server hat nicht bestätigt -> lokalen Stand nicht divergieren lassen.
+      const i2 = zeitEntriesDesktop.findIndex(e => e.id === id);
+      if (i2 !== -1) Object.assign(zeitEntriesDesktop[i2], snapshot);
+      showNotification(message || 'Speichern fehlgeschlagen.', 'error');
+      renderSeDesktop();
+    });
 }
 
 // -- PDF Export für eigene Stundenerfassung --
@@ -21530,11 +21773,15 @@ async function loadBaustelleSchnellnotizen(baustelleId) {
     const j = await r.json();
     if (!j.ok) { el.innerHTML = '<p class="hint-text" style="padding:16px;text-align:center">Fehler beim Laden.</p>'; return; }
     const notes = j.notes || [];
+    _baustelleSnCache = notes;
     renderBaustelleSchnellnotizen(el, notes, baustelleId);
   } catch(e) {
     el.innerHTML = '<p class="hint-text" style="padding:16px;text-align:center">Fehler beim Laden.</p>';
   }
 }
+
+// Zuletzt geladene Schnellnotizen der Baustellenansicht (fuer editBaustelleSchnellnotiz)
+let _baustelleSnCache = [];
 
 function renderBaustelleSchnellnotizen(el, notes, baustelleId) {
   const active = notes.filter(n => !n.archiviert).sort((a,b) => (b.datum||'').localeCompare(a.datum||''));
@@ -21558,6 +21805,7 @@ function renderBaustelleSchnellnotizen(el, notes, baustelleId) {
       </div>
       <div class="sn-text">${esc(n.text)}</div>
       <div class="sn-actions">
+        <button class="btn btn-sm btn-secondary" onclick="editBaustelleSchnellnotiz(${n.id},${baustelleId})">Bearbeiten</button>
         ${isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="archiveBaustelleSchnellnotiz(${n.id},${baustelleId})">Archivieren</button>` : ''}
         ${isAdmin ? `<button class="btn btn-sm btn-secondary" style="color:var(--danger)" onclick="deleteBaustelleSchnellnotiz(${n.id},${baustelleId})">Löschen</button>` : ''}
       </div>
@@ -21814,6 +22062,7 @@ function renderSchnellnotizCard(n, isArchived) {
     <div class="sn-text">${esc(n.text)}</div>
     ${zuweisungBadge}
     <div class="sn-actions">
+      ${!isArchived ? `<button class="btn btn-sm btn-secondary" onclick="editSchnellnotiz(${n.id})">Bearbeiten</button>` : ''}
       ${!isArchived ? `<button class="btn btn-sm btn-secondary" onclick="archiveSchnellnotiz(${n.id})">Archivieren</button>` : ''}
       <button class="btn btn-sm btn-secondary" style="color:var(--danger)" onclick="deleteSchnellnotiz(${n.id})">Löschen</button>
     </div>
@@ -21852,6 +22101,106 @@ async function deleteSchnellnotiz(id) {
     });
     await loadSchnellnotizenDesktop();
   } catch (e) { console.warn(e); }
+}
+
+// -- Schnellnotiz nachträglich bearbeiten (AP-20261101-notizen-bearbeiten) --
+let _snEditSavedCallback = null;
+
+function editSchnellnotiz(id) {
+  const n = schnellnotizenData.find(x => x.id === id);
+  if (!n) return;
+  _openSchnellnotizEditModal(n, () => loadSchnellnotizenDesktop());
+}
+
+function editBaustelleSchnellnotiz(id, baustelleId) {
+  const n = (_baustelleSnCache || []).find(x => x.id === id);
+  if (!n) return;
+  _openSchnellnotizEditModal(n, () => loadBaustelleSchnellnotizen(baustelleId));
+}
+
+function _openSchnellnotizEditModal(note, onSaved) {
+  const isAdmin = (currentRole === 'admin' || currentRole === 'master');
+
+  // Zuweisungs-Optionen nur für Admin/Master, analog zum Anlegen-Dialog
+  let zuweisenHtml = '';
+  if (isAdmin) {
+    const current = note.zugewiesen_an || '';
+    const alleOpt = `<option value="" ${current === '' ? 'selected' : ''}>– Niemanden –</option><option value="alle" ${current === 'alle' ? 'selected' : ''}>📢 Alle Mitarbeiter</option>`;
+    const gruppenOpts = (gruppenData || []).map(g =>
+      `<option value="gruppe:${g.id}" ${current === 'gruppe:' + g.id ? 'selected' : ''}>${esc(g.name)}</option>`
+    ).join('');
+    const gruppenGroup = gruppenOpts ? `<optgroup label="👥 Gruppen">${gruppenOpts}</optgroup>` : '';
+    zuweisenHtml = `
+    <div style="margin-bottom:12px">
+      <label style="font-size:.82rem;font-weight:600;color:var(--grey-600);display:block;margin-bottom:4px">Zuweisen an</label>
+      <select id="snEditZugewiesen" class="form-control" style="width:100%">
+        ${alleOpt}${gruppenGroup}
+      </select>
+    </div>`;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'kunde-form-overlay';
+  overlay.id = 'schnellnotizEditOverlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `<div class="kunde-form-card" style="max-width:520px">
+    <h3>Schnellnotiz bearbeiten</h3>
+    ${zuweisenHtml}
+    <div style="margin-bottom:12px">
+      <label style="font-size:.82rem;font-weight:600;color:var(--grey-600);display:block;margin-bottom:4px">Notiz</label>
+      <textarea id="snEditText" class="form-control" rows="5" style="width:100%;resize:vertical;padding:8px">${esc(note.text || '')}</textarea>
+    </div>
+    <div class="kunde-form-actions">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('schnellnotizEditOverlay')?.remove()">Abbrechen</button>
+      <button class="btn btn-primary btn-sm" onclick="_saveSchnellnotizEdit(${note.id})">Speichern</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('snEditText')?.focus(), 100);
+  _snEditSavedCallback = onSaved;
+
+  // Benutzer-Optionen für Admin/Master nachladen (analog Anlegen-Dialog)
+  if (isAdmin) {
+    fetch('api.php?action=list_users').then(r => r.json()).then(j => {
+      const sel = document.getElementById('snEditZugewiesen');
+      if (!sel || !j.ok) return;
+      const grp = document.createElement('optgroup');
+      grp.label = '👤 Benutzer';
+      (j.users || []).forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.username;
+        opt.textContent = u.username + (u.kuerzel ? ' (' + u.kuerzel + ')' : '');
+        if (u.username === note.zugewiesen_an) opt.selected = true;
+        grp.appendChild(opt);
+      });
+      const existingGroup = sel.querySelector('optgroup[label="👥 Gruppen"]');
+      if (existingGroup) sel.insertBefore(grp, existingGroup);
+      else sel.appendChild(grp);
+    }).catch(() => {});
+  }
+}
+
+async function _saveSchnellnotizEdit(id) {
+  const text = document.getElementById('snEditText')?.value.trim();
+  if (!text) { showNotification('Bitte Notiz eingeben.', 'error'); return; }
+  const payload = { id, text };
+  const zugewiesenSel = document.getElementById('snEditZugewiesen');
+  if (zugewiesenSel) payload.zugewiesen_an = zugewiesenSel.value || '';
+  try {
+    const r = await fetch('api.php?action=update_schnellnotiz', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (j.ok) {
+      showNotification('Schnellnotiz aktualisiert!', 'success');
+      document.getElementById('schnellnotizEditOverlay')?.remove();
+      if (typeof _snEditSavedCallback === 'function') _snEditSavedCallback();
+      _snEditSavedCallback = null;
+    } else {
+      showNotification(j.error || 'Fehler beim Speichern.', 'error');
+    }
+  } catch(e) { showNotification('Netzwerkfehler: ' + e.message, 'error'); }
 }
 
 async function updateSchnellnotizBadge() {
@@ -22550,9 +22899,9 @@ function renderKundenListe() {
   for (const k of filtered) {
     const name = [k.anrede, k.vorname, k.nachname].filter(Boolean).join(' ');
     const tel = k.telefon || k.mobil || '';
-    const telCell = tel ? `<a href="tel:${esc(tel)}">${esc(tel)}</a>` : '-';
-    const mailCell = k.email ? `<a href="mailto:${esc(k.email)}">${esc(k.email)}</a>` : '-';
-    html += `<tr>
+    const telCell = tel ? `<a href="tel:${esc(tel)}" onclick="event.stopPropagation()">${esc(tel)}</a>` : '-';
+    const mailCell = k.email ? `<a href="mailto:${esc(k.email)}" onclick="event.stopPropagation()">${esc(k.email)}</a>` : '-';
+    html += `<tr onclick="openKundeForm(${k.id})" style="cursor:pointer" title="Kundendetails öffnen">
       <td>${esc(k.kundennummer || '-')}</td>
       <td>${esc(k.firma || '-')}</td>
       <td>${esc(name || '-')}</td>
@@ -22560,8 +22909,8 @@ function renderKundenListe() {
       <td>${telCell}</td>
       <td>${mailCell}</td>
       ${canWrite ? `<td class="kunde-actions">
-        <button onclick="openKundeForm(${k.id})" title="Bearbeiten">${ico('edit')}</button>
-        <button onclick="deleteKunde(${k.id})" title="Löschen">${ico('trash')}</button>
+        <button onclick="event.stopPropagation(); openKundeForm(${k.id})" title="Bearbeiten">${ico('edit')}</button>
+        <button onclick="event.stopPropagation(); deleteKunde(${k.id})" title="Löschen">${ico('trash')}</button>
       </td>` : ''}
     </tr>`;
   }
@@ -23188,22 +23537,19 @@ function openKundeForm(id) {
       if (!j.ok) return;
       const archContainer = document.getElementById('kundeArchivProjekte');
       if (!archContainer) return;
-      const archives = (j.archives||[]).filter(a => {
-        // Archives may have kundeId stored in metadata
-        const name = a.name || '';
-        return false; // We'll show a generic "Archiv öffnen" hint
-      });
-      // Show all archives with reimport option
-      const allArch = j.archives || [];
-      if (allArch.length > 0) {
+      // Nur Archive dieses Kunden (Alt-Archive ohne kundeId werden ausgeblendet)
+      const kundeArch = (j.archives||[]).filter(a => a.kundeId != null && Number(a.kundeId) === Number(kunde.id));
+      if (kundeArch.length > 0) {
         let archHtml = '<div style="margin-top:12px;border-top:1px solid #e0e0e0;padding-top:12px">';
-        archHtml += '<h4 style="font-size:.85rem;color:#888;margin:0 0 6px">Archivierte Projekte ('+ allArch.length +')</h4>';
+        archHtml += '<h4 style="font-size:.85rem;color:#888;margin:0 0 6px">Archivierte Projekte ('+ kundeArch.length +')</h4>';
         archHtml += '<table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr style="background:#f9f9f9"><th style="padding:4px 8px;text-align:left">Name</th><th style="padding:4px 8px">Archiviert am</th><th style="padding:4px 8px;width:120px"></th></tr></thead><tbody>';
-        allArch.forEach(a => {
+        kundeArch.forEach(a => {
           archHtml += '<tr style="border-bottom:1px solid #eee"><td style="padding:4px 8px">'+esc(a.name)+'</td><td style="padding:4px 8px;font-size:.78rem;color:#888">'+esc(a.archivedAt||'')+'</td><td style="padding:4px 8px"><button class="btn btn-secondary btn-sm" style="font-size:.72rem" onclick="document.getElementById(\'kundeFormOverlay\')?.remove();reimportBaustelle(\''+esc(a.file)+'\')">Wiederherstellen</button></td></tr>';
         });
         archHtml += '</tbody></table></div>';
         archContainer.innerHTML = archHtml;
+      } else {
+        archContainer.innerHTML = '<div style="margin-top:12px;border-top:1px solid #e0e0e0;padding-top:12px"><p style="font-size:.82rem;color:#888;margin:0">Keine archivierten Projekte.</p></div>';
       }
     }).catch(()=>{});
   }

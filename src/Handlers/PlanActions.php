@@ -497,6 +497,85 @@ class PlanActions
         jsonOut(['ok' => true]);
     }
 
+    /** update_schnellnotiz – Text (und fuer admin/master zugewiesen_an) nachtraeglich aendern. */
+    public function updateSchnellnotiz(): void
+    {
+        Auth::requireAuth();
+        // id auch aus $_GET lesen: GET ?id=... soll nach der 404/403-Pruefung
+        // als 405 abgelehnt werden koennen (E-015), nicht wegen fehlender id als 404.
+        $noteId = (int)($this->body['id'] ?? $_GET['id'] ?? 0);
+        $note = Database::fetchOne($this->db, "SELECT * FROM schnellnotizen WHERE id = ?", [$noteId]);
+        if (!$note) {
+            jsonOut(['error' => 'Notiz nicht gefunden.'], 404);
+        }
+        if (!$this->kannSchnellnotizSehen($note)) {
+            jsonOut(['error' => 'Keine Berechtigung fuer diese Notiz.'], 403);
+        }
+        // Zustandsändernd – erst nach der Rechteprüfung per GET ablehnen (E-015).
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            jsonOut(['error' => 'Bearbeiten nur per POST.'], 405);
+        }
+        if ((bool)$note['archiviert']) {
+            jsonOut(['error' => 'Archivierte Notizen können nicht bearbeitet werden.'], 409);
+        }
+        $text = trim((string)($this->body['text'] ?? ''));
+        if ($text === '') {
+            jsonOut(['error' => 'Notiztext fehlt.'], 400);
+        }
+
+        $role       = $_SESSION['role'] ?? 'normal';
+        $zugewiesen = $note['zugewiesen_an'] ?? '';
+        if (in_array($role, ['admin', 'master'], true) && array_key_exists('zugewiesen_an', $this->body)) {
+            $zugewiesen = trim((string)$this->body['zugewiesen_an']);
+        }
+
+        $this->db->prepare("UPDATE schnellnotizen SET text = ?, zugewiesen_an = ? WHERE id = ?")
+                  ->execute([$text, $zugewiesen, $noteId]);
+
+        $updated = Database::fetchOne($this->db, "SELECT * FROM schnellnotizen WHERE id = ?", [$noteId]);
+        $updated['id'] = (int)$updated['id'];
+        $updated['archiviert'] = (bool)$updated['archiviert'];
+        $updated['baustelleId'] = $updated['baustelleId'] !== null ? (int)$updated['baustelleId'] : null;
+        $updated['zugewiesen_an'] = $updated['zugewiesen_an'] ?? '';
+        jsonOut(['ok' => true, 'note' => $updated]);
+    }
+
+    /**
+     * Sichtbarkeitsregel wie loadSchnellnotizen(): admin/master sehen alles;
+     * sonst Baustellen-Notizen (werden jedem Angemeldeten in der
+     * Baustellenansicht gezeigt), eigene Notizen (Ersteller), sowie an
+     * den Nutzer/"alle"/eine eigene Gruppe zugewiesene Notizen.
+     */
+    private function kannSchnellnotizSehen(array $note): bool
+    {
+        $role = $_SESSION['role'] ?? 'normal';
+        if (in_array($role, ['admin', 'master'], true)) {
+            return true;
+        }
+        if ($note['baustelleId'] !== null) {
+            return true;
+        }
+        $user = $_SESSION['username'] ?? '';
+        if (($note['ersteller'] ?? '') === $user) {
+            return true;
+        }
+        $zugewiesen = $note['zugewiesen_an'] ?? '';
+        if ($zugewiesen === $user || $zugewiesen === 'alle') {
+            return true;
+        }
+        if (str_starts_with((string)$zugewiesen, 'gruppe:')) {
+            $gruppenStmt = $this->db->prepare("SELECT gruppen_id FROM gruppen_mitglieder WHERE username = ?");
+            $gruppenStmt->execute([$user]);
+            $gruppenIds = array_column($gruppenStmt->fetchAll(), 'gruppen_id');
+            foreach ($gruppenIds as $gid) {
+                if ($zugewiesen === 'gruppe:' . $gid) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public function archiveAllSchnellnotizen(): void
     {
         Auth::requireAuth();

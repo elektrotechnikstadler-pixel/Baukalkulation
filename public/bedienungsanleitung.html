@@ -143,6 +143,8 @@
         <li>Im <strong>Bautagebuch</strong> werden Ereignisse dokumentiert.</li>
         <li><strong>Fehlendes Material</strong> markiert Bestellbedarf und lässt sich als „bestellt" kennzeichnen.</li>
       </ul>
+      <h3>Gesamtübersicht</h3>
+      <p>Über die Seitenleiste öffnet <strong>Gesamtübersicht</strong> eine Tabelle aller Projekte mit Summenzeile „Gesamt" und Kennzahlen-Karten darüber. Bei aktivem Filter oder Suche zeigen die Zeile „Gesamt" und die Kennzahlen-Karten nur die Summen der gerade sichtbaren (gefilterten) Projekte; ohne Filter zählen wie bisher alle Projekte.</p>
     </section>
 
     <section id="kataloge">
@@ -158,7 +160,7 @@
     <section id="kunden">
       <h2>5. Kunden &amp; Rechnungen</h2>
       <ul>
-        <li><strong>Kundenstamm:</strong> Firma/Person, Anschrift, Kontakt, Kundennummer.</li>
+        <li><strong>Kundenstamm:</strong> Firma/Person, Anschrift, Kontakt, Kundennummer. Ein Klick auf die Kundenzeile (nicht auf einen Button) öffnet die Detailansicht; im Abschnitt „Archivierte Projekte" erscheinen dort nur die archivierten Projekte dieses Kunden – ältere Archive ohne gespeicherte Kundenzuordnung werden dort nicht angezeigt.</li>
         <li><strong>Rechnungen:</strong> Rechnungen und Abschläge mit Positionen, Fälligkeit und Status. Projekte lassen sich mit Kunden verknüpfen.</li>
         <li><strong>PDF:</strong> „📄 PDF“ in der Liste, „Vorschau / Drucken“ und „📎 In Dateien speichern“ im Formular, der ZUGFeRD-Download und der E-Mail-Anhang erzeugen das PDF auf dem Server mit demselben Layout (DIN-5008-Briefkopf, Falz- und Lochmarken, Fußzeile mit Firmen- und Bankdaten auf jeder Seite). Die Vorschau zeigt auch noch nicht gespeicherte Änderungen; ohne vergebene Nummer steht im Betreff nur das Datum.</li>
       </ul>
@@ -172,7 +174,7 @@
       <p>Am Desktop öffnen Sie <strong>Zeitverwaltung → Stundenerfassung</strong>. In der mobilen Ansicht tippen Sie auf <strong>Stunden</strong> und anschließend auf <strong>+</strong>; in Mobile-Light erfassen Sie direkt in der Stundenerfassung. Wählen Sie Datum und Typ. Bei <strong>Arbeit</strong> können Sie Baustelle, Stundenkategorie und Bemerkung angeben.</p>
       <p>Ist der Stunden-Auto-Import aktiviert, entsteht die zugehörige Projektbuchung im selben Speichervorgang. Die Bestätigung <strong>Stunden erfasst</strong> bedeutet daher, dass auch der Projektabgleich abgeschlossen ist; ein späterer planmäßiger Importlauf ist nicht erforderlich. Das gilt auch, wenn berechtigte Personen Einträge in der Stundenauswertung oder der Jahresansicht der Wochenplanung nachtragen, bearbeiten oder löschen. Wie Änderungen an Stunden, Datum oder Projekt in die Projektbuchung übernommen werden, steht unter <a href="#ze-projekte">Projektübernahme und Rechte</a>.</p>
       <p>Ist unter <strong>Verwaltung → Allgemein → Erweiterte Zeiterfassung</strong> die Option aktiviert, erfassen Sie bei Arbeit zusätzlich <strong>Von</strong>, <strong>Bis</strong> und <strong>Pause</strong>; die Dauer wird daraus berechnet. Beim Typ <strong>Sonstiger Fehlgrund</strong> können Sie zwischen „Ganzer Tag“ und „Zeitspanne“ wählen. Bei Urlaub, Krank und anderen passenden Typen lässt sich ein Datumsbereich angeben; die Erfassung legt Einträge für die berücksichtigten Tage an.</p>
-      <p>Eigene Einträge können Sie in den mobilen Ansichten bearbeiten. In der Desktop-Erfassung ist das Löschen für nicht automatische Einträge ab fünf Tagen vor heute freigeschaltet; das schließt zukünftige Einträge ein. Berechtigte Personen können Einträge außerdem über die Stundenauswertung nachtragen, bearbeiten und löschen.</p>
+      <p>Eigene Einträge können Sie in den mobilen Ansichten und – über das Stift-Symbol – auch in der Desktop-Stundenerfassung bearbeiten. Bearbeiten und Löschen sind dort für nicht automatische Einträge ab fünf Tagen vor heute freigeschaltet; das schließt zukünftige Einträge ein. Berechtigte Personen können Einträge außerdem über die Stundenauswertung nachtragen, bearbeiten und löschen.</p>
       <div class="warn">Beim Speichern wird der vollständige Zeiterfassungsstand abgeglichen. Erkennt der Server, dass dadurch viele Einträge verschwinden würden, stoppt er zunächst und verlangt eine ausdrückliche Bestätigung. Ohne Bestätigung bleiben die Daten unverändert.</div>
 
       <h3 id="ze-kategorien">Buchungskategorien</h3>
@@ -287,6 +289,8 @@
         <li>Ist eine <strong>Baustelle verknüpft</strong>, öffnet ein Klick auf die Verknüpfung direkt das Projekt.</li>
         <li>Das <strong>Termine-Widget</strong> zeigt heutige und kommende Termine; Klick öffnet den Termin, „+ Neu" legt einen an.</li>
       </ul>
+      <h3>Schnellnotizen</h3>
+      <p>Über <strong>📝 Schnellnotizen</strong> in der Seitenleiste oder je Baustelle legen Sie kurze Notizen an. Über das Bearbeiten-Symbol darf jeder, der eine Schnellnotiz sehen darf, deren Text ändern; die Zuweisung („Zugewiesen an") können nur Administratoren/Master ändern. Archivierte Schnellnotizen lassen sich nicht mehr bearbeiten.</p>
     </section>
 
     <section id="auswertung">

@@ -37,6 +37,28 @@
 
 ---
 
+## Unveröffentlicht
+
+### Behoben
+- **Gesamtübersicht:** Die Zeile „Gesamt" und die Kennzahlen-Karten zeigen bei aktivem Filter/Suche
+  jetzt nur noch die Summen der sichtbaren (gefilterten) Projekte statt der Summen aller Projekte.
+- **Kundenarchiv:** `list_archive` liefert je Archiv-Eintrag `kundeId`; im Kunden-Detail erscheinen
+  unter „Archivierte Projekte" dadurch nur noch die archivierten Projekte des jeweiligen Kunden
+  (Alt-Archive ohne gespeicherte `kundeId` werden dort ausgeblendet).
+
+### Neu
+- **Kundenstamm:** Klick auf eine Kundenzeile öffnet die Detailansicht des Kunden; Aktions-Buttons
+  (Bearbeiten/Löschen/Telefon/E-Mail) lösen das nicht zusätzlich aus.
+- **Schnellnotizen bearbeiten:** Neuer Endpunkt `update_schnellnotiz` (`PlanActions::updateSchnellnotiz`) –
+  wer eine Schnellnotiz sehen darf, darf ihren Text nachträglich ändern (Desktop und Mobil); die
+  Zuweisung bleibt Administratoren/Master vorbehalten, archivierte Notizen sind nicht bearbeitbar.
+- **Stundenerfassung Desktop bearbeiten:** Eigene Einträge der letzten 5 Tage lassen sich jetzt wie
+  beim Löschen auch über das Stift-Symbol bearbeiten (Datum, Typ, Stunden, Baustelle, Bemerkung),
+  statt sie löschen und neu anlegen zu müssen – inklusive derselben Prüfungen (Überschneidung,
+  Urlaubslimit, ArbZG-Hinweise, Gleitzeit max. 1/Tag).
+
+---
+
 ## v3.0.24 – Testkorrektur NAS-Abgleich (CI)
 
 ### Intern

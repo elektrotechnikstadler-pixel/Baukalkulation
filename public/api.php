@@ -332,6 +332,7 @@ $routes = [
     // Schnellnotizen
     'load_schnellnotizen'          => ['App\\Handlers\\PlanActions',           'loadSchnellnotizen'],
     'save_schnellnotiz'            => ['App\\Handlers\\PlanActions',           'saveSchnellnotiz'],
+    'update_schnellnotiz'          => ['App\\Handlers\\PlanActions',           'updateSchnellnotiz'],
     'archive_schnellnotiz'         => ['App\\Handlers\\PlanActions',           'archiveSchnellnotiz'],
     'archive_all_schnellnotizen'   => ['App\\Handlers\\PlanActions',           'archiveAllSchnellnotizen'],
     'delete_schnellnotiz'          => ['App\\Handlers\\PlanActions',           'deleteSchnellnotiz'],

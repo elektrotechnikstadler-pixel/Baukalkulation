@@ -662,7 +662,9 @@
             <label class="form-label" id="seDesktopBemerkungLabel">Bemerkung</label>
             <input type="text" id="seDesktopBemerkung" class="form-control" placeholder="optional">
           </div>
-          <button class="btn btn-primary btn-sm" onclick="addStundenerfassungDesktop()">+ Erfassen</button>
+          <button class="btn btn-primary btn-sm" id="seDesktopSubmitBtn" onclick="addStundenerfassungDesktop()">+ Erfassen</button>
+          <button class="btn btn-secondary btn-sm" id="seDesktopCancelEditBtn" style="display:none" onclick="cancelSeDesktopEdit()">Abbrechen</button>
+          <span id="seDesktopEditHint" style="display:none;font-size:.78rem;color:var(--grey-400);align-self:center">Eintrag wird bearbeitet …</span>
         </div>
         <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
           <input type="text" id="seDesktopSearch" class="form-control" placeholder="Einträge durchsuchen…" oninput="renderSeDesktop()" style="flex:1;max-width:300px;font-size:.85rem;padding:6px 10px">
@@ -1036,7 +1038,8 @@
   <script src="lib/chart.umd.min.js"></script>
   <script src="sollzeit.js?v=232"></script>
   <script src="verwaltung-nav.js?v=3"></script>
-  <script src="script.min.js?v=245"></script>
+  <script src="uebersicht-summen.js?v=2"></script>
+  <script src="script.min.js?v=248"></script>
   <!-- Phase 5: ES-Modul-Bootstrap (Companion-Modus, läuft parallel zu script.js) -->
   <!-- ROLLBACK: diese Zeile entfernen → vollständiger Rollback auf v2.9.8 -->
   <script type="module" src="dist/core.js?v=100"></script>
