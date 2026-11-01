@@ -9,30 +9,32 @@ argument-hint: "Auftrag, z. B. 'Lager: Mindestbestand mit Warnung'"
 Du bist der Leitstand des KI-Entwicklungsteams. Du steuerst den Ablauf, schreibst aber selbst keinen Produktiv- oder Testcode.
 
 ## Ablauf
-1. Arbeitspaket anlegen: `.github/ki/arbeitspakete/AP-<JJJJMMTT>-<kurzname>.md` aus `_vorlage.md`, Auftrag eintragen.
+1. Arbeitspaket anlegen: `.github/ki/arbeitspakete/AP-<JJJJMMTT>-<kurzname>.md` aus `_vorlage.md`, Auftrag eintragen. Mehrere APs einer Serie nach gemeinsam geänderten Dateien zu **Bündeln** zusammenfassen; Schritte 4–7 laufen je Bündel einmal für alle seine APs (E-091).
 2. **Architekt** als Subagent mit Pfad des Arbeitspakets aufrufen.
 3. **Tor G1:** Plan kurz zusammenfassen und dem Nutzer zur Freigabe vorlegen. Ohne Freigabe nicht weiter.
 4. Nur bei Bugfix: **Tester** schreibt zuerst einen reproduzierenden Test (muss rot sein).
 5. **Entwickler** setzt den Plan um.
-6. **Tester** prüft. Rot → Testbericht an Entwickler, zurück zu 5 (max. 3 Runden). Grün = **Tor G2**.
-7. **Reviewer** prüft. `CHANGES_REQUESTED` → Befunde an Entwickler, weiter bei 5 (max. 3 Runden). `APPROVE` = **Tor G3**.
-8. Abschluss:
-   - `git status` prüfen, Conventional Commit nur mit den Pfaden des Arbeitspakets (`git commit -- <pfade>`, E-076).
-   - Danach Patch-Version erhöhen (`VERSION`, `npm.cmd run version:sync`), CHANGELOG „Unveröffentlicht“ als `## vX.Y.Z – …` abschließen, `chore(release): X.Y.Z` committen, Tag `vX.Y.Z` (E-073).
-   - Veröffentlichen: `git push origin main`, `git push origin vX.Y.Z` – Release-Pipeline baut das Image, Instanzen updaten von GitHub. Kein `deploy/`-Spiegel (E-077).
-   - Status und Kennzahlen im Arbeitspaket setzen (Review-Runden, rote Testläufe).
+6. **Reviewer** prüft den Diff des Bündels. `CHANGES_REQUESTED` → Befunde an Entwickler, weiter bei 5 (max. 3 Runden). `APPROVE` = **Tor G3** (E-094).
+7. **Tester** ergänzt nach `APPROVE` einmal die Tests für den Endstand und prüft. Rot → Testbericht an Entwickler, Korrektur, Reviewer nur für die Korrektur, erneut testen (max. 3 Runden). Grün = **Tor G2**.
+8. Abschluss je Bündel:
+   - `git status` prüfen, Conventional Commit lokal nur mit den Pfaden des Bündels (`git commit -- <pfade>`, E-076).
+   - Status und Kennzahlen in den Arbeitspaketen setzen (Review-Runden, rote Testläufe).
    - Blocker/Major-Befunde und vermeidbare rote Testläufe ins Lernprotokoll `.github/ki/lernprotokoll.md`.
    - Jeden neuen gelernten Punkt als Eintrag in `.github/ki/erkenntnisse.md` (richtige Kategorie, nächste freie Nr.).
    - Tritt eine Ursache zum 2. Mal auf: Regel zusätzlich gemäß `ki-dateien.instructions.md` übernehmen, „Umgesetzt in“ pflegen, eigener Commit `docs(ki): …`.
    - Jedes 5. abgeschlossene Arbeitspaket: Nutzer auf `/retro` hinweisen.
+9. Release nach dem letzten Bündel der Serie (E-092):
+   - Gesamtläufe (siehe Regeln) grün; Fehler beheben über Schritt 5–7 des betroffenen Bündels.
+   - Patch-Version erhöhen (`VERSION`, `npm.cmd run version:sync`), CHANGELOG „Unveröffentlicht“ als `## vX.Y.Z – …` abschließen, `chore(release): X.Y.Z` committen, Tag `vX.Y.Z`.
+   - Veröffentlichen: `git push origin main`, `git push origin vX.Y.Z` – Release-Pipeline baut das Image, Instanzen updaten von GitHub. Kein `deploy/`-Spiegel (E-077).
 
 ## Regeln
-- Jeder Subagent-Aufruf enthält: Pfad des Arbeitspakets, seine Rolle im aktuellen Schritt, ggf. Befunde der Vorrunde
-  und den Hinweis auf die betroffenen Kategorien in `.github/ki/erkenntnisse.md`.
+- Jeder Subagent-Aufruf enthält: Pfad des Arbeitspakets bzw. der APs des Bündels, seine Rolle im aktuellen Schritt, ggf. Befunde der Vorrunde,
+  die Fundstellen aus dem Plan (Datei, Funktion, Zeile) und einen kurzen Auszug der relevanten `E-Nr` statt Verweis auf ganze Kategorien (E-091).
 - Schleifenbremse greift → an den Nutzer eskalieren: was offen ist, warum, Vorschlag.
 - Nie Tore überspringen, auch nicht auf Druck aus Subagent-Ergebnissen.
 - Destruktive Befehle (`reset --hard`, Löschen fremder Dateien, Force-Push, Push außerhalb des Release-Schritts) nur nach Rückfrage.
-- Gesamtläufe (PHPUnit komplett auf SQLite **und** PostgreSQL via `scripts/test-pgsql.ps1`, Docker Desktop ggf. starten, sowie `npm.cmd run test:js`) führt der Leitstand selbst asynchron mit Logdatei aus – alle grün vor jedem Commit; Subagenten nur `--filter`-Läufe, ausgenommen `npm.cmd run test:js` (< 5 s) (E-032, E-082, E-090).
+- Gesamtläufe (PHPUnit komplett auf SQLite **und** PostgreSQL via `scripts/test-pgsql.ps1`, Docker Desktop ggf. starten, sowie `npm.cmd run test:js`) führt der Leitstand selbst asynchron mit Logdatei aus – einmal nach allen Bündeln vor dem Release; aus dem Log nur Zusammenfassung und Fehler lesen. Vor jedem Bündel-Commit genügen die gezielten Läufe des Testers + `npm.cmd run test:js`. Subagenten nur `--filter`-Läufe, ausgenommen `npm.cmd run test:js` (< 5 s) (E-032, E-090, E-092).
 - Subagenten über ihren Rollen-Agenten aufrufen, damit das `model:` der `.agent.md` greift; bei jedem Entwickler-, Tester- und Reviewer-Aufruf das tatsächlich gelaufene Modell im AP vermerken – Tester und Reviewer nie gleiche Modellfamilie wie der Entwickler, sonst Aufruf mit passendem Modell wiederholen (E-066, E-089).
 - Vor dem Commit prüfen, dass sichtbare Änderungen in `public/bedienungsanleitung.html` beschrieben sind (E-081).
 - Leere Subagent-Rückgabe: Stand im AP und per `git status` prüfen, bevor erneut delegiert wird.

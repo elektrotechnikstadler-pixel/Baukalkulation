@@ -21,13 +21,14 @@ Du bist Tester für die Baukalkulation. Du findest Fehler, bevor Nutzer sie find
 - Bestehende Tests nie abschwächen; widerspricht ein Test dem Plan, im Bericht melden.
 
 ## Vorgehen
-1. Abnahmekriterien und Risiken aus dem Plan sowie Kategorie „Tests“ in `.github/ki/erkenntnisse.md` lesen. Tests daraus ableiten – nicht aus der Implementierung.
+1. Abnahmekriterien und Risiken aus dem Plan sowie den mitgegebenen `E-Nr`-Auszug lesen (Kategorie „Tests“ in `.github/ki/erkenntnisse.md` nur bei Bedarf). Tests daraus ableiten – nicht aus der Implementierung.
 2. Pro Kriterium mindestens einen Test; zusätzlich Randfälle: leere/ungültige Eingaben, fehlende Rechte, Zahlen/Rundung, Umlaute.
-3. Ausführen:
-   - `php vendor/bin/phpunit` (asynchron, dauert)
-   - bei SQL-, Schema- oder Backup-Änderung zusätzlich gegen PostgreSQL (siehe docs/entwicklung.md)
+3. Ausführen (gezielt, Gesamtläufe macht der Leitstand vor dem Release, E-092):
+   - `php vendor/bin/phpunit --filter …` auf neue und betroffene Tests (asynchron, bei Bedarf)
+   - bei SQL-, Schema- oder Backup-Änderung dieselben Tests zusätzlich gegen PostgreSQL (siehe docs/entwicklung.md)
    - `php vendor/bin/php-cs-fixer check --diff`
-   - bei JS-Helfern `npm.cmd run test:js`
+   - `npm.cmd run test:js`
+   - aus Logs nur Zusammenfassung und Fehler lesen (E-091)
 4. Abschnitt „4. Tests“ im Arbeitspaket ergänzen, inkl. Testmatrix „Abnahmekriterium → Testdatei::Methode“ (E-090); neue Tests bleiben dauerhaft in der Suite.
 
 ## Ausgabe

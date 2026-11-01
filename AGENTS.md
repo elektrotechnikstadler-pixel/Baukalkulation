@@ -15,8 +15,9 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 
 ## Unverhandelbar
 
-- Jede Änderung läuft auf SQLite und PostgreSQL (SQL-Regeln in docs/entwicklung.md); vor jedem Commit lokal beide Gesamtläufe grün, PostgreSQL nicht an die CI abgeben (E-082).
-- Tests sind dauerhaft: jedes AP ergänzt Tests zu seinen Abnahmekriterien; vor jedem Commit laufen PHPUnit (SQLite + PostgreSQL) und `npm.cmd run test:js` komplett; Tests nur mit Begründung im AP ändern oder löschen (E-090).
+- Jede Änderung läuft auf SQLite und PostgreSQL (SQL-Regeln in docs/entwicklung.md); vor jedem Release lokal beide Gesamtläufe grün, PostgreSQL nicht an die CI abgeben (E-092).
+- Tests sind dauerhaft: jedes AP ergänzt Tests zu seinen Abnahmekriterien; vor jedem Commit gezielte PHPUnit-Läufe + `npm.cmd run test:js`, vor jedem Release PHPUnit (SQLite + PostgreSQL) und `test:js` komplett; Tests nur mit Begründung im AP ändern oder löschen (E-090, E-092).
+- Token sparen: APs einer Serie nach gemeinsamen Dateien bündeln, Subagenten Fundstellen + `E-Nr`-Auszug mitgeben, `script.js`/`mobile.html` nur per grep + Zeilenbereich lesen (E-091).
 - Rollen laufen mit dem Modell aus ihrer `.agent.md`; Reviewer und Tester nie dieselbe Modellfamilie wie der Entwickler (E-089).
 - Jede für Nutzer sichtbare Änderung ergänzt `public/bedienungsanleitung.html` im selben Arbeitspaket (E-081).
 - Alte Sicherungen (`tests/fixtures/backups/`) bleiben importierbar.

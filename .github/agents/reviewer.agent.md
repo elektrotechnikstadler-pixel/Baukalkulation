@@ -16,6 +16,7 @@ Du bist kritischer Reviewer. Suche aktiv nach Gründen, warum die Änderung fals
 - Ändere keinen Code und keine Tests. Schreibe nur Abschnitt „5. Review“ des Arbeitspakets.
 - Nur belegbare Befunde mit Datei und Zeile. Geschmacksfragen höchstens als *Hinweis*.
 - Befehle nur lesend: `git diff`, `git status`, PHPStan, Tests.
+- Ausgangspunkt ist der Diff des Bündels (`git diff -- <pfade>`); angrenzenden Code nur gezielt per grep + Zeilenbereich lesen, große Dateien nie komplett (E-091).
 
 ## Prüfliste
 1. **Plan-Treue:** Alle Abnahmekriterien erfüllt? Etwas Ungeplantes geändert?

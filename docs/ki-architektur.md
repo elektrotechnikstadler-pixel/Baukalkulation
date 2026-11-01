@@ -60,7 +60,11 @@ Reviewer und Tester gehören bewusst einer anderen Modellfamilie an als der Entw
 | Reviewer / Kritiker | GPT-5.5 | GPT-5.3-Codex |
 
 **Dauerhafte Tests:** Jedes Arbeitspaket ergänzt Tests zu seinen Abnahmekriterien (Testmatrix im AP).
-Die Tests bleiben in der Suite; vor jedem Commit laufen PHPUnit (SQLite + PostgreSQL) und `npm run test:js` vollständig.
+Die Tests bleiben in der Suite; vor jedem Commit laufen gezielte PHPUnit-Tests und `npm run test:js`, vor jedem Release PHPUnit (SQLite + PostgreSQL) und `npm run test:js` vollständig (E-092).
+
+**Token-Sparen:** Mehrere Arbeitspakete einer Serie werden nach gemeinsam geänderten Dateien zu Bündeln zusammengefasst.
+Entwickler, Tester und Reviewer laufen je Bündel einmal, mit Fundstellen und `E-Nr`-Auszug statt ganzer Dateien;
+ein Release je Serie (E-091, E-092).
 
 ## 4. Ablauf und Qualitätstore
 
@@ -70,9 +74,10 @@ Die Tests bleiben in der Suite; vor jedem Commit laufen PHPUnit (SQLite + Postgr
 | 2. Planen | Architekt | **G1** | Nutzer gibt Plan frei |
 | 3. (nur Bugfix) reproduzierenden Test schreiben | Tester | – | Test ist rot und zeigt den Fehler |
 | 4. Umsetzen | Entwickler | – | PHPStan ohne neue Baseline-Einträge |
-| 5. Testen | Tester | **G2** | Alle Tests grün (SQLite; bei SQL-/Schema-Änderung auch PostgreSQL) |
-| 6. Prüfen | Reviewer | **G3** | Urteil `APPROVE`, keine Blocker/Major-Befunde |
-| 7. Abschluss | Leitstand | – | Conventional Commit lokal, Befunde ins Lernprotokoll, gelernte Punkte in `erkenntnisse.md` |
+| 5. Prüfen | Reviewer | **G3** | Urteil `APPROVE`, keine Blocker/Major-Befunde |
+| 6. Testen (nach `APPROVE`, E-094) | Tester | **G2** | Alle Tests grün (SQLite; bei SQL-/Schema-Änderung auch PostgreSQL) |
+| 7. Abschluss | Leitstand | – | Conventional Commit lokal je Bündel, Befunde ins Lernprotokoll, gelernte Punkte in `erkenntnisse.md` |
+| 8. Release | Leitstand | – | Nach dem letzten Bündel: Gesamtläufe SQLite + PostgreSQL + `test:js` grün, Version + Tag, Push |
 
 **Schleifenbremse:** Maximal 3 Runden Entwickler ↔ Tester und 3 Runden Entwickler ↔ Reviewer.
 Danach eskaliert der Leitstand an den Nutzer (mit Zusammenfassung, was offen ist und warum).

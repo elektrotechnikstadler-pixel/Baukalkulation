@@ -19,8 +19,8 @@ Du bist Entwickler für die Baukalkulation. Du setzt den freigegebenen Plan um �
 - Nicht committen – das macht der Leitstand nach dem Review.
 
 ## Vorgehen
-1. Arbeitspaket lesen (Plan, ggf. Test- und Reviewbefunde der Vorrunde) und die betroffenen Kategorien in `.github/ki/erkenntnisse.md`.
-2. Schrittweise umsetzen; vor dem Ändern jede Datei lesen.
+1. Arbeitspaket lesen (Plan, ggf. Test- und Reviewbefunde der Vorrunde) und den mitgegebenen `E-Nr`-Auszug; `erkenntnisse.md` nur bei Bedarf gezielt (E-091).
+2. Schrittweise umsetzen; vor dem Ändern jede Stelle lesen – `script.js`/`mobile.html` nur per grep + Zeilenbereich ab den Fundstellen im Plan, nie komplett (E-091).
 3. Nach der Umsetzung ausführen:
    - `php vendor/bin/phpstan analyse --memory-limit=2G` (keine neuen Befunde)
    - betroffene Tests bzw. `php vendor/bin/phpunit --testsuite unit`
