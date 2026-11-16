@@ -37,6 +37,20 @@
 
 ---
 
+## v3.0.26 – Halbe Urlaubstage
+
+### Neu
+- **Urlaub in 0,5-Schritten:** Beim Typ Urlaub lässt sich „Halber Tag“ wählen (Desktop, Mobil,
+  Light, Nachtragen in der Stundenauswertung, Jahresplanung). Ein halber Tag zählt 0,5 Tage auf das
+  Jahreskontingent und im Ist das halbe Tages-Soll; in Listen erscheint „Urlaub (½ Tag)“.
+- **Urlaubsanspruch mit halben Tagen:** Jahresanspruch kann z. B. 27,5 Tage betragen (Eingabe mit
+  Komma, Rundung auf 0,5). Limitprüfungen, Kennzahlen, PDFs, CSV und Monats-Mail rechnen mit
+  Tagesanteilen.
+- **Datenbank:** Neue Spalte `zeiterfassung.tagesanteil` (Migration `20261116000000`); bestehende
+  Einträge bleiben ganze Tage, alte Sicherungen bleiben importierbar.
+
+---
+
 ## v3.0.25 – Gefilterte Summen, Kundendetail, Notizen und Stunden bearbeiten
 
 ### Behoben
