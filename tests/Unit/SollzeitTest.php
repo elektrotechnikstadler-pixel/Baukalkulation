@@ -9,6 +9,22 @@ use PHPUnit\Framework\TestCase;
 
 final class SollzeitTest extends TestCase
 {
+    public function testHalbeUrlaubstageUndAnspruchInHalbtagesSchritten(): void
+    {
+        self::assertSame(0.5, Sollzeit::urlaubTage(['typ' => 'urlaub', 'tagesanteil' => 0.5]));
+        self::assertSame(0.5, Sollzeit::urlaubTage(['typ' => 'urlaub', 'tagesanteil' => '0.5']));
+        self::assertSame(1.0, Sollzeit::urlaubTage(['typ' => 'urlaub']));
+        self::assertSame(1.0, Sollzeit::urlaubTage(['typ' => 'urlaub', 'tagesanteil' => 0.3]));
+        self::assertSame(0.0, Sollzeit::urlaubTage(['typ' => 'krank', 'tagesanteil' => 0.5]));
+        self::assertSame(1.0, Sollzeit::tagesanteil(['typ' => 'krank', 'tagesanteil' => 0.5]));
+
+        self::assertSame(27.5, Sollzeit::urlaubstageNormalisieren('27,5'));
+        self::assertSame(27.5, Sollzeit::urlaubstageNormalisieren(27.4));
+        self::assertSame(27.0, Sollzeit::urlaubstageNormalisieren('27.2'));
+        self::assertSame(0.0, Sollzeit::urlaubstageNormalisieren(-2));
+        self::assertSame(30.0, Sollzeit::urlaubstageNormalisieren('abc'));
+    }
+
     public function testAltmodusBeachtetArbeitstageUndFallbacks(): void
     {
         $mitarbeiter = ['sollstundenTag' => 8, 'arbeitstage' => '1,2,3,4,5'];

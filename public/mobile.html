@@ -1714,6 +1714,9 @@
             <option value="sonstig">Sonstiger Fehlgrund</option>
           </select>
         </div>
+        <div class="form-group" id="seHalberTagGroup" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;font-size:.9rem"><input type="checkbox" id="seHalberTag"> Halber Tag</label>
+        </div>
         <div class="form-group" id="seSonstigModusGroup" style="display:none">
           <label class="form-label">Umfang</label>
           <div style="display:flex;gap:16px;align-items:center">
@@ -1893,7 +1896,7 @@
 <!-- ============ Toast ============ -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=232"></script>
+<script src="sollzeit.js?v=233"></script>
 <script>
 // ============================================================
 // API-BASED PERSISTENCE  (Synology NAS)
@@ -4809,7 +4812,7 @@ function renderStundenerfassung() {
   const vtFeiertage = getVirtuelleFeiertagEintraegeM(zeitEntries, seMobileUser, year, now.getMonth());
   const monthHours = monthEntries.reduce((s,e) => s + bkIstStundenEintrag(seMobileUser, e, appSettings.ze_custom_typen), 0)
     + vtFeiertage.reduce((s,e) => s + (e.stunden||0), 0);
-  const monthUrlaub = monthEntries.filter(e => e.typ === 'urlaub').length;
+  const monthUrlaub = bkUrlaubTage(monthEntries);
   const monthGleitzeit = monthEntries.filter(e => e.typ === 'gleitzeit').length;
   const monthKrank = monthEntries.filter(e => e.typ === 'krank').length;
 
@@ -4834,7 +4837,7 @@ function renderStundenerfassung() {
 
   // Urlaubskonto
   const urlaubJahr = bkUrlaubsanspruch({ urlaubstageProJahr: seMobileUrlaubProJahr }, year);
-  const urlaubGenommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+  const urlaubGenommen = bkUrlaubTage(zeitEntries, year);
 
   let html = `
     <div class="kpi-strip" style="margin-bottom:10px;flex-wrap:wrap;gap:6px">
@@ -4856,7 +4859,7 @@ function renderStundenerfassung() {
       </div>` : ''}
       <div class="kpi-tile" style="flex:1;min-width:30%;background:var(--surface)">
         <div class="kpi-tile-label">Urlaub ${year}</div>
-        <div class="kpi-tile-value">${urlaubGenommen}/${urlaubJahr}</div>
+        <div class="kpi-tile-value">${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)}</div>
       </div>
       <div class="kpi-tile" style="flex:1;min-width:30%;background:var(--surface)">
         <div class="kpi-tile-label">Krank</div>
@@ -4938,7 +4941,7 @@ function renderStundenerfassung() {
       <div class="card se-month-card" id="seMonth-${mk}"${collapsed ? ' style="display:none"' : ''}>`;
       entries.forEach(e => {
         const typIcon = e.typ === 'urlaub' ? ico('palm','ico-lg') : (e.typ === 'krank' ? ico('thermometer','ico-lg') : (e.typ === 'gleitzeit' ? '⏱' : (e.typ === 'abwesend' ? '🚪' : (e.typ === 'sonstig' ? ico('alert','ico-lg') : ico('clock','ico-lg')))));
-        const typText = e.typ === 'urlaub' ? 'Urlaubstag' : (e.typ === 'krank' ? 'Krankheitstag' : (e.typ === 'gleitzeit' ? 'Gleittag' : (e.typ === 'abwesend' ? `Abwesend · ${(e.stunden||0).toFixed(2)} h` : (e.typ === 'sonstig' ? (e.bemerkung || 'Sonstig') : `${(e.stunden||0).toFixed(2)} h`))));
+        const typText = e.typ === 'urlaub' ? (bkTagesanteil(e) === 0.5 ? '½ Urlaubstag' : 'Urlaubstag') : (e.typ === 'krank' ? 'Krankheitstag' : (e.typ === 'gleitzeit' ? 'Gleittag' : (e.typ === 'abwesend' ? `Abwesend · ${(e.stunden||0).toFixed(2)} h` : (e.typ === 'sonstig' ? (e.bemerkung || 'Sonstig') : `${(e.stunden||0).toFixed(2)} h`))));
         const vonBisText = (appSettings.erweiterte_zeiterfassung && e.von && e.bis) ? ` (${e.von}–${e.bis}, ${e.pause||0}′ Pause)` : '';
         const baustelleName = e.baustelleName || '';
         const canEdit = editableIds.has(e.id);
@@ -5002,6 +5005,7 @@ function toggleSeFields() {
   const showVonBis = (isArbeit && erweitert) || sonstigZeit;
   const showManualStunden = isIstSoll ? false : ((isArbeit && !erweitert) || sonstigZeit || isAbwesend || (isCustomArbeit && !isIstSoll));
   document.getElementById('seSonstigModusGroup').style.display = isSonstig ? '' : 'none';
+  document.getElementById('seHalberTagGroup').style.display = typ === 'urlaub' ? '' : 'none';
   document.getElementById('seStundenGroup').style.display = showManualStunden ? '' : 'none';
   document.getElementById('seVonGroup').style.display = showVonBis ? '' : 'none';
   document.getElementById('seBisGroup').style.display = showVonBis ? '' : 'none';
@@ -5117,6 +5121,7 @@ function showStundenerfassungSheet(id) {
       document.getElementById('seDatum').value = e.datum || '';
       document.getElementById('seTyp').value = e.typ || 'arbeit';
       document.getElementById('seStunden').value = e.stunden || '';
+      document.getElementById('seHalberTag').checked = bkTagesanteil(e) === 0.5;
       if (e.baustelleId) {
         const bName = (appData.baustellen||[]).find(b => b.id === e.baustelleId)?.name || e.baustelleName || '';
         _applySeSelection(e.baustelleId, bName);
@@ -5134,6 +5139,7 @@ function showStundenerfassungSheet(id) {
     document.getElementById('seDatum').value = new Date().toISOString().split('T')[0];
     document.getElementById('seTyp').value = 'arbeit';
     document.getElementById('seStunden').value = '';
+    document.getElementById('seHalberTag').checked = false;
     document.getElementById('seBemerkung').value = '';
     document.getElementById('seVon').value = '';
     document.getElementById('seBis').value = '';
@@ -5170,7 +5176,8 @@ function saveStundenerfassung() {
   // Custom-Arbeitstyp ohne "Ist = Soll": manuelle Stunden; mit "Ist = Soll": Soll/Tag automatisch.
   const _isManualCustomArbeitM = isArbeitTypM(typ) && typ !== 'arbeit' && typ !== 'feiertag' && !mTypIstGleichSoll(typ);
   const enteredHours = parseFloat(document.getElementById('seStunden').value) || 0;
-  const stunden = bkGespeicherteStunden(seMobileUser, { datum, typ, stunden: enteredHours }, appSettings.ze_custom_typen, sonstigZeitspanne);
+  const tagesanteil = (typ === 'urlaub' && document.getElementById('seHalberTag').checked) ? 0.5 : 1;
+  const stunden = bkGespeicherteStunden(seMobileUser, { datum, typ, stunden: enteredHours, tagesanteil }, appSettings.ze_custom_typen, sonstigZeitspanne);
   const baustelleId = typ === 'arbeit' ? (parseInt(document.getElementById('seBaustelle').value) || null) : null;
   const bemerkung = document.getElementById('seBemerkung').value.trim();
 
@@ -5181,16 +5188,18 @@ function saveStundenerfassung() {
     if (!bemerkung)   { showToast('Bitte einen Grund für die Abwesenheit angeben.'); return; }
   }
 
-  // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30)
-  if (typ === 'urlaub') {
-    const y = datum.slice(0, 4);
+  // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30); halbe Tage zählen 0,5.
+  // Neuanlagen (ggf. Zeitraum) werden nach dem Sammeln der Tage geprüft.
+  const urlaubLimitUeberschritten = (y, neueTage) => {
     const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seMobileUrlaubProJahr }, y);
-    const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && e.id !== editingSeId).length;
-    if (genommen + 1 > limit) {
-      showToast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`);
-      return;
+    const genommen = bkUrlaubTage(zeitEntries.filter(e => e.id !== editingSeId), y);
+    if (genommen + neueTage > limit) {
+      showToast(`Urlaubslimit für ${y} erreicht (${bkFormatTage(limit)} Tage). Buchung nicht möglich.`);
+      return true;
     }
-  }
+    return false;
+  };
+  if (typ === 'urlaub' && editingSeId !== null && urlaubLimitUeberschritten(datum.slice(0, 4), tagesanteil)) return;
 
   // Validierung bei erweiterter Zeiterfassung
   if (typ === 'arbeit' && erweitert) {
@@ -5216,7 +5225,7 @@ function saveStundenerfassung() {
   }
 
   const baustelleName = baustelleId ? ((appData.baustellen||[]).find(b=>b.id===baustelleId)?.name || '') : '';
-  const draftEntry = { datum, typ, stunden, baustelleId, baustelleName, bemerkung, von, bis, pause };
+  const draftEntry = { datum, typ, stunden, tagesanteil, baustelleId, baustelleName, bemerkung, von, bis, pause };
   let rollbackState = null;
 
   // Gleitzeit: nur ein Eintrag pro Tag, kein Datumsbereich
@@ -5225,7 +5234,7 @@ function saveStundenerfassung() {
       const e = zeitEntries.find(e => e.id === editingSeId);
       if (e) {
         rollbackState = { type: 'replace', id: editingSeId, snapshot: { ...e } };
-        Object.assign(e, { datum, typ: 'gleitzeit', stunden: 0, baustelleId: null, baustelleName: '', bemerkung, von: '', bis: '', pause: 0 });
+        Object.assign(e, { datum, typ: 'gleitzeit', stunden: 0, tagesanteil: 1, baustelleId: null, baustelleName: '', bemerkung, von: '', bis: '', pause: 0 });
       }
     } else {
       const exists = zeitEntries.some(e => e.typ === 'gleitzeit' && e.datum === datum);
@@ -5280,10 +5289,18 @@ function saveStundenerfassung() {
     dates.forEach(d => {
       // Mehrfachbuchungen pro Tag bei Arbeitszeit und Abwesenheit erlaubt; Urlaub/Krank/Sonstig bleiben eindeutig
       if (typ !== 'arbeit' && typ !== 'abwesend' && existingDates.has(d)) return;
-      const entryHours = bkGespeicherteStunden(seMobileUser, { datum: d, typ, stunden: enteredHours }, appSettings.ze_custom_typen, sonstigZeitspanne);
-      pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden: entryHours, baustelleId, baustelleName, bemerkung, von, bis, pause });
+      const entryHours = bkGespeicherteStunden(seMobileUser, { datum: d, typ, stunden: enteredHours, tagesanteil }, appSettings.ze_custom_typen, sonstigZeitspanne);
+      pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden: entryHours, tagesanteil, baustelleId, baustelleName, bemerkung, von, bis, pause });
       added++;
     });
+    if (typ === 'urlaub') {
+      const neueProJahr = {};
+      pendingEntries.forEach(entry => {
+        const y = entry.datum.slice(0, 4);
+        neueProJahr[y] = (neueProJahr[y] || 0) + tagesanteil;
+      });
+      if (Object.keys(neueProJahr).some(y => urlaubLimitUeberschritten(y, neueProJahr[y]))) return;
+    }
     if (typ === 'arbeit') {
       const overlap = findMobileTimeOverlap([...zeitEntries, ...pendingEntries]);
       if (overlap) {
@@ -5477,7 +5494,7 @@ function exportSeMobilePDF() {
       + getVirtuelleFeiertagEintraegeM(me, seMobileUser, year, m).reduce((s,e) => s + (e.stunden||0), 0);
     const soll = calcSollMonat(seMobileUser, year, m);
     const diff = ist - soll;
-    const urlaub = me.filter(e => e.typ === 'urlaub').length;
+    const urlaub = bkUrlaubTage(me);
     const gleitzeit = me.filter(e => e.typ === 'gleitzeit').length;
     const krank = me.filter(e => e.typ === 'krank').length;
     const sonstig = me.filter(e => e.typ === 'sonstig').length;
@@ -5485,11 +5502,11 @@ function exportSeMobilePDF() {
     totalIst += ist; totalSoll += soll; totalUrlaub += urlaub; totalGleitzeit += gleitzeit; totalKrank += krank;
     const cls = diff >= 0 ? 'positive' : 'negative';
     const sign = diff >= 0 ? '+' : '';
-    html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${urlaub}</td><td>${gleitzeit}</td><td>${krank}</td><td>${sonstig}</td></tr>`;
+    html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${bkFormatTage(urlaub)}</td><td>${gleitzeit}</td><td>${krank}</td><td>${sonstig}</td></tr>`;
   });
   totalIst = jahreswerte.ist; totalSoll = jahreswerte.soll;
   const totalDiff = totalIst - totalSoll;
-  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${totalUrlaub}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
+  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${bkFormatTage(totalUrlaub)}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
   html += `</tbody></table>`;
 
   // Gleitzeitkonto Buchungen
@@ -5513,7 +5530,7 @@ function exportSeMobilePDF() {
   yearEntries.forEach(e => {
     const d = new Date(e.datum);
     const wd = wdNames[d.getDay()];
-    const typLabel = e.typ === 'arbeit' ? 'Arbeit' : e.typ === 'urlaub' ? 'Urlaub' : e.typ === 'gleitzeit' ? 'Gleitzeit' : e.typ === 'abwesend' ? 'Abwesend' : e.typ === 'krank' ? 'Krank' : 'Sonstig';
+    const typLabel = e.typ === 'arbeit' ? 'Arbeit' : e.typ === 'urlaub' ? (bkTagesanteil(e) === 0.5 ? 'Urlaub (½ Tag)' : 'Urlaub') : e.typ === 'gleitzeit' ? 'Gleitzeit' : e.typ === 'abwesend' ? 'Abwesend' : e.typ === 'krank' ? 'Krank' : 'Sonstig';
     html += `<tr><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + '′' : ''}</td>` : ''}<td style="text-align:left">${esc(e.baustelleName||'')}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${e.typ==='arbeit'?(e.stunden||0).toFixed(2):'–'}</td></tr>`;
   });
   html += `</tbody></table>`;
@@ -5738,7 +5755,7 @@ function renderWochenplanungMobile() {
       const uname = user.username;
       const color = WP_COLORS_M[userIdx % WP_COLORS_M.length];
       const seEntries = (wpAllZeitMobile[uname]?.entries || []);
-      const urlaubDates = new Set(seEntries.filter(e => e.typ === 'urlaub').map(e => e.datum));
+      const urlaubDates = new Map(seEntries.filter(e => e.typ === 'urlaub').map(e => [e.datum, bkTagesanteil(e)]));
       const krankDates = new Set(seEntries.filter(e => e.typ === 'krank').map(e => e.datum));
       const sonstigMap = {};
       seEntries.filter(e => e.typ === 'sonstig').forEach(e => { sonstigMap[e.datum] = e.bemerkung || 'Sonstig'; });
@@ -5775,7 +5792,7 @@ function renderWochenplanungMobile() {
             }
           });
 
-          if (isSeUrlaub && !hasPlannedUrlaub) blocks.push(`<div class="wp-m-blk wp-m-urlaub" style="border-style:dashed">U</div>`);
+          if (isSeUrlaub && !hasPlannedUrlaub) blocks.push(`<div class="wp-m-blk wp-m-urlaub" style="border-style:dashed"${urlaubDates.get(key) === 0.5 ? ' title="Halber Urlaubstag">½U' : '>U'}</div>`);
           if (isSeKrank) blocks.push(`<div class="wp-m-blk wp-m-krank" style="border-style:dashed">K</div>`);
           if (isSeSonstig && !hasPlannedSonstig) blocks.push(`<div class="wp-m-blk wp-m-sonstig" style="border-style:dashed" title="${esc(sonstigMap[key])}">${esc(sonstigMap[key].substring(0,2))}</div>`);
           if (arbeitMap[key] && !plannedBauIds.has(String(arbeitMap[key].baustelleId))) {
@@ -6395,10 +6412,7 @@ function sumIstStundenMobile(entries, user) {
 }
 
 function parseUrlaubstageInputMobile(value) {
-  const text = String(value ?? '').trim();
-  if (text === '') return 30;
-  const number = parseInt(text, 10);
-  return Number.isFinite(number) ? number : 30;
+  return bkUrlaubstageEingabe(value, 30);
 }
 
 function calcJahresStichtagMobile(year) {
@@ -6525,7 +6539,7 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
     const entries = (allZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(currentMonth));
     const istStunden = entries.reduce((s,e) => s + bkIstStundenEintrag(user, e, appSettings.ze_custom_typen), 0)
       + getVirtuelleFeiertagEintraegeM(entries, user, y, m).reduce((s,e) => s + (e.stunden||0), 0);
-    const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubTage = bkUrlaubTage(entries);
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const sollTag = Number(user.sollstundenTag ?? 8);
     const tageWoche = Number(user.sollTageWoche ?? 5);
@@ -6536,7 +6550,7 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
     const diffSign = diff >= 0 ? '+' : '';
     const urlaubJahr = bkUrlaubsanspruch(user, y);
     const allUserEntries = allZeit[user.username]?.entries || [];
-    const urlaubGenommen = allUserEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(y))).length;
+    const urlaubGenommen = bkUrlaubTage(allUserEntries, y);
 
     html += `<div class="card" style="margin-bottom:10px">
       <div class="detail-row" style="flex-wrap:wrap">
@@ -6551,7 +6565,7 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
         </div>
       </div>
       <div class="detail-row" style="flex-wrap:wrap;gap:8px">
-        <div class="detail-row-label"><small>Urlaub: ${urlaubTage} Tage (${urlaubGenommen}/${urlaubJahr} Jahr) · Krank: ${krankTage} Tage</small></div>
+        <div class="detail-row-label"><small>Urlaub: ${bkFormatTage(urlaubTage)} Tage (${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)} Jahr) · Krank: ${krankTage} Tage</small></div>
         ${(currentRole === 'admin' || currentRole === 'master') ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div>
             <label style="font-size:0.72rem;color:var(--grey-400)">Soll/Tag:</label>
@@ -6567,7 +6581,7 @@ function zuMobileRenderOverview(sv, visibleUsers, allZeit, currentMonth, monthNa
           </div>
           <div>
             <label style="font-size:0.72rem;color:var(--grey-400)">Urlaub/J:</label>
-            <input type="number" value="${urlaubJahr}" min="0" step="1" style="width:60px;padding:4px 8px;border:1.5px solid var(--grey-100);border-radius:8px;font-size:0.85rem;font-family:inherit"
+            <input type="number" value="${urlaubJahr}" min="0" step="0.5" style="width:60px;padding:4px 8px;border:1.5px solid var(--grey-100);border-radius:8px;font-size:0.85rem;font-family:inherit"
               onchange="setUrlaubstageMobile('${esc(user.username)}', ${y}, this.value)">
           </div>
         </div>` : ''}
@@ -6590,7 +6604,7 @@ function zuMobileRenderMonteur(sv, visibleUsers, allZeit, currentMonth, monthNam
     const entries = (allZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(currentMonth));
     const istStunden = entries.reduce((s,e) => s + bkIstStundenEintrag(user, e, appSettings.ze_custom_typen), 0)
       + getVirtuelleFeiertagEintraegeM(entries, user, y, m).reduce((s,e) => s + (e.stunden||0), 0);
-    const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubTage = bkUrlaubTage(entries);
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const sollStunden = calcSollMonat(user, y, m);
     const diff = istStunden - sollStunden;
@@ -6611,7 +6625,7 @@ function zuMobileRenderMonteur(sv, visibleUsers, allZeit, currentMonth, monthNam
         <div style="display:flex;gap:10px;font-size:0.82rem;flex-wrap:wrap">
           <span><strong>${istStunden.toFixed(2)}</strong>h Ist</span>
           <span style="color:${diffColor};font-weight:700">${diffSign}${diff.toFixed(2)}h</span>
-          ${urlaubTage ? '<span>🏖' + urlaubTage + 'd</span>' : ''}
+          ${urlaubTage ? '<span>🏖' + bkFormatTage(urlaubTage) + 'd</span>' : ''}
           ${krankTage ? '<span>🤒' + krankTage + 'd</span>' : ''}
           <span style="color:var(--grey-400);font-size:0.75rem">▼ Details</span>
         </div>
@@ -6640,7 +6654,7 @@ function zuMobileRenderMonteur(sv, visibleUsers, allZeit, currentMonth, monthNam
 
         dayEntries.forEach(e => {
           const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '#'+e.baustelleId) : '';
-          const typLabel = e.typ === 'arbeit' ? '🔧' : e.typ === 'urlaub' ? '🏖' : e.typ === 'krank' ? '🤒' : '📋';
+          const typLabel = e.typ === 'arbeit' ? '🔧' : e.typ === 'urlaub' ? (bkTagesanteil(e) === 0.5 ? '🏖½' : '🏖') : e.typ === 'krank' ? '🤒' : '📋';
           html += `<div style="font-size:0.78rem;color:var(--grey-500);margin-top:2px;padding-left:4px">
             ${typLabel} ${esc(bName)}${e.bemerkung ? ' – ' + esc(e.bemerkung) : ''} <span style="float:right">${bkIstStundenEintrag(user, e, appSettings.ze_custom_typen).toFixed(2)}h</span>
           </div>`;
@@ -6702,7 +6716,7 @@ function zuMobileRenderTag(sv, visibleUsers, allZeit, currentMonth, monthName, y
 
     dayEntries.forEach(e => {
       const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '#'+e.baustelleId) : '';
-      const typLabel = e.typ === 'arbeit' ? '🔧' : e.typ === 'urlaub' ? '🏖' : e.typ === 'krank' ? '🤒' : '📋';
+      const typLabel = e.typ === 'arbeit' ? '🔧' : e.typ === 'urlaub' ? (bkTagesanteil(e) === 0.5 ? '🏖½' : '🏖') : e.typ === 'krank' ? '🤒' : '📋';
       html += `<div class="list-row" style="padding:8px 12px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div>
@@ -6779,17 +6793,17 @@ function exportZeituebersichtPDFMobile() {
     const en = allZeit[user.username]?.entries||[];
     const sollBeschreibung = bkSollBeschreibung(user);
     const urlaubJahr = bkUrlaubsanspruch(user, year);
-    const urlaubGen = en.filter(e=>e.typ==='urlaub'&&e.datum&&e.datum.startsWith(String(year))).length;
+    const urlaubGen = bkUrlaubTage(en, year);
     const krankGes = en.filter(e=>e.typ==='krank'&&e.datum&&e.datum.startsWith(String(year))).length;
     const jahreswerte = calcJahresSollIstMobile(user, en, year);
     const jahresLabel = isCurrentYearMobile(year) ? ' (bis heute)' : '';
-    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${bkFormatTage(urlaubGen)}/${bkFormatTage(urlaubJahr)} · Krank: ${krankGes}</p>`;
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll</th><th>Ist</th><th>+/-</th><th>Urlaub</th><th>Krank</th></tr></thead><tbody>`;
     let tI=0,tS=0;
-    months.forEach(m=>{const mk=year+'-'+String(m+1).padStart(2,'0');const me=en.filter(e=>e.datum&&e.datum.startsWith(mk));const ist=me.reduce((s,e)=>s+bkIstStundenEintrag(user,e,appSettings.ze_custom_typen),0)+getVirtuelleFeiertagEintraegeM(me,user,year,m).reduce((s,e)=>s+(e.stunden||0),0);const soll=calcSollMonat(user,year,m);const u2=me.filter(e=>e.typ==='urlaub').length;const k2=me.filter(e=>e.typ==='krank').length;const diff=ist-soll;const wd=getWorkingDaysInMonth(year,m,user);tI+=ist;tS+=soll;html+=`<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${u2}</td><td>${k2}</td></tr>`;});
+    months.forEach(m=>{const mk=year+'-'+String(m+1).padStart(2,'0');const me=en.filter(e=>e.datum&&e.datum.startsWith(mk));const ist=me.reduce((s,e)=>s+bkIstStundenEintrag(user,e,appSettings.ze_custom_typen),0)+getVirtuelleFeiertagEintraegeM(me,user,year,m).reduce((s,e)=>s+(e.stunden||0),0);const soll=calcSollMonat(user,year,m);const u2=bkUrlaubTage(me);const k2=me.filter(e=>e.typ==='krank').length;const diff=ist-soll;const wd=getWorkingDaysInMonth(year,m,user);tI+=ist;tS+=soll;html+=`<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${bkFormatTage(u2)}</td><td>${k2}</td></tr>`;});
     tI = jahreswerte.ist; tS = jahreswerte.soll;
     const td2=tI-tS;
-    html+=`<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td>${urlaubGen}</td><td>${krankGes}</td></tr></tbody></table>`;
+    html+=`<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt${jahresLabel}</td><td></td><td>${tS.toFixed(2)}</td><td>${tI.toFixed(2)}</td><td class="${td2>=0?'positive':'negative'}">${td2>=0?'+':''}${td2.toFixed(2)}</td><td>${bkFormatTage(urlaubGen)}</td><td>${krankGes}</td></tr></tbody></table>`;
   });
   html += '</body></html>';
   mobilePrintHtml(html, 'Stundenuebersicht_' + year);
@@ -6885,7 +6899,7 @@ function renderStundenauswertungMobile() {
     const buchungen = saMobileGleitzeitAll[user.username] || [];
     let gzSaldo = calcGleitzeitSaldoMobile(allEntries, user, year, buchungen);
 
-    const urlaubGen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+    const urlaubGen = bkUrlaubTage(allEntries, year);
     const krankGes = allEntries.filter(e => e.typ === 'krank' && e.datum && e.datum.startsWith(String(year))).length;
 
     const gzColor = gzSaldo >= 0 ? '#28A745' : '#FF3B30';
@@ -6915,7 +6929,7 @@ function renderStundenauswertungMobile() {
         </div>` : ''}
         <div class="kpi-tile" style="flex:1;min-width:25%;padding:6px;background:var(--surface)">
           <div class="kpi-tile-label" style="font-size:.65rem">Urlaub</div>
-          <div class="kpi-tile-value" style="font-size:.85rem">${urlaubGen}/${urlaubJahr}</div>
+          <div class="kpi-tile-value" style="font-size:.85rem">${bkFormatTage(urlaubGen)}/${bkFormatTage(urlaubJahr)}</div>
         </div>
         <div class="kpi-tile" style="flex:1;min-width:25%;padding:6px;background:var(--surface)">
           <div class="kpi-tile-label" style="font-size:.65rem">Krank</div>
@@ -6970,7 +6984,7 @@ function saMobileToggleEntries(username) {
 
   let h = '';
   sorted.forEach(e => {
-    const typLabel = e.typ === 'arbeit' ? 'Arbeit' : e.typ === 'urlaub' ? 'Urlaub' : e.typ === 'gleitzeit' ? 'Gleitzeit' : e.typ === 'krank' ? 'Krank' : 'Sonstig';
+    const typLabel = e.typ === 'arbeit' ? 'Arbeit' : e.typ === 'urlaub' ? (bkTagesanteil(e) === 0.5 ? 'Urlaub (½ Tag)' : 'Urlaub') : e.typ === 'gleitzeit' ? 'Gleitzeit' : e.typ === 'krank' ? 'Krank' : 'Sonstig';
     const stundenTxt = e.typ === 'arbeit' ? `${(e.stunden||0).toFixed(2)} h` : '–';
     h += `<div class="list-row" style="padding:6px 0;border-bottom:1px solid var(--border)">
       <div class="list-row-body">
@@ -7050,6 +7064,9 @@ async function saMobileEditEntry(username, entryId) {
   const newStunden = manuelleStunden ? parseFloat(prompt('Stunden:', entry.stunden || (newTyp === 'arbeit' ? '8' : '')) || '0') : 0;
   if (newTyp === 'abwesend' && !(newStunden > 0)) { showToast('Bitte Stunden der Abwesenheit eingeben.'); return; }
   const newBemerkung = prompt('Bemerkung:', entry.bemerkung || '') || '';
+  const newTagesanteil = newTyp === 'urlaub'
+    ? (confirm(`Halber Urlaubstag?\n\nOK = halber Tag, Abbrechen = ganzer Tag${bkTagesanteil(entry) === 0.5 ? '\n(bisher: halber Tag)' : ''}`) ? 0.5 : 1)
+    : 1;
 
   try {
     // Projekt und Uhrzeiten werden bewusst nicht gesendet: der Server behält dann
@@ -7057,12 +7074,12 @@ async function saMobileEditEntry(username, entryId) {
     const r = await fetch('api.php?action=admin_edit_zeiterfassung', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, entryId, datum: newDatum, typ: newTyp, stunden: newStunden, bemerkung: newBemerkung })
+      body: JSON.stringify({ username, entryId, datum: newDatum, typ: newTyp, stunden: newStunden, bemerkung: newBemerkung, tagesanteil: newTagesanteil })
     });
     const j = await r.json();
     if (j.ok) {
       showToast('✓ Aktualisiert');
-      if (entry) Object.assign(entry, { datum: newDatum, typ: newTyp, stunden: (j.stunden != null ? j.stunden : newStunden), bemerkung: newBemerkung });
+      if (entry) Object.assign(entry, { datum: newDatum, typ: newTyp, stunden: (j.stunden != null ? j.stunden : newStunden), bemerkung: newBemerkung, tagesanteil: newTagesanteil });
       await projektstandNachZeitAbgleichMobile(j);
       renderStundenauswertungMobile();
     } else { showToast('Fehler: ' + (j.error||'Unbekannt')); }
@@ -7101,7 +7118,7 @@ function exportSaAuswertungPDFMobile() {
     const allEntries = saMobileAllZeit[user.username]?.entries || [];
     const sollBeschreibung = bkSollBeschreibung(user);
     const urlaubJahr = bkUrlaubsanspruch(user, year);
-    const urlaubGen = allEntries.filter(e => e.typ==='urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+    const urlaubGen = bkUrlaubTage(allEntries, year);
     const krankGes = allEntries.filter(e => e.typ==='krank' && e.datum && e.datum.startsWith(String(year))).length;
     const buchungen = saMobileGleitzeitAll[user.username] || [];
     const jahreswerte = calcJahresSollIstMobile(user, allEntries, year);
@@ -7112,7 +7129,7 @@ function exportSaAuswertungPDFMobile() {
     let gzSaldo = calcGleitzeitSaldoMobile(allEntries, user, year, buchungen);
 
     if (idx > 0) html += '<div class="page-break"></div>';
-    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${urlaubGen}/${urlaubJahr} · Krank: ${krankGes}${gleitzeitAktiv ? ` · Gleitzeitkonto: <span class="${gzSaldo>=0?'positive':'negative'}">${gzSaldo>=0?'+':''}${gzSaldo.toFixed(2)} h</span>` : ''}</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) · Soll: ${esc(sollBeschreibung)} · Urlaub: ${bkFormatTage(urlaubGen)}/${bkFormatTage(urlaubJahr)} · Krank: ${krankGes}${gleitzeitAktiv ? ` · Gleitzeitkonto: <span class="${gzSaldo>=0?'positive':'negative'}">${gzSaldo>=0?'+':''}${gzSaldo.toFixed(2)} h</span>` : ''}</p>`;
 
     // Monatsübersicht
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll</th><th>Ist</th><th>+/-</th><th>Urlaub</th><th>Gleitzeit</th><th>Krank</th></tr></thead><tbody>`;
@@ -7124,11 +7141,11 @@ function exportSaAuswertungPDFMobile() {
         + getVirtuelleFeiertagEintraegeM(me, user, year, m).reduce((s,e)=>s+(e.stunden||0),0);
       const soll = calcSollMonat(user, year, m);
       const diff = ist - soll;
-      const u2 = me.filter(e=>e.typ==='urlaub').length;
+      const u2 = bkUrlaubTage(me);
       const gz = me.filter(e=>e.typ==='gleitzeit').length;
       const k2 = me.filter(e=>e.typ==='krank').length;
       tI += ist; tS += soll;
-      html += `<tr><td>${getMonthName(m)}</td><td>${getWorkingDaysInMonth(year,m,user)}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${u2}</td><td>${gz}</td><td>${k2}</td></tr>`;
+      html += `<tr><td>${getMonthName(m)}</td><td>${getWorkingDaysInMonth(year,m,user)}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${bkFormatTage(u2)}</td><td>${gz}</td><td>${k2}</td></tr>`;
     });
     tI = jahreswerte.ist; tS = jahreswerte.soll;
     const td2 = tI - tS;
@@ -7152,7 +7169,7 @@ function exportSaAuswertungPDFMobile() {
       yearEntries.forEach(e => {
         const d = new Date(e.datum);
         const wd = wdNames[d.getDay()];
-        const typLabel = e.typ==='arbeit'?'Arbeit':e.typ==='urlaub'?'Urlaub':e.typ==='gleitzeit'?'Gleitzeit':e.typ==='krank'?'Krank':'Sonstig';
+        const typLabel = e.typ==='arbeit'?'Arbeit':e.typ==='urlaub'?(bkTagesanteil(e)===0.5?'Urlaub (½ Tag)':'Urlaub'):e.typ==='gleitzeit'?'Gleitzeit':e.typ==='krank'?'Krank':'Sonstig';
         html += `<tr><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td><td style="text-align:left">${esc(e.baustelleName||'')}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${e.typ==='arbeit'?(e.stunden||0).toFixed(2):'–'}</td></tr>`;
       });
       html += `</tbody></table>`;

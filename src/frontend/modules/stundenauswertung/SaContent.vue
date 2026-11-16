@@ -14,6 +14,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { formatDate } from '@core/utils.ts';
 import type { SaUser, SaEntry } from './types.ts';
+import { urlaubTage, formatTage, tagesanteil } from '../zeiterfassung/types.ts';
 
 // ── Props ─────────────────────────────────────────────────────
 const props = defineProps<{
@@ -157,7 +158,7 @@ const userResults = computed<UserResult[]>(() => {
         const istTotal = entries.filter(e => countsTowardIst?.(e.typ) ?? false)
             .reduce((s, e) => s + (e.stunden ?? 0), 0);
         const urlaubJahr    = (user.urlaubstageProJahr?.[year]) ?? 30;
-        const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum?.startsWith(String(year))).length;
+        const urlaubGenommen = urlaubTage(allEntries, year);
 
         return {
             user, entries, istTotal,
@@ -266,7 +267,7 @@ function openGleitzeitDialog(username: string, saldo: number) {
               style="font-size:.75rem;padding:3px 8px"
               @click.stop="openGleitzeitDialog(r.user.username, r.gleitzeitSaldo)"
             >Gleitzeit</button>
-            <span>Urlaub: {{ r.urlaubGenommen }}/{{ r.urlaubJahr }}</span>
+            <span>Urlaub: {{ formatTage(r.urlaubGenommen) }}/{{ formatTage(r.urlaubJahr) }}</span>
             <button
               class="btn btn-secondary btn-sm"
               style="font-size:.75rem;padding:3px 8px"
@@ -316,7 +317,7 @@ function openGleitzeitDialog(username: string, saldo: number) {
             >
               <td style="font-weight:600">{{ formatDate(e.datum) }}</td>
               <td>{{ e.datum ? ['So','Mo','Di','Mi','Do','Fr','Sa'][new Date(e.datum).getDay()] : '' }}</td>
-              <td>{{ typLabel(e.typ) }}</td>
+              <td>{{ typLabel(e.typ) }}{{ tagesanteil(e) === 0.5 ? ' (½ Tag)' : '' }}</td>
               <template v-if="isErweitert">
                 <td>{{ e.von ?? '' }}</td>
                 <td>{{ e.bis ?? '' }}</td>

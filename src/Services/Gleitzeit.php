@@ -38,7 +38,7 @@ final class Gleitzeit
         }
         $feiertage = Feiertage::fuerJahr($jahr, Feiertage::customAusEinstellungen($settings));
 
-        $stmt = $db->prepare('SELECT datum, typ, stunden FROM zeiterfassung WHERE username = ? AND datum >= ? AND datum <= ?');
+        $stmt = $db->prepare('SELECT datum, typ, stunden, tagesanteil FROM zeiterfassung WHERE username = ? AND datum >= ? AND datum <= ?');
         if ($stmt === false) {
             return 0.0;
         }

@@ -317,6 +317,10 @@
           <option value="sonstig">Sonstiges</option>
         </select>
       </div>
+      <!-- Halber Urlaubstag -->
+      <div class="field" id="fieldHalberTag" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;font-size:.95rem"><input type="checkbox" id="fHalberTag"> Halber Tag</label>
+      </div>
       <!-- Sonstig-Umfang -->
       <div class="field" id="fieldSonstigModus" style="display:none">
         <label class="field-label">Umfang</label>
@@ -370,7 +374,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script src="sollzeit.js?v=232"></script>
+<script src="sollzeit.js?v=233"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
 let currentUser = '';
@@ -512,6 +516,7 @@ function showForm() {
   document.getElementById('fDatumBis').value = '';
   document.getElementById('fTyp').value = 'arbeit';
   document.getElementById('fStunden').value = '';
+  document.getElementById('fHalberTag').checked = false;
   document.getElementById('fBsId').value = '';
   const fBsBtnTxt = document.getElementById('fBsBtnText');
   if (fBsBtnTxt) { fBsBtnTxt.textContent = 'Baustelle wählen…'; fBsBtnTxt.style.color = 'var(--grey-400,#aaa)'; }
@@ -537,6 +542,7 @@ function editLightEntry(id) {
   document.getElementById('fDatumBis').value = '';
   document.getElementById('fTyp').value = e.typ || 'arbeit';
   document.getElementById('fStunden').value = e.stunden || '';
+  document.getElementById('fHalberTag').checked = bkTagesanteil(e) === 0.5;
   document.getElementById('fVon').value = e.von || '';
   document.getElementById('fBis').value = e.bis || '';
   document.getElementById('fPause').value = e.pause || '';
@@ -589,6 +595,7 @@ function toggleBaustelleField() {
   const sonstigZeit = isSonstig && sonstigModus === 'zeitspanne';
   const showVonBis = (isArbeit && erweitert && !isIstSoll) || sonstigZeit;
   document.getElementById('fieldSonstigModus').style.display = isSonstig ? '' : 'none';
+  document.getElementById('fieldHalberTag').style.display = typ === 'urlaub' ? '' : 'none';
   document.getElementById('fieldBaustelle').style.display = (isArbeit && !isIstSoll) ? '' : 'none';
   document.getElementById('fieldStunden').style.display = isIstSoll ? 'none' : ((isArbeit && !erweitert) ? '' : ((sonstigZeit || isAbwesend) ? '' : 'none'));
   document.getElementById('fieldVon').style.display = showVonBis ? '' : 'none';
@@ -872,7 +879,8 @@ async function saveEntry() {
   // Validation
   if (!datum) { toast('Bitte Datum eingeben.', 'error'); return; }
   if (!lightSollUser) { toast('Sollzeit wird noch geladen. Bitte gleich erneut versuchen.', 'error'); return; }
-  const effStunden = bkGespeicherteStunden(lightSollUser, { datum, typ, stunden }, appSettings.ze_custom_typen, sonstigZeitspanne);
+  const tagesanteil = (typ === 'urlaub' && document.getElementById('fHalberTag').checked) ? 0.5 : 1;
+  const effStunden = bkGespeicherteStunden(lightSollUser, { datum, typ, stunden, tagesanteil }, appSettings.ze_custom_typen, sonstigZeitspanne);
   if (_isArbeit && !_istSoll) {
     if (stunden <= 0) { toast('Bitte Stunden eingeben.', 'error'); return; }
   }
@@ -913,14 +921,15 @@ async function saveEntry() {
     if (typ === 'urlaub') {
       const y = datum.slice(0, 4);
       const limit = bkUrlaubsanspruch({ urlaubstageProJahr: lightUrlaubProJahr }, y);
-      const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && e.id !== editingLightId).length;
-      if (genommen + 1 > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
+      const genommen = bkUrlaubTage(zeitEntries.filter(e => e.id !== editingLightId), y);
+      if (genommen + tagesanteil > limit) { toast(`Urlaubslimit für ${y} erreicht (${bkFormatTage(limit)} Tage). Buchung nicht möglich.`, 'error'); return; }
     }
     // Bestehenden Eintrag aktualisieren
     const e = zeitEntries.find(en => en.id === editingLightId);
     if (e) {
       e.datum = datum; e.typ = typ;
       e.stunden = effStunden;
+      e.tagesanteil = tagesanteil;
       e.baustelleId = (_isArbeit && !_istSoll) ? baustelleId : null;
       e.bemerkung = bemerkung; e.von = von; e.bis = bis; e.pause = pause;
     }
@@ -951,20 +960,20 @@ async function saveEntry() {
     // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30)
     if (typ === 'urlaub') {
       const byYear = {};
-      neueDates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; });
+      neueDates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + tagesanteil; });
       for (const y in byYear) {
         const limit = bkUrlaubsanspruch({ urlaubstageProJahr: lightUrlaubProJahr }, y);
-        const genommen = zeitEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y)).length;
-        if (genommen + byYear[y] > limit) { toast(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error'); return; }
+        const genommen = bkUrlaubTage(zeitEntries, y);
+        if (genommen + byYear[y] > limit) { toast(`Urlaubslimit für ${y} erreicht (${bkFormatTage(limit)} Tage). Buchung nicht möglich.`, 'error'); return; }
       }
     }
     neueDates.forEach(d => {
-      const _st = bkGespeicherteStunden(lightSollUser, { datum: d, typ, stunden }, appSettings.ze_custom_typen, sonstigZeitspanne);
-      zeitEntries.push({ id: nextEntryId++, clientUuid: newZeitUuid(), datum: d, typ, stunden: _st, baustelleId: null, bemerkung, von: sonstigZeitspanne ? von : '', bis: sonstigZeitspanne ? bis : '', pause: 0 });
+      const _st = bkGespeicherteStunden(lightSollUser, { datum: d, typ, stunden, tagesanteil }, appSettings.ze_custom_typen, sonstigZeitspanne);
+      zeitEntries.push({ id: nextEntryId++, clientUuid: newZeitUuid(), datum: d, typ, stunden: _st, tagesanteil, baustelleId: null, bemerkung, von: sonstigZeitspanne ? von : '', bis: sonstigZeitspanne ? bis : '', pause: 0 });
     });
   } else {
     // Einzelner Arbeits-, Abwesenheits- oder Gleitzeit-Eintrag
-    const entry = { id: nextEntryId++, clientUuid: newZeitUuid(), datum, typ, stunden: effStunden, baustelleId: (_isArbeit && !_istSoll) ? baustelleId : null, bemerkung, von, bis, pause };
+    const entry = { id: nextEntryId++, clientUuid: newZeitUuid(), datum, typ, stunden: effStunden, tagesanteil: 1, baustelleId: (_isArbeit && !_istSoll) ? baustelleId : null, bemerkung, von, bis, pause };
     if (_isArbeit) {
       const overlap = findLightTimeOverlap([...zeitEntries, entry]);
       if (overlap) { nextEntryId--; toast(overlap, 'error'); return; }
@@ -981,6 +990,7 @@ async function saveEntry() {
       document.getElementById('formHeaderTitle').textContent = 'Neuer Eintrag';
       document.getElementById('fTyp').value = 'arbeit';
       document.getElementById('fStunden').value = '';
+      document.getElementById('fHalberTag').checked = false;
       document.getElementById('fDatumBis').value = '';
       document.getElementById('fBsId').value = '';
       const _btnTxt = document.getElementById('fBsBtnText');
@@ -1090,7 +1100,7 @@ function renderHistory() {
     return `<div class="history-card">
       <div class="history-left">
         <div class="history-date">${datumDE}</div>
-        <div class="history-type">${typLabels[e.typ] || e.typ}</div>
+        <div class="history-type">${e.typ === 'urlaub' && bkTagesanteil(e) === 0.5 ? '🌴 ½ Urlaub' : (typLabels[e.typ] || e.typ)}</div>
         ${vonBisInfo}
         ${bName ? `<div class="history-detail">${esc(bName)}</div>` : ''}
         ${e.bemerkung ? `<div class="history-detail">${esc(e.bemerkung)}</div>` : ''}

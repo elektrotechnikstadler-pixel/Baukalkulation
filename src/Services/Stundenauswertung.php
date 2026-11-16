@@ -35,7 +35,7 @@ final class Stundenauswertung
         }
         $users->execute(['admin']);
 
-        $stmt = $db->prepare('SELECT username, datum, typ, stunden FROM zeiterfassung WHERE datum >= ? AND datum <= ?');
+        $stmt = $db->prepare('SELECT username, datum, typ, stunden, tagesanteil FROM zeiterfassung WHERE datum >= ? AND datum <= ?');
         if ($stmt === false) {
             return [];
         }
@@ -72,7 +72,7 @@ final class Stundenauswertung
                     $arbeit += (float)($entry['stunden'] ?? 0);
                 }
                 if ($typ === 'urlaub') {
-                    $urlaub[$datum] = true;
+                    $urlaub[$datum] = min(1.0, ($urlaub[$datum] ?? 0.0) + Sollzeit::urlaubTage($entry));
                 }
                 if ($typ === 'krank') {
                     $krank[$datum] = true;
@@ -98,12 +98,18 @@ final class Stundenauswertung
                 'ist' => round($ist, 2),
                 'diff' => round($ist - $soll, 2),
                 'arbeit' => round($arbeit, 2),
-                'urlaub' => count($urlaub),
+                'urlaub' => self::tageWert(array_sum($urlaub)),
                 'krank' => count($krank),
             ];
         }
 
         usort($rows, static fn(array $a, array $b): int => strcasecmp((string)$a['name'], (string)$b['name']));
         return $rows;
+    }
+
+    /** Ganze Tage bleiben int (bisheriges Format), halbe Tage werden als float geliefert. */
+    private static function tageWert(float $tage): int|float
+    {
+        return floor($tage) === $tage ? (int)$tage : $tage;
     }
 }

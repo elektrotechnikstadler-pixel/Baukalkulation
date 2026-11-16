@@ -102,7 +102,7 @@ class PlanActions
             $bNames[(int)$b['id']] = $b['name'];
         }
         // Zeiterfassung laden
-        $zeRows = $this->db->query("SELECT username, entryId, datum, typ, baustelleId, stunden, bemerkung FROM zeiterfassung ORDER BY username, datum, pk")->fetchAll();
+        $zeRows = $this->db->query("SELECT username, entryId, datum, typ, baustelleId, stunden, bemerkung, tagesanteil FROM zeiterfassung ORDER BY username, datum, pk")->fetchAll();
         $zeData = [];
         foreach ($zeRows as $r) {
             $u = $r['username'];
@@ -112,6 +112,7 @@ class PlanActions
                 'datum' => $r['datum'], 'typ' => $r['typ'],
                 'baustelleId' => $r['baustelleId'] !== null ? (int)$r['baustelleId'] : null,
                 'stunden' => (float)$r['stunden'], 'bemerkung' => $r['bemerkung'],
+                'tagesanteil' => \App\Services\Sollzeit::tagesanteil($r),
             ];
             $zeData[$u]['entries'][] = $entry;
             if ($entry['id'] !== null && $entry['id'] >= $zeData[$u]['nextId']) $zeData[$u]['nextId'] = $entry['id'] + 1;

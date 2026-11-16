@@ -42,7 +42,10 @@ final class Sollzeit
     {
         $typ = (string)($eintrag['typ'] ?? '');
         if ($typ === 'arbeit') return self::number($eintrag['stunden'] ?? 0, 0.0);
-        if (in_array($typ, ['urlaub', 'krank', 'feiertag'], true)) {
+        if ($typ === 'urlaub') {
+            return self::tagesSoll($mitarbeiter, (string)($eintrag['datum'] ?? '')) * self::tagesanteil($eintrag);
+        }
+        if (in_array($typ, ['krank', 'feiertag'], true)) {
             return self::tagesSoll($mitarbeiter, (string)($eintrag['datum'] ?? ''));
         }
         if (in_array($typ, ['abwesend', 'gleitzeit', 'sonstig'], true)) return 0.0;
@@ -76,6 +79,28 @@ final class Sollzeit
 
         $key = (string)$jahr;
         return array_key_exists($key, $raw) && is_numeric($raw[$key]) ? (float)$raw[$key] : 30.0;
+    }
+
+    /** Tagesanteil eines Urlaubseintrags: 0.5 für einen halben Tag, sonst 1 (auch für alle anderen Typen). */
+    public static function tagesanteil(array $eintrag): float
+    {
+        if ((string)($eintrag['typ'] ?? '') !== 'urlaub') return 1.0;
+        $anteil = self::number($eintrag['tagesanteil'] ?? null, 1.0);
+        return abs($anteil - 0.5) < 0.001 ? 0.5 : 1.0;
+    }
+
+    /** Urlaubstage eines Eintrags (0, 0.5 oder 1). */
+    public static function urlaubTage(array $eintrag): float
+    {
+        return (string)($eintrag['typ'] ?? '') === 'urlaub' ? self::tagesanteil($eintrag) : 0.0;
+    }
+
+    /** Urlaubsanspruch-Eingabe auf 0,5-Tage-Schritte normalisieren (Komma erlaubt, nie negativ). */
+    public static function urlaubstageNormalisieren(mixed $wert, float $default = 30.0): float
+    {
+        if (is_string($wert)) $wert = str_replace(',', '.', trim($wert));
+        if (!is_numeric($wert)) return $default;
+        return max(0.0, round((float)$wert * 2) / 2);
     }
 
     private static function arbeitstage(mixed $raw): array

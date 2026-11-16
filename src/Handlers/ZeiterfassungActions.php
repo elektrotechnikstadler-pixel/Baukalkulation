@@ -34,9 +34,29 @@ class ZeiterfassungActions
     }
 
     /** Ermittelt das Urlaubs-Jahreslimit (Default 30, falls für das Jahr nichts hinterlegt). */
-    private function urlaubLimitForYear(array $urlaubProJahr, string $year): int
+    private function urlaubLimitForYear(array $urlaubProJahr, string $year): float
     {
-        return (int)Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => $urlaubProJahr], (int)$year);
+        return Sollzeit::urlaubsanspruch(['urlaubstageProJahr' => $urlaubProJahr], (int)$year);
+    }
+
+    /** Tage für Meldungen formatieren (12 bzw. 12,5). */
+    private static function tageText(float $tage): string
+    {
+        return str_replace('.', ',', (string)$tage);
+    }
+
+    /** Summe der Urlaubstage eines Users in einem Jahr (halbe Tage zählen 0,5), optional ohne einen Eintrag. */
+    private function urlaubTageImJahr(string $username, string $year, ?int $ohneEntryId = null): float
+    {
+        $sql = "SELECT typ, tagesanteil FROM zeiterfassung WHERE username = ? AND typ = 'urlaub' AND substr(datum,1,4) = ?";
+        $params = [$username, $year];
+        if ($ohneEntryId !== null) {
+            $sql .= ' AND entryId <> ?';
+            $params[] = $ohneEntryId;
+        }
+        $summe = 0.0;
+        foreach (Database::fetchAll($this->db, $sql, $params) as $r) $summe += Sollzeit::urlaubTage($r);
+        return $summe;
     }
 
     /** save_zeiterfassung */
@@ -71,21 +91,33 @@ class ZeiterfassungActions
         // Jahreslimit hinaus hinzukommen. Bestehende Über-Limit-Altdaten werden geduldet,
         // damit reine Bearbeitungen (z.B. Arbeits-Eintrag ändern) nicht scheitern.
         $oldUrlaubByYear = [];
-        foreach (Database::fetchAll($this->db, "SELECT datum FROM zeiterfassung WHERE username = ? AND typ = 'urlaub'", [$username]) as $r) {
+        $prevAnteil = []; // entryId => tagesanteil (alte Clients senden das Feld nicht mit)
+        foreach (Database::fetchAll($this->db, "SELECT entryId, datum, typ, tagesanteil FROM zeiterfassung WHERE username = ? AND typ = 'urlaub'", [$username]) as $r) {
             $y = substr((string)($r['datum'] ?? ''), 0, 4);
-            if ($y !== '') $oldUrlaubByYear[$y] = ($oldUrlaubByYear[$y] ?? 0) + 1;
+            if ($y !== '') $oldUrlaubByYear[$y] = ($oldUrlaubByYear[$y] ?? 0) + Sollzeit::urlaubTage($r);
+            if (isset($r['entryId'])) $prevAnteil[(int)$r['entryId']] = (float)$r['tagesanteil'];
+        }
+        $anteile = []; // Index in $entries => normalisierter tagesanteil
+        foreach ($entries as $i => $e) {
+            if (!is_array($e) || ($e['typ'] ?? '') !== 'urlaub') {
+                $anteile[$i] = 1.0;
+                continue;
+            }
+            $eid = isset($e['id']) ? (int)$e['id'] : 0;
+            if (!array_key_exists('tagesanteil', $e) && isset($prevAnteil[$eid])) $e['tagesanteil'] = $prevAnteil[$eid];
+            $anteile[$i] = Sollzeit::tagesanteil($e);
         }
         $newUrlaubByYear = [];
-        foreach ($entries as $e) {
+        foreach ($entries as $i => $e) {
             if (($e['typ'] ?? '') !== 'urlaub') continue;
             $y = substr((string)($e['datum'] ?? ''), 0, 4);
-            if ($y !== '') $newUrlaubByYear[$y] = ($newUrlaubByYear[$y] ?? 0) + 1;
+            if ($y !== '') $newUrlaubByYear[$y] = ($newUrlaubByYear[$y] ?? 0) + $anteile[$i];
         }
         foreach ($newUrlaubByYear as $y => $cnt) {
             $limit  = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], (string)$y);
             $oldCnt = $oldUrlaubByYear[$y] ?? 0;
             if ($cnt > $limit && $cnt > $oldCnt) {
-                jsonOut(['error' => "Urlaubslimit für {$y} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
+                jsonOut(['error' => "Urlaubslimit für {$y} erreicht (" . self::tageText($limit) . " Tage). Buchung nicht möglich."], 400);
             }
         }
 
@@ -166,17 +198,18 @@ class ZeiterfassungActions
             $stmt = $this->db->prepare(
                 "INSERT INTO zeiterfassung
                    (username, entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause, stundenKatId,
-                    clientUuid, status, errorCode, errorMessage, baustelleName, createdAt, updatedAt, quelle)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                    clientUuid, status, errorCode, errorMessage, baustelleName, createdAt, updatedAt, quelle, tagesanteil)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             );
             $written  = [];
             $moveLogs = [];
-            foreach ($entries as $e) {
+            foreach ($entries as $i => $e) {
                 $typ        = $e['typ'] ?? '';
                 $stundenVal = (float)($e['stunden'] ?? 0);
-                // Urlaub/Krank werden serverseitig immer mit Soll/Tag gutgeschrieben (Gleitzeit-neutral)
+                $anteil     = $anteile[$i] ?? 1.0;
+                // Urlaub/Krank werden serverseitig immer mit Soll/Tag gutgeschrieben (Gleitzeit-neutral), halber Urlaubstag mit halbem Soll
                 if (in_array($typ, self::CREDITED_ABSENCE_TYPEN, true)) {
-                    $stundenVal = $this->absenceStundenForDate((string)($e['datum'] ?? ''), $zeitCfg);
+                    $stundenVal = $this->absenceStundenForDate((string)($e['datum'] ?? ''), $zeitCfg) * $anteil;
                 }
                 $eid  = isset($e['id']) && $e['id'] !== null ? (int)$e['id'] : 0;
                 $prev = $eid > 0 ? ($prevMeta[$eid] ?? null) : null;
@@ -211,6 +244,7 @@ class ZeiterfassungActions
                     (string)($prev['createdAt'] ?? $now),
                     $now,
                     $quelle,
+                    $anteil,
                 ]);
 
                 $written[] = [
@@ -220,6 +254,7 @@ class ZeiterfassungActions
                     'datum'       => $e['datum'] ?? '',
                     'baustelleId' => $bId,
                     'stunden'     => $stundenVal,
+                    'tagesanteil' => $anteil,
                 ];
 
                 // Projektwechsel für den Audit-Trail vormerken.
@@ -1705,7 +1740,7 @@ class ZeiterfassungActions
     public function load(): void
     {
         Auth::requireAuth();
-        $rows = Database::fetchAll($this->db, "SELECT entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause, stundenKatId, clientUuid, status, errorCode, errorMessage, baustelleName FROM zeiterfassung WHERE username = ? ORDER BY datum, pk", [$_SESSION['username']]);
+        $rows = Database::fetchAll($this->db, "SELECT entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause, stundenKatId, clientUuid, status, errorCode, errorMessage, baustelleName, tagesanteil FROM zeiterfassung WHERE username = ? ORDER BY datum, pk", [$_SESSION['username']]);
         $entries = array_map(fn($r) => [
             'id'          => $r['entryId'] !== null ? (int)$r['entryId'] : null,
             'datum'       => $r['datum'],
@@ -1722,6 +1757,7 @@ class ZeiterfassungActions
             'errorCode'   => (string)($r['errorCode'] ?? ''),
             'errorMessage'=> (string)($r['errorMessage'] ?? ''),
             'baustelleName'=> (string)($r['baustelleName'] ?? ''),
+            'tagesanteil' => Sollzeit::tagesanteil($r),
         ], $rows);
         jsonOut(['ok' => true, 'entries' => $entries, 'zeitRev' => $this->currentZeitRev($_SESSION['username'])]);
     }
@@ -1730,7 +1766,7 @@ class ZeiterfassungActions
     public function loadAll(): void
     {
         Auth::requireAuth();
-        $rows = $this->db->query("SELECT username, entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause, stundenKatId, clientUuid, status, errorCode, errorMessage, baustelleName FROM zeiterfassung ORDER BY username, datum, pk")->fetchAll();
+        $rows = $this->db->query("SELECT username, entryId, datum, typ, baustelleId, stunden, bemerkung, von, bis, pause, stundenKatId, clientUuid, status, errorCode, errorMessage, baustelleName, tagesanteil FROM zeiterfassung ORDER BY username, datum, pk")->fetchAll();
         $data = [];
         foreach ($rows as $r) {
             $u = $r['username'];
@@ -1751,6 +1787,7 @@ class ZeiterfassungActions
                 'errorCode'   => (string)($r['errorCode'] ?? ''),
                 'errorMessage'=> (string)($r['errorMessage'] ?? ''),
                 'baustelleName'=> (string)($r['baustelleName'] ?? ''),
+                'tagesanteil' => Sollzeit::tagesanteil($r),
             ];
             $data[$u]['entries'][] = $entry;
             if ($entry['id'] !== null && $entry['id'] >= $data[$u]['nextId']) {
@@ -1852,7 +1889,7 @@ class ZeiterfassungActions
         Auth::requireRole('admin', 'master');
         $target     = trim($this->body['username'] ?? '');
         $year       = (int)($this->body['year'] ?? date('Y'));
-        $urlaubstage = (int)($this->body['urlaubstage'] ?? 30);
+        $urlaubstage = Sollzeit::urlaubstageNormalisieren($this->body['urlaubstage'] ?? 30);
         if (strtolower($target) === 'systemadmin') jsonOut(['error' => 'Eigenschaften von Systemadmin nicht änderbar.'], 403);
 
         $row = Database::fetchOne($this->db, "SELECT urlaubstageProJahr FROM users WHERE username = ?", [$target]);
@@ -1985,7 +2022,7 @@ class ZeiterfassungActions
         $entryId = (int)($this->body['entryId'] ?? 0);
         if (!$target || !$entryId) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
-        $old = Database::fetchOne($this->db, "SELECT datum, typ, stunden, baustelleId, baustelleName, bemerkung, von, bis, pause FROM zeiterfassung WHERE username = ? AND entryId = ?", [$target, $entryId]);
+        $old = Database::fetchOne($this->db, "SELECT datum, typ, stunden, baustelleId, baustelleName, bemerkung, von, bis, pause, tagesanteil FROM zeiterfassung WHERE username = ? AND entryId = ?", [$target, $entryId]);
         if (!$old) jsonOut(['error' => 'Eintrag nicht gefunden.'], 404);
 
         // Nicht gesendete Felder behalten ihren Wert (die mobile Bearbeitung sendet z.B.
@@ -2000,19 +2037,19 @@ class ZeiterfassungActions
         $von     = trim((string)$feld('von', $old['von']));
         $bis     = trim((string)$feld('bis', $old['bis']));
         $pause   = (float)$feld('pause', $old['pause']);
+        $anteil  = Sollzeit::tagesanteil(['typ' => $typ, 'tagesanteil' => $feld('tagesanteil', $old['tagesanteil'])]);
 
-        // Urlaub/Krank serverseitig immer mit Soll/Tag gutschreiben (Gleitzeit-neutral)
+        // Urlaub/Krank serverseitig immer mit Soll/Tag gutschreiben (Gleitzeit-neutral), halber Urlaubstag mit halbem Soll
         $zeitCfg = $this->loadUserZeitConfig($target);
         if (in_array($typ, self::CREDITED_ABSENCE_TYPEN, true)) {
-            $stunden = $this->absenceStundenForDate($datum, $zeitCfg);
+            $stunden = $this->absenceStundenForDate($datum, $zeitCfg) * $anteil;
         }
         // Urlaubslimit prüfen (dieser Eintrag ausgenommen)
         if ($typ === 'urlaub') {
-            $year = substr($datum, 0, 4);
-            $row  = Database::fetchOne($this->db, "SELECT COUNT(*) AS c FROM zeiterfassung WHERE username = ? AND typ = 'urlaub' AND entryId <> ? AND substr(datum,1,4) = ?", [$target, $entryId, $year]);
+            $year  = substr($datum, 0, 4);
             $limit = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], $year);
-            if ((int)($row['c'] ?? 0) + 1 > $limit) {
-                jsonOut(['error' => "Urlaubslimit für {$year} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
+            if ($this->urlaubTageImJahr($target, $year, $entryId) + $anteil > $limit) {
+                jsonOut(['error' => "Urlaubslimit für {$year} erreicht (" . self::tageText($limit) . " Tage). Buchung nicht möglich."], 400);
             }
         }
 
@@ -2036,7 +2073,7 @@ class ZeiterfassungActions
                 $logStmt->execute([
                     $target, $entryId, 'edit',
                     json_encode($old, JSON_UNESCAPED_UNICODE),
-                    json_encode(['datum'=>$datum,'typ'=>$typ,'stunden'=>$stunden,'bemerkung'=>$bemerkung,'von'=>$von,'bis'=>$bis,'pause'=>$pause], JSON_UNESCAPED_UNICODE),
+                    json_encode(['datum'=>$datum,'typ'=>$typ,'stunden'=>$stunden,'bemerkung'=>$bemerkung,'von'=>$von,'bis'=>$bis,'pause'=>$pause,'tagesanteil'=>$anteil], JSON_UNESCAPED_UNICODE),
                     $_SESSION['username'],
                     $now,
                 ]);
@@ -2053,8 +2090,8 @@ class ZeiterfassungActions
             }
 
             $vorherKat = Database::fetchOne($this->db, "SELECT stundenKatId FROM zeiterfassung WHERE username = ? AND entryId = ?", [$target, $entryId]);
-            $stmt = $this->db->prepare("UPDATE zeiterfassung SET datum = ?, typ = ?, stunden = ?, baustelleId = ?, baustelleName = ?, bemerkung = ?, von = ?, bis = ?, pause = ?, updatedAt = ? WHERE username = ? AND entryId = ?");
-            $stmt->execute([$datum, $typ, $stunden, $baustelleId, $neuName, $bemerkung, $von, $bis, $pause, $now, $target, $entryId]);
+            $stmt = $this->db->prepare("UPDATE zeiterfassung SET datum = ?, typ = ?, stunden = ?, baustelleId = ?, baustelleName = ?, bemerkung = ?, von = ?, bis = ?, pause = ?, tagesanteil = ?, updatedAt = ? WHERE username = ? AND entryId = ?");
+            $stmt->execute([$datum, $typ, $stunden, $baustelleId, $neuName, $bemerkung, $von, $bis, $pause, $anteil, $now, $target, $entryId]);
 
             $vorherWerte = [$entryId => $old + ['stundenKatId' => $vorherKat['stundenKatId'] ?? null]];
             if ($this->syncNachAdminAenderung($target, $altBId !== null ? [$altBId] : [], $vorherWerte)['changed']) {
@@ -2088,6 +2125,7 @@ class ZeiterfassungActions
         $von         = trim($this->body['von']  ?? '');
         $bis         = trim($this->body['bis']  ?? '');
         $pause       = (float)($this->body['pause'] ?? 0);
+        $anteil      = Sollzeit::tagesanteil(['typ' => $typ, 'tagesanteil' => $this->body['tagesanteil'] ?? 1]);
 
         if (!$target || !$datum) jsonOut(['error' => 'Ungültige Parameter.'], 400);
 
@@ -2124,12 +2162,11 @@ class ZeiterfassungActions
         // Urlaubslimit prüfen (bestehende + neue Tage pro Jahr)
         if ($typ === 'urlaub') {
             $newByYear = [];
-            foreach ($dates as $d) { $y = substr($d, 0, 4); $newByYear[$y] = ($newByYear[$y] ?? 0) + 1; }
+            foreach ($dates as $d) { $y = substr($d, 0, 4); $newByYear[$y] = ($newByYear[$y] ?? 0) + $anteil; }
             foreach ($newByYear as $y => $cnt) {
-                $row      = Database::fetchOne($this->db, "SELECT COUNT(*) AS c FROM zeiterfassung WHERE username = ? AND typ = 'urlaub' AND substr(datum,1,4) = ?", [$target, (string)$y]);
                 $limit    = $this->urlaubLimitForYear($zeitCfg['urlaubProJahr'], (string)$y);
-                if ((int)($row['c'] ?? 0) + $cnt > $limit) {
-                    jsonOut(['error' => "Urlaubslimit für {$y} erreicht ({$limit} Tage). Buchung nicht möglich."], 400);
+                if ($this->urlaubTageImJahr($target, (string)$y) + $cnt > $limit) {
+                    jsonOut(['error' => "Urlaubslimit für {$y} erreicht (" . self::tageText($limit) . " Tage). Buchung nicht möglich."], 400);
                 }
             }
         }
@@ -2138,7 +2175,7 @@ class ZeiterfassungActions
         $row    = Database::fetchOne($this->db, "SELECT COALESCE(MAX(entryId),0) AS m FROM zeiterfassung WHERE username = ?", [$target]);
         $nextId = (int)($row['m'] ?? 0) + 1;
 
-        $stmt         = $this->db->prepare("INSERT INTO zeiterfassung (username, entryId, datum, typ, baustelleId, baustelleName, stunden, bemerkung, von, bis, pause, clientUuid, status, createdAt, updatedAt, quelle) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'admin')");
+        $stmt         = $this->db->prepare("INSERT INTO zeiterfassung (username, entryId, datum, typ, baustelleId, baustelleName, stunden, bemerkung, von, bis, pause, clientUuid, status, createdAt, updatedAt, quelle, tagesanteil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'admin',?)");
         $auditEnabled = !empty($settings['erweiterte_zeiterfassung']);
         $auditStmt    = $auditEnabled
             ? $this->db->prepare("INSERT INTO zeiterfassung_log (username, entryId, aktion, alteWerte, neueWerte, geaendertVon, geaendertAm) VALUES (?,?,?,?,?,?,?)")
@@ -2165,21 +2202,21 @@ class ZeiterfassungActions
             foreach ($dates as $d) {
                 // Urlaub/Krank + "Ist = Soll"-Typen pro Tag mit Soll/Tag gutschreiben (Gleitzeit-neutral)
                 $stundenForDate = in_array($typ, $creditedTypen, true)
-                    ? $this->absenceStundenForDate($d, $zeitCfg)
+                    ? $this->absenceStundenForDate($d, $zeitCfg) * $anteil
                     : $stunden;
                 $stmt->execute([
                     $target, $nextId, $d, $typ, $baustelleId, $bName, $stundenForDate, $bemerkung, $von, $bis, $pause,
-                    self::newUuid(), BuchungValidator::STATUS_VALID, $nowTs, $nowTs,
+                    self::newUuid(), BuchungValidator::STATUS_VALID, $nowTs, $nowTs, $anteil,
                 ]);
                 if ($auditStmt) {
                     $auditStmt->execute([
                         $target, $nextId, 'add', '',
-                        json_encode(['datum'=>$d,'typ'=>$typ,'stunden'=>$stundenForDate,'bemerkung'=>$bemerkung,'von'=>$von,'bis'=>$bis,'pause'=>$pause], JSON_UNESCAPED_UNICODE),
+                        json_encode(['datum'=>$d,'typ'=>$typ,'stunden'=>$stundenForDate,'bemerkung'=>$bemerkung,'von'=>$von,'bis'=>$bis,'pause'=>$pause,'tagesanteil'=>$anteil], JSON_UNESCAPED_UNICODE),
                         $_SESSION['username'],
                         $nowTs,
                     ]);
                 }
-                $inserted[] = ['entryId' => $nextId, 'datum' => $d, 'stunden' => $stundenForDate];
+                $inserted[] = ['entryId' => $nextId, 'datum' => $d, 'stunden' => $stundenForDate, 'tagesanteil' => $anteil];
                 $nextId++;
             }
 

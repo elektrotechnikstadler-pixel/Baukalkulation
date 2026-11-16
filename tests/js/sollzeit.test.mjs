@@ -21,6 +21,10 @@ const {
   bkVirtuelleFeiertage,
   bkGleitzeitSaldo,
   bkUrlaubsanspruch,
+  bkUrlaubTage,
+  bkTagesanteil,
+  bkUrlaubstageEingabe,
+  bkFormatTage,
   bkSollBeschreibung,
 } = context;
 
@@ -111,6 +115,33 @@ test('bkUrlaubsanspruch erfüllt alle gemeinsamen Fälle', () => {
   for (const fall of faelle.urlaubsanspruch) {
     assert.equal(bkUrlaubsanspruch(fall.mitarbeiter, fall.jahr), fall.expected, fall.name);
   }
+});
+
+test('bkUrlaubTage zählt halbe Tage mit 0,5 und filtert das Jahr', () => {
+  const eintraege = [
+    { datum: '2025-03-17', typ: 'urlaub', tagesanteil: 0.5 },
+    { datum: '2025-03-18', typ: 'urlaub', tagesanteil: 1 },
+    { datum: '2025-03-19', typ: 'urlaub' },
+    { datum: '2025-03-20', typ: 'krank', tagesanteil: 0.5 },
+    { datum: '2024-12-30', typ: 'urlaub', tagesanteil: 0.5 },
+  ];
+  assert.equal(bkUrlaubTage(eintraege, 2025), 2.5);
+  assert.equal(bkUrlaubTage(eintraege, '2024'), 0.5);
+  assert.equal(bkUrlaubTage(eintraege), 3);
+  assert.equal(bkUrlaubTage(null), 0);
+  assert.equal(bkTagesanteil({ typ: 'urlaub', tagesanteil: '0.5' }), 0.5);
+  assert.equal(bkTagesanteil({ typ: 'krank', tagesanteil: 0.5 }), 1);
+});
+
+test('bkUrlaubstageEingabe rundet auf 0,5-Schritte und bkFormatTage nutzt Komma', () => {
+  assert.equal(bkUrlaubstageEingabe('27,5'), 27.5);
+  assert.equal(bkUrlaubstageEingabe('27.4'), 27.5);
+  assert.equal(bkUrlaubstageEingabe('27.2'), 27);
+  assert.equal(bkUrlaubstageEingabe(''), 30);
+  assert.equal(bkUrlaubstageEingabe('abc'), 30);
+  assert.equal(bkUrlaubstageEingabe('-3'), 0);
+  assert.equal(bkFormatTage(12.5), '12,5');
+  assert.equal(bkFormatTage(12), '12');
 });
 
 test('bkGleitzeitSaldo erfüllt alle gemeinsamen Fälle', () => {

@@ -11,7 +11,7 @@
 
 import { ref, computed, watch, onMounted } from 'vue';
 import type { ZeitEntry } from '../modules/zeiterfassung/types.ts';
-import { TYP_EMOJI }      from '../modules/zeiterfassung/types.ts';
+import { TYP_EMOJI, urlaubTage, formatTage, tagesanteil } from '../modules/zeiterfassung/types.ts';
 import { formatDate }      from '@core/utils.ts';
 
 // ── Props ─────────────────────────────────────────────────────
@@ -98,8 +98,7 @@ const gleitzeitSaldo = computed(() =>
             ?.(entries.value, sollTag.value, year, gleitzeitBuchungen.value, arbeitstage.value) ?? 0)
         : 0);
 const urlaubJahr     = computed(() => urlaubProJahr.value[year] ?? 30);
-const urlaubGenommen = computed(() =>
-    entries.value.filter(e => e.typ === 'urlaub' && e.datum?.startsWith(String(year))).length);
+const urlaubGenommen = computed(() => urlaubTage(entries.value, year));
 
 // Heute
 const heuteIst  = computed(() =>
@@ -195,7 +194,7 @@ function typIcon(typ: string): string {
     return icons[typ] ?? '⏱';
 }
 function typText(e: ZeitEntry): string {
-    if (e.typ === 'urlaub')    return 'Urlaubstag';
+    if (e.typ === 'urlaub')    return tagesanteil(e) === 0.5 ? '½ Urlaubstag' : 'Urlaubstag';
     if (e.typ === 'krank')     return 'Krankheitstag';
     if (e.typ === 'gleitzeit') return 'Gleittag';
     if (e.typ === 'sonstig')   return e.bemerkung || 'Sonstig';
@@ -252,7 +251,7 @@ function positiveColor(v: number) { return v >= 0 ? '#28A745' : '#FF3B30'; }
     </div>
     <div class="kpi-tile" style="flex:1;min-width:30%;background:var(--surface)">
       <div class="kpi-tile-label">Urlaub {{ year }}</div>
-      <div class="kpi-tile-value">{{ urlaubGenommen }}/{{ urlaubJahr }}</div>
+      <div class="kpi-tile-value">{{ formatTage(urlaubGenommen) }}/{{ formatTage(urlaubJahr) }}</div>
     </div>
     <div class="kpi-tile" style="flex:1;min-width:30%;background:var(--surface)">
       <div class="kpi-tile-label">Krank</div>

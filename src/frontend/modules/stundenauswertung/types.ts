@@ -24,6 +24,7 @@ export interface SaEntry {
     von?:          string;
     bis?:          string;
     pause?:        number;
+    tagesanteil?:  number;
 }
 
 export interface SaZeitData {

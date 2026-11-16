@@ -10848,7 +10848,7 @@ async function openUserProfileModal(username) {
         ${sollzeitInputs}
       </div>
       <div><label class="form-label">Urlaub ${currentYear}</label>
-        <input id="upUrlaub" type="number" class="form-control" style="width:100%" value="${esc(urlaubJ)}" min="0" step="1"></div>
+        <input id="upUrlaub" type="number" class="form-control" style="width:100%" value="${esc(urlaubJ)}" min="0" step="0.5"></div>
       <div><label class="form-label">Stundenkategorie</label>
         <select id="upStdKat" class="form-control" style="width:100%">
           <option value="">— Keine —</option>
@@ -11931,9 +11931,9 @@ function _renderJahreswechselModal(d, year) {
     const nextVal = (u.urlaubstageProJahr && u.urlaubstageProJahr[nextYear]) ?? curVal;
     return `<tr>
       <td style="padding:6px 8px;font-size:.85rem">${esc(u.username)}</td>
-      <td style="padding:6px 8px;font-size:.85rem;text-align:center">${curVal}</td>
+      <td style="padding:6px 8px;font-size:.85rem;text-align:center">${bkFormatTage(curVal)}</td>
       <td style="padding:6px 8px">
-        <input type="number" min="0" max="365" value="${nextVal}"
+        <input type="number" min="0" max="365" step="0.5" value="${nextVal}"
                style="width:72px;font-size:.85rem;padding:3px 6px;border:1px solid #ccc;border-radius:4px;text-align:center"
                data-jw-urlaub-user="${esc(u.username)}" data-jw-urlaub-prev="${curVal}">
       </td>
@@ -12278,7 +12278,7 @@ async function saExportZeiterfassungExcel(year) {
         .sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
       entries.forEach(e => {
         const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || ('#'+e.baustelleId)) : '';
-        const typLabel = (typeof _seTypLabel === 'function') ? _seTypLabel(e.typ) : (e.typ||'');
+        const typLabel = (typeof _seTypLabel === 'function') ? _seEntryLabel(e) : (e.typ||'');
         const stunden = bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []);
         if (erweitert) {
           rows.push([username, e.datum, typLabel, e.von||'', e.bis||'', e.pause||'', bName, e.bemerkung||'', stunden]);
@@ -15477,6 +15477,12 @@ function _seTypLabel(typ) {
   return typ ? (typ.charAt(0).toUpperCase() + typ.slice(1)) : 'Sonstig';
 }
 
+/** Anzeige-Label eines Eintrags; halbe Urlaubstage mit Zusatz „(½ Tag)“. */
+function _seEntryLabel(e) {
+  const label = _seTypLabel(e && e.typ);
+  return e && e.typ === 'urlaub' && bkTagesanteil(e) === 0.5 ? label + ' (½ Tag)' : label;
+}
+
 /** Befüllt einen <select>-Element mit allen verfügbaren SE-Typen. */
 function _fillSeTypSelect(selectId, selectedValue) {
   const sel = document.getElementById(selectId);
@@ -15645,6 +15651,7 @@ function _resetSeDesktopForm() {
   _fillSeTypSelect('seDesktopTyp', 'arbeit');
   document.getElementById('seDesktopStunden').value = '';
   document.getElementById('seDesktopBemerkung').value = '';
+  document.getElementById('seDesktopHalbtag').checked = false;
   document.getElementById('seDesktopBaustelle').value = '';
   document.getElementById('seDesktopBaustelleSearch').value = '';
   document.getElementById('seDesktopVon').value = '';
@@ -15745,6 +15752,8 @@ function toggleSeDesktopFields() {
   const showVonBis = (isArbeit && erweitert) || sonstigZeit;
   const showManualStunden = isArbeit ? !erweitert : (sonstigZeit || isAbwesend || (isCustomArbeit && !isIstSoll));
   document.getElementById('seDesktopSonstigModusWrap').style.display = isSonstig ? '' : 'none';
+  const halbtagWrap = document.getElementById('seDesktopHalbtagWrap');
+  if (halbtagWrap) halbtagWrap.style.display = typ === 'urlaub' ? '' : 'none';
   document.getElementById('seDesktopStundenWrap').style.display = showManualStunden ? '' : 'none';
   document.getElementById('seDesktopVonWrap').style.display = showVonBis ? '' : 'none';
   document.getElementById('seDesktopBisWrap').style.display = showVonBis ? '' : 'none';
@@ -15794,10 +15803,11 @@ function calcGleitzeitSaldo(entries, user, year, buchungen) {
 }
 
 function parseUrlaubstageInput(value) {
-  const text = String(value ?? '').trim();
-  if (text === '') return 30;
-  const number = parseInt(text, 10);
-  return Number.isFinite(number) ? number : 30;
+  return bkUrlaubstageEingabe(value, 30);
+}
+
+function _seDesktopTagesanteil(typ) {
+  return typ === 'urlaub' && document.getElementById('seDesktopHalbtag')?.checked ? 0.5 : 1;
 }
 
 function calcJahresStichtag(year) {
@@ -15857,7 +15867,7 @@ function renderSeDesktop() {
   const vtFeiertage = getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopUser, now.getFullYear(), now.getMonth());
   const monthHours = sumIstStunden(monthEntries, seDesktopUser)
     + sumIstStunden(vtFeiertage, seDesktopUser);
-  const monthUrlaub = monthEntries.filter(e => e.typ === 'urlaub').length;
+  const monthUrlaub = bkUrlaubTage(monthEntries);
   const monthGleitzeit = monthEntries.filter(e => e.typ === 'gleitzeit').length;
   const monthKrank = monthEntries.filter(e => e.typ === 'krank').length;
 
@@ -15876,7 +15886,7 @@ function renderSeDesktop() {
 
   // Urlaubskonto
   const urlaubJahr = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, year);
-  const urlaubGenommen = zeitEntriesDesktop.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+  const urlaubGenommen = bkUrlaubTage(zeitEntriesDesktop, year);
 
   document.getElementById('seMonthKpi').innerHTML = `
     <div class="kpi-card kpi-compact">
@@ -15897,7 +15907,7 @@ function renderSeDesktop() {
     </div>` : ''}
     <div class="kpi-card kpi-compact">
       <span class="kpi-icon">${ico('palm')}</span>
-      <div class="kpi-body"><span class="kpi-label">Urlaub ${year}</span><span class="kpi-value">${urlaubGenommen}/${urlaubJahr}</span></div>
+      <div class="kpi-body"><span class="kpi-label">Urlaub ${year}</span><span class="kpi-value">${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)}</span></div>
     </div>
     <div class="kpi-card kpi-compact">
       <span class="kpi-icon">${ico('thermometer')}</span>
@@ -15952,7 +15962,7 @@ function renderSeDesktop() {
   allRows.forEach(e => {
     const isVirtual = !!e._virtual;
     const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung || 'Feiertag')}` :
-      (e.typ === 'urlaub' ? `${ico('palm')} Urlaub` : (e.typ === 'krank' ? `${ico('thermometer')} Krank` : (e.typ === 'gleitzeit' ? `⏱ Gleitzeit` : (isAbwesendTyp(e.typ) ? `🚪 Abwesend` : (e.typ === 'sonstig' ? `${ico('alert')} ${esc(e.bemerkung || 'Sonstig')}` : isArbeitTyp(e.typ) ? `${ico('clock')} ${esc(_seTypLabel(e.typ))}` : `${ico('clock')} Arbeit`)))));
+      (e.typ === 'urlaub' ? `${ico('palm')} ${esc(_seEntryLabel(e))}` : (e.typ === 'krank' ? `${ico('thermometer')} Krank` : (e.typ === 'gleitzeit' ? `⏱ Gleitzeit` : (isAbwesendTyp(e.typ) ? `🚪 Abwesend` : (e.typ === 'sonstig' ? `${ico('alert')} ${esc(e.bemerkung || 'Sonstig')}` : isArbeitTyp(e.typ) ? `${ico('clock')} ${esc(_seEntryLabel(e))}` : `${ico('clock')} Arbeit`)))));
     const entryDate = e.datum ? new Date(e.datum + 'T00:00:00') : null;
     // Bearbeiten/Löschen nur für Einträge der letzten 5 Tage (datumsbasiert, inkl.
     // Zukunft) – NICHT die letzten 5 Einträge, sonst blockieren z.B. Urlaubseinträge
@@ -16039,7 +16049,7 @@ function addStundenerfassungDesktop() {
       const _isManualCustomArbeit = isArbeitTyp(typ) && typ !== 'arbeit' && !seTypIstGleichSoll(typ);
       stunden = (typ === 'arbeit' || isAbwesendTyp(typ) || _isManualCustomArbeit)
         ? (parseFloat(document.getElementById('seDesktopStunden').value) || 0)
-        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) : 0);
+        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) * _seDesktopTagesanteil(typ) : 0);
     }
     // Hinweis bei >10h Tagessumme im Normal-Modus
     if (typ === 'arbeit') {
@@ -16099,15 +16109,16 @@ function addStundenerfassungDesktop() {
     dates.push(datum);
   }
 
-  // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30)
+  // Urlaubslimit prüfen (Jahresbudget nach urlaubstageProJahr, sonst 30; halbe Tage zählen 0,5)
+  const tagesanteil = _seDesktopTagesanteil(typ);
   if (typ === 'urlaub') {
     const byYear = {};
-    dates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; });
+    dates.forEach(d => { const y = d.slice(0, 4); byYear[y] = (byYear[y] || 0) + tagesanteil; });
     for (const y in byYear) {
       const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, y);
-      const existing = zeitEntriesDesktop.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y) && !dates.includes(e.datum)).length;
+      const existing = bkUrlaubTage(zeitEntriesDesktop.filter(e => !dates.includes(e.datum)), y);
       if (existing + byYear[y] > limit) {
-        showNotification(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error');
+        showNotification(`Urlaubslimit für ${y} erreicht (${bkFormatTage(limit)} Tage). Buchung nicht möglich.`, 'error');
         return;
       }
     }
@@ -16120,7 +16131,7 @@ function addStundenerfassungDesktop() {
   dates.forEach(d => {
     // Mehrfacherfassung pro Tag nur bei Arbeit und Abwesenheit sinnvoll
     if (typ !== 'arbeit' && !isAbwesendTyp(typ) && existingDates.has(d)) return; // Skip duplicates for Urlaub/Krank/Sonstig only
-    pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden, baustelleId, baustelleName, bemerkung, von: (typ === 'arbeit' || sonstigZeitspanne) ? von : '', bis: (typ === 'arbeit' || sonstigZeitspanne) ? bis : '', pause: typ === 'arbeit' ? pauseMin : 0, stundenKatId: typ === 'arbeit' ? stundenKatId : null });
+    pendingEntries.push({ id: ++maxId, clientUuid: newZeitUuid(), datum: d, typ, stunden, tagesanteil, baustelleId, baustelleName, bemerkung, von: (typ === 'arbeit' || sonstigZeitspanne) ? von : '', bis: (typ === 'arbeit' || sonstigZeitspanne) ? bis : '', pause: typ === 'arbeit' ? pauseMin : 0, stundenKatId: typ === 'arbeit' ? stundenKatId : null });
     added++;
   });
 
@@ -16141,6 +16152,7 @@ function addStundenerfassungDesktop() {
       document.getElementById('seDesktopStunden').value = '';
       document.getElementById('seDesktopBemerkung').value = '';
       document.getElementById('seDesktopDatumBis').value = '';
+      document.getElementById('seDesktopHalbtag').checked = false;
       document.getElementById('seDesktopVon').value = '';
       document.getElementById('seDesktopBis').value = '';
       document.getElementById('seDesktopPause').value = '';
@@ -16291,6 +16303,7 @@ function editSeDesktop(id) {
   document.getElementById('seDesktopBis').value = entry.bis || '';
   document.getElementById('seDesktopPause').value = entry.pause != null ? entry.pause : '';
   document.getElementById('seDesktopBemerkung').value = entry.bemerkung || '';
+  document.getElementById('seDesktopHalbtag').checked = entry.typ === 'urlaub' && bkTagesanteil(entry) === 0.5;
   document.getElementById('seDesktopBaustelle').value = entry.baustelleId != null ? entry.baustelleId : '';
   document.getElementById('seDesktopBaustelleSearch').value = entry.baustelleName || '';
   const katSelect = document.getElementById('seDesktopStundenKat');
@@ -16378,7 +16391,7 @@ function _saveSeDesktopEdit() {
       const _isManualCustomArbeit = isArbeitTyp(typ) && typ !== 'arbeit' && !seTypIstGleichSoll(typ);
       stunden = (typ === 'arbeit' || isAbwesendTyp(typ) || _isManualCustomArbeit)
         ? (parseFloat(document.getElementById('seDesktopStunden').value) || 0)
-        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) : 0);
+        : (countsTowardIst(typ) ? bkTagesSoll(seDesktopUser, datum) * _seDesktopTagesanteil(typ) : 0);
     }
     if (typ === 'arbeit') {
       const tagSumme = others.filter(e => e.datum === datum && e.typ === 'arbeit').reduce((s, e) => s + (e.stunden || 0), 0);
@@ -16411,19 +16424,20 @@ function _saveSeDesktopEdit() {
     if (dupe) { showNotification('Für diesen Tag und Typ existiert bereits ein Eintrag.'); return; }
   }
 
-  // Urlaubslimit prüfen (ohne den bearbeiteten Eintrag selbst)
+  // Urlaubslimit prüfen (ohne den bearbeiteten Eintrag selbst; halbe Tage zählen 0,5)
+  const tagesanteil = _seDesktopTagesanteil(typ);
   if (typ === 'urlaub') {
     const y = datum.slice(0, 4);
     const limit = bkUrlaubsanspruch({ urlaubstageProJahr: seDesktopUrlaubProJahr }, y);
-    const existing = others.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(y)).length;
-    if (existing + 1 > limit) {
-      showNotification(`Urlaubslimit für ${y} erreicht (${limit} Tage). Buchung nicht möglich.`, 'error');
+    const existing = bkUrlaubTage(others, y);
+    if (existing + tagesanteil > limit) {
+      showNotification(`Urlaubslimit für ${y} erreicht (${bkFormatTage(limit)} Tage). Buchung nicht möglich.`, 'error');
       return;
     }
   }
 
   const updated = {
-    datum, typ, stunden, baustelleId, baustelleName, bemerkung,
+    datum, typ, stunden, tagesanteil, baustelleId, baustelleName, bemerkung,
     von: (typ === 'arbeit' || sonstigZeitspanne) ? von : '',
     bis: (typ === 'arbeit' || sonstigZeitspanne) ? bis : '',
     pause: typ === 'arbeit' ? pauseMin : 0,
@@ -16490,7 +16504,7 @@ function exportSeDesktopPDF() {
       + sumIstStunden(getVirtuelleFeiertagEintraege(zeitEntriesDesktop, seDesktopUser, year, m), seDesktopUser);
     const soll = calcSollMonat(seDesktopUser, year, m);
     const diff = ist - soll;
-    const urlaub = me.filter(e => e.typ === 'urlaub').length;
+    const urlaub = bkUrlaubTage(me);
     const gleitzeit = me.filter(e => e.typ === 'gleitzeit').length;
     const krank = me.filter(e => e.typ === 'krank').length;
     const sonstig = me.filter(e => e.typ === 'sonstig').length;
@@ -16498,10 +16512,10 @@ function exportSeDesktopPDF() {
     totalIst += ist; totalSoll += soll; totalUrlaub += urlaub; totalGleitzeit += gleitzeit; totalKrank += krank;
     const cls = diff >= 0 ? 'positive' : 'negative';
     const sign = diff >= 0 ? '+' : '';
-    html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${urlaub}</td><td>${gleitzeit}</td><td>${krank}</td><td>${sonstig}</td></tr>`;
+    html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${bkFormatTage(urlaub)}</td><td>${gleitzeit}</td><td>${krank}</td><td>${sonstig}</td></tr>`;
   });
   const totalDiff = totalIst - totalSoll;
-  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${totalUrlaub}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
+  html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalDiff>=0?'positive':'negative'}">${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}</td><td>${bkFormatTage(totalUrlaub)}</td><td>${totalGleitzeit}</td><td>${totalKrank}</td><td></td></tr>`;
   html += `</tbody></table>`;
 
   // Gleitzeitkonto Buchungen (nur wenn aktiviert)
@@ -16525,7 +16539,7 @@ function exportSeDesktopPDF() {
   yearEntries.forEach(e => {
     const d = new Date(e.datum);
     const wd = wdNames[d.getDay()];
-    const typLabel = _seTypLabel(e.typ);
+    const typLabel = _seEntryLabel(e);
     html += `<tr><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(e.baustelleName||'')}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${bkIstStundenEintrag(seDesktopUser, e, appSettings?.ze_custom_typen || []).toFixed(2)}</td></tr>`;
   });
   html += `</tbody></table>`;
@@ -16827,7 +16841,7 @@ function zpRenderTageBlock(username, kw, entries, dayDates, weekGeprueft, tagUse
   dayDates.forEach(datum => {
     const dayEntries = entries.filter(e => e.datum === datum);
     const arbeitH = sumIstStunden(dayEntries, user);
-    const typen = [...new Set(dayEntries.map(e => _seTypLabel(e.typ)))].join(', ');
+    const typen = [...new Set(dayEntries.map(e => _seEntryLabel(e)))].join(', ');
     const d = new Date(datum + 'T00:00:00');
     const dLabel = `${wd[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
     const tg = tagUser[datum] || {};
@@ -17237,7 +17251,7 @@ function renderStundenauswertung() {
     const uid = 'sa_' + user.username.replace(/\W/g, '_');
     const istTotal = sumIstStunden(entries, user);
     const urlaubJahr = bkUrlaubsanspruch(user, year);
-    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+    const urlaubGenommen = bkUrlaubTage(allEntries, year);
 
     html += `<div class="summary-box" style="margin-bottom:8px;cursor:pointer" onclick="document.getElementById('${uid}').classList.toggle('hidden')">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -17247,7 +17261,7 @@ function renderStundenauswertung() {
           <span><strong>${istTotal.toFixed(2)}</strong> h</span>
           ${gleitzeitAktivSa ? `<span style="color:${gzColor};font-weight:700">Gleitzeit: ${gzSign}${gleitzeitSaldo.toFixed(2)} h</span>
           <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openGleitzeitBuchungDialog('${esc(user.username)}', ${gleitzeitSaldo.toFixed(1)})" style="font-size:.75rem;padding:3px 8px" title="Gleitzeitkonto bearbeiten"> Gleitzeit</button>` : ''}
-          <span>Urlaub: ${urlaubGenommen}/${urlaubJahr}</span>
+          <span>Urlaub: ${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)}</span>
           <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();saAddEntry('${esc(user.username)}')" style="font-size:.75rem;padding:3px 8px" title="Eintrag nachtragen">${ico('plus')} Nachtragen</button>
         </div>
       </div>
@@ -17293,7 +17307,7 @@ function renderStundenauswertung() {
         const wd = d ? wdNames[d.getDay()] : '';
         const isWeekend = d && (d.getDay() === 0 || d.getDay() === 6);
         const bName = _saResolveBaustelleName(e.baustelleId);
-        const typLabel = _seTypLabel(e.typ);
+        const typLabel = _seEntryLabel(e);
         const bg = isWeekend ? 'background:var(--yellow-light);' : '';
         html += `<tr class="sa-row-${uid}-${mk}" style="${bg}${hideStyle}">
           <td style="font-weight:600">${e.datum ? e.datum.split('-').reverse().join('.') : ''}</td>
@@ -17474,6 +17488,9 @@ function openSaEntryModal(username, mode, entryId) {
           <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:4px">Stunden</label>
           <input type="number" id="saef_stunden" class="form-control" value="${initStunden}" min="0" max="24" step="0.25">
         </div>
+        <div id="saef_halbtag_wrap" style="margin-bottom:12px${initTyp === 'urlaub' ? '' : ';display:none'}">
+          <label style="font-size:.85rem;display:flex;align-items:center;gap:6px"><input type="checkbox" id="saef_halbtag"${e && bkTagesanteil(e) === 0.5 ? ' checked' : ''}> Halber Urlaubstag</label>
+        </div>
         <div id="saef_bs_wrap" style="margin-bottom:12px${isArbeit ? '' : ';display:none'}">
           <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:4px">Baustelle (optional)</label>
           <select id="saef_baustelle" class="form-control">
@@ -17524,6 +17541,7 @@ function _saefTypChanged() {
   set('saef_bs_wrap',   arbeit);
   set('saef_erw_wrap',  arbeit);
   set('saef_bis_wrap',  range);
+  set('saef_halbtag_wrap', typ === 'urlaub');
   const lbl = document.getElementById('saef_datum_lbl');
   if (lbl) lbl.textContent = range ? 'Datum von *' : 'Datum *';
 }
@@ -17563,6 +17581,7 @@ async function _saefSave(username, mode, entryId) {
   const von       = document.getElementById('saef_von')?.value       || '';
   const bisZeit   = document.getElementById('saef_biszeit')?.value   || '';
   const pause     = parseFloat(document.getElementById('saef_pause')?.value) || 0;
+  const tagesanteil = typ === 'urlaub' && document.getElementById('saef_halbtag')?.checked ? 0.5 : 1;
   const baustelleId = bsId ? parseInt(bsId) : null;
 
   if (!datum) {
@@ -17580,7 +17599,7 @@ async function _saefSave(username, mode, entryId) {
 
   try {
     if (mode === 'add') {
-      const body = { username, datum, typ, stunden, baustelleId, bemerkung, von, bis: bisZeit, pause };
+      const body = { username, datum, typ, stunden, baustelleId, bemerkung, von, bis: bisZeit, pause, tagesanteil };
       if (useRange) body.datumBis = datumBis;
       const r = await fetch('api.php?action=admin_add_zeiterfassung', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
       const j = await r.json();
@@ -17590,7 +17609,7 @@ async function _saefSave(username, mode, entryId) {
         showNotification(count > 1 ? `${count} Einträge nachgetragen.` : 'Eintrag nachgetragen.');
         if (!saAllZeit[username]) saAllZeit[username] = { entries: [] };
         inserted.forEach(ins => {
-          saAllZeit[username].entries.push({ id: ins.entryId, datum: ins.datum, typ, stunden: (ins.stunden != null ? ins.stunden : stunden), bemerkung, von, bis: bisZeit, pause, baustelleId });
+          saAllZeit[username].entries.push({ id: ins.entryId, datum: ins.datum, typ, stunden: (ins.stunden != null ? ins.stunden : stunden), tagesanteil, bemerkung, von, bis: bisZeit, pause, baustelleId });
         });
         document.getElementById('saEntryModal')?.remove();
         await _projektstandNachZeitAbgleich(j);
@@ -17600,12 +17619,12 @@ async function _saefSave(username, mode, entryId) {
         if (btn) { btn.disabled = false; btn.textContent = 'Speichern'; }
       }
     } else {
-      const r = await fetch('api.php?action=admin_edit_zeiterfassung', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username, entryId, datum, typ, stunden, baustelleId, bemerkung, von, bis: bisZeit, pause }) });
+      const r = await fetch('api.php?action=admin_edit_zeiterfassung', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username, entryId, datum, typ, stunden, baustelleId, bemerkung, von, bis: bisZeit, pause, tagesanteil }) });
       const j = await r.json();
       if (j.ok) {
         showNotification('Eintrag aktualisiert.');
         const entry = (saAllZeit[username]?.entries || []).find(x => x.id === entryId);
-        if (entry) Object.assign(entry, { datum, typ, stunden: (j.stunden != null ? j.stunden : stunden), bemerkung, von, bis: bisZeit, pause, baustelleId });
+        if (entry) Object.assign(entry, { datum, typ, stunden: (j.stunden != null ? j.stunden : stunden), tagesanteil, bemerkung, von, bis: bisZeit, pause, baustelleId });
         document.getElementById('saEntryModal')?.remove();
         await _projektstandNachZeitAbgleich(j);
         renderStundenauswertung();
@@ -17666,20 +17685,20 @@ function exportStundenauswertungPDF() {
     const allEntriesWithFt = [...entries, ...vtInRange].sort((a,b) => (a.datum||'').localeCompare(b.datum||''));
     const istTotal = sumIstStunden(allEntriesWithFt, user);
     const urlaubJahr = bkUrlaubsanspruch(user, referenceYear);
-    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(referenceYear))).length;
+    const urlaubGenommen = bkUrlaubTage(allEntries, referenceYear);
 
     const buchungen = saGleitzeitAll[user.username] || [];
     const gleitzeitAktivPrint = appSettings.gleitzeit_enabled !== false;
     const gleitzeitSaldo = gleitzeitAktivPrint ? calcGleitzeitSaldo(allEntries, user, referenceYear, buchungen) : null;
     const sollBeschreibung = bkSollBeschreibung(user);
 
-    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - ${gleitzeitAktivPrint ? `Gleitzeit: ${gleitzeitSaldo>=0?'+':''}${gleitzeitSaldo.toFixed(2)}h - ` : ''}Urlaub: ${urlaubGenommen}/${urlaubJahr}</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - ${gleitzeitAktivPrint ? `Gleitzeit: ${gleitzeitSaldo>=0?'+':''}${gleitzeitSaldo.toFixed(2)}h - ` : ''}Urlaub: ${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)}</p>`;
     html += `<table><thead><tr><th>Datum</th><th>Tag</th><th>Typ</th>${appSettings.erweiterte_zeiterfassung ? '<th>Von</th><th>Bis</th><th>Pause</th>' : ''}<th>Baustelle</th><th>Bemerkung</th><th>Stunden</th></tr></thead><tbody>`;
     allEntriesWithFt.forEach(e => {
       const d = e.datum ? new Date(e.datum) : null;
       const wd = d ? wdNames[d.getDay()] : '';
       const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '') : '';
-      const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung||'Feiertag')}` : _seTypLabel(e.typ);
+      const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung||'Feiertag')}` : _seEntryLabel(e);
       const rowStyle = e._virtual ? 'background:#FFF9C4' : '';
       html += `<tr style="${rowStyle}"><td>${e.datum}</td><td>${wd}</td><td>${typLabel}</td>${appSettings.erweiterte_zeiterfassung ? `<td>${e.von||''}</td><td>${e.bis||''}</td><td>${e.pause ? e.pause + ' min' : ''}</td>` : ''}<td style="text-align:left">${esc(bName)}</td><td style="text-align:left">${esc(e.bemerkung||'')}</td><td>${bkIstStundenEintrag(user, e, appSettings?.ze_custom_typen || []).toFixed(2)}</td></tr>`;
     });
@@ -18044,7 +18063,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
     const sollBeschreibung = bkSollBeschreibung(user);
     const feiertagH = sumIstStunden(getVirtuelleFeiertagEintraege(allEntries, user, y, m), user);
     const istStunden = sumIstStunden(entries, user) + feiertagH;
-    const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubTage = bkUrlaubTage(entries);
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const sonstigTage = entries.filter(e => e.typ === 'sonstig').length;
     const sollStunden = calcSollMonat(user, y, m);
@@ -18055,7 +18074,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
     const urlaubJahr = bkUrlaubsanspruch(user, currentYear);
 
     // Urlaubsverbrauch im laufenden Jahr berechnen
-    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(currentYear))).length;
+    const urlaubGenommen = bkUrlaubTage(allEntries, currentYear);
 
     html += `<tr>
       <td><strong>${esc(user.username)}</strong></td>
@@ -18064,7 +18083,7 @@ function zuRenderOverview(content, visibleUsers, monthKey, y, m) {
       <td class="text-right">${istStunden.toFixed(2)}</td>
       <td class="text-right">${sollStunden.toFixed(2)}</td>
       <td class="text-right" style="${diffCls}">${diffSign}${diff.toFixed(2)}</td>
-      <td class="text-right">${urlaubTage}</td>
+      <td class="text-right">${bkFormatTage(urlaubTage)}</td>
       <td class="text-right">${krankTage}</td>
       <td class="text-right">${sonstigTage}</td>
     </tr>`;
@@ -18081,7 +18100,7 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
   visibleUsers.forEach(user => {
     const entries = (zuAllZeit[user.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(monthKey));
     const allEntries = zuAllZeit[user.username]?.entries || [];
-    const urlaubTage = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubTage = bkUrlaubTage(entries);
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const feiertagEntries = getVirtuelleFeiertagEintraege(allEntries, user, y, m);
     const feiertagH = feiertagEntries.reduce((s,e) => s+(e.stunden||0), 0);
@@ -18111,7 +18130,7 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
           <span><strong>${istStunden.toFixed(2)}</strong> h Ist</span>
           <span><strong>${sollStunden.toFixed(2)}</strong> h Soll</span>
           <span style="color:${diffColor};font-weight:700">${diffSign}${diff.toFixed(2)} h</span>
-          ${urlaubTage ? `<span> ${urlaubTage}d</span>` : ''}
+          ${urlaubTage ? `<span> ${bkFormatTage(urlaubTage)}d</span>` : ''}
           ${krankTage ? `<span> ${krankTage}d</span>` : ''}
         </div>
       </div>
@@ -18132,7 +18151,7 @@ function zuRenderMonteurView(content, visibleUsers, monthKey, y, m) {
         dayEntries.forEach((e, i) => {
           const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '#'+e.baustelleId) : '';
           const isVirt = !!e._virtual;
-          const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung||'Feiertag')}` : _seTypLabel(e.typ);
+          const typLabel = e.typ === 'feiertag' ? `🎉 ${esc(e.bemerkung||'Feiertag')}` : _seEntryLabel(e);
           html += `<tr style="${isVirt ? 'background:#FFF9C4' : (isWeekend ? 'background:var(--yellow-light)' : '')}">
             ${i === 0 ? `<td rowspan="${dayEntries.length}" style="vertical-align:top;font-weight:600">${datum.split('-').reverse().join('.')}</td><td rowspan="${dayEntries.length}" style="vertical-align:top;${isWeekend?'color:var(--danger)':''}">${wd}</td>` : ''}
             <td>${typLabel}</td>
@@ -18202,7 +18221,7 @@ function zuRenderTagView(content, visibleUsers, monthKey, y, m) {
 
     dayEntries.forEach(e => {
       const bName = e.baustelleId ? ((appData.baustellen||[]).find(b=>b.id===e.baustelleId)?.name || '#'+e.baustelleId) : '';
-      const typLabel = _seTypLabel(e.typ);
+      const typLabel = _seEntryLabel(e);
       html += `<tr>
         <td><strong>${esc(e.username)}</strong></td>
         <td>${typLabel}</td>
@@ -19313,7 +19332,10 @@ function renderWochenplanungJahr() {
       if (!datum.startsWith(String(year))) return;
       if ((uWp[datum] || []).some(we => (we.typ || '') === 'urlaub')) urlaubPlanDates.add(datum);
     });
-    const urlaubTakenDates = new Set(uEntries.filter(e => e.typ === 'urlaub').map(e => e.datum));
+    const urlaubTakenDates = new Map();
+    uEntries.filter(e => e.typ === 'urlaub').forEach(e => {
+      urlaubTakenDates.set(e.datum, Math.min(1, (urlaubTakenDates.get(e.datum) || 0) + bkTagesanteil(e)));
+    });
     const todayKey2 = dateToKey(new Date());
 
     let totalPlan = 0, totalTaken = 0, totalSoll = 0, totalIst = 0;
@@ -19335,7 +19357,7 @@ function renderWochenplanungJahr() {
         if (dailySoll > 0) moSoll += dailySoll;
         moIst += ist;
         if (urlaubPlanDates.has(key)) moPlan++;
-        if (urlaubTakenDates.has(key)) moTaken++;
+        moTaken += urlaubTakenDates.get(key) || 0;
         let bg = isWorkday ? '#fff' : '#f5f5f5', bd = '1px solid #eee';
         if (holidaySet.has(key)) { bg = '#FFF8E1'; bd = '1px solid #FFD54F'; }
         if (abs) { bg = (typColors[abs] || '#ddd') + '33'; bd = '1px solid ' + (typColors[abs] || '#ccc'); }
@@ -19354,7 +19376,7 @@ function renderWochenplanungJahr() {
       body += `<div style="border:1px solid var(--border,#e0e0e0);border-radius:8px;padding:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
           <strong style="font-size:.9rem">${monthNames[mo]} ${year}</strong>
-          <span style="font-size:.72rem;color:#1565C0" title="Urlaub genommen">🏖 ${moTaken}</span>
+          <span style="font-size:.72rem;color:#1565C0" title="Urlaub genommen">🏖 ${bkFormatTage(moTaken)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:.68rem;color:#666;margin-bottom:6px">
           <span title="Soll / Ist (Monat)">Soll ${moSoll.toFixed(1).replace(/\.0$/,'')}h · Ist ${moIst.toFixed(1).replace(/\.0$/,'')}h</span>
@@ -19371,9 +19393,9 @@ function renderWochenplanungJahr() {
     const urlaubRest = urlaubAnspruch - totalTaken;
     const jahrDiff = totalIst - totalSoll;
     body += `<div style="margin-top:12px;padding:10px 14px;background:var(--bg-light,#f5f7fa);border-radius:8px;font-size:.9rem;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
-      <span>🏖 <strong>Urlaubsanspruch ${year}:</strong> ${urlaubAnspruch} Tage</span>
-      <span>✅ <strong>genommen:</strong> ${totalTaken}</span>
-      <span> <strong>Resturlaub:</strong> ${urlaubRest} Tage</span>
+      <span>🏖 <strong>Urlaubsanspruch ${year}:</strong> ${bkFormatTage(urlaubAnspruch)} Tage</span>
+      <span>✅ <strong>genommen:</strong> ${bkFormatTage(totalTaken)}</span>
+      <span> <strong>Resturlaub:</strong> ${bkFormatTage(urlaubRest)} Tage</span>
       <span style="margin-left:auto">Σ Soll ${totalSoll.toFixed(1).replace(/\.0$/,'')}h · Ist ${totalIst.toFixed(1).replace(/\.0$/,'')}h · <span style="font-weight:700;color:${jahrDiff>=0?'#2E7D32':'#C62828'}">${jahrDiff>=0?'+':''}${jahrDiff.toFixed(1).replace(/\.0$/,'')}h</span></span>
     </div>`;
     el.innerHTML = html + body;
@@ -19456,7 +19478,7 @@ function wpYearDayClick(dateKey) {
   bookUsers.forEach(u => {
     const entries = wpAllZeit[u.username]?.entries || [];
     entries.filter(e => e.datum === dateKey && e.typ !== 'arbeit').forEach(e => {
-      existing.push({ username: u.username, entryId: e.id, typ: e.typ, stunden: e.stunden });
+      existing.push({ username: u.username, entryId: e.id, typ: e.typ, stunden: e.stunden, label: _seEntryLabel(e) });
     });
   });
 
@@ -19469,7 +19491,7 @@ function wpYearDayClick(dateKey) {
   const typOpts = `<option value="urlaub">Urlaub</option><option value="krank">Krank</option><option value="gleitzeit">Gleitzeit</option><option value="sonstig">Sonstiger Fehlgrund</option>` + wpCustomOpts;
 
   const existingHtml = existing.length ? existing.map(e => `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #eee;font-size:.82rem">
-    <span>${esc(e.username)}</span> · <span>${esc(e.typ)}</span> · <span>${(e.stunden||0).toFixed(1)} h</span>
+    <span>${esc(e.username)}</span> · <span>${esc(e.label)}</span> · <span>${(e.stunden||0).toFixed(1)} h</span>
     <button class="icon-btn danger" onclick="wpYearDeleteEntry('${esc(e.username)}',${e.entryId})" title="Löschen" style="margin-left:auto">${ico('trash')}</button>
   </div>`).join('') : '<span style="font-size:.8rem;color:#aaa">Keine Abwesenheiten an diesem Tag.</span>';
 
@@ -19489,8 +19511,9 @@ function wpYearDayClick(dateKey) {
         <div style="font-weight:600;font-size:.82rem;margin-bottom:6px;">Neuen Eintrag anlegen:</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div><label style="font-size:.72rem;color:#666;display:block">Person</label><select id="wpYbUser" class="form-control" style="font-size:.85rem;padding:4px 6px">${userOpts}</select></div>
-          <div><label style="font-size:.72rem;color:#666;display:block">Typ</label><select id="wpYbTyp" class="form-control" style="font-size:.85rem;padding:4px 6px">${typOpts}</select></div>
+          <div><label style="font-size:.72rem;color:#666;display:block">Typ</label><select id="wpYbTyp" class="form-control" style="font-size:.85rem;padding:4px 6px" onchange="document.getElementById('wpYbHalbtagWrap').style.display = this.value === 'urlaub' ? '' : 'none'">${typOpts}</select></div>
         </div>
+        <div id="wpYbHalbtagWrap" style="margin-bottom:8px"><label style="font-size:.8rem;display:flex;align-items:center;gap:6px"><input type="checkbox" id="wpYbHalbtag"> Halber Urlaubstag</label></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
           <div><label style="font-size:.72rem;color:#666;display:block">Von (Datum)</label><input type="date" id="wpYbFrom" class="form-control" value="${dateKey}" style="font-size:.85rem;padding:4px 6px"></div>
           <div><label style="font-size:.72rem;color:#666;display:block">Bis (optional)</label><input type="date" id="wpYbTo" class="form-control" value="${dateKey}" style="font-size:.85rem;padding:4px 6px"></div>
@@ -19511,7 +19534,7 @@ async function wpYearBookSave(fallbackDate) {
   const datumTo = document.getElementById('wpYbTo')?.value || datumFrom;
   if (!username || !datumFrom) return;
   try {
-    const body = { username, datum: datumFrom, typ, stunden: 0 };
+    const body = { username, datum: datumFrom, typ, stunden: 0, tagesanteil: typ === 'urlaub' && document.getElementById('wpYbHalbtag')?.checked ? 0.5 : 1 };
     if (datumTo > datumFrom) body.datumBis = datumTo;
     const r = await fetch('api.php?action=admin_add_zeiterfassung', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -20107,10 +20130,10 @@ function exportZeituebersichtPDF() {
     const allEntries = zuAllZeit[user.username]?.entries || [];
     const sollBeschreibung = bkSollBeschreibung(user);
     const urlaubJahr = bkUrlaubsanspruch(user, year);
-    const urlaubGenommen = allEntries.filter(e => e.typ === 'urlaub' && e.datum && e.datum.startsWith(String(year))).length;
+    const urlaubGenommen = bkUrlaubTage(allEntries, year);
     const krankGesamt = allEntries.filter(e => e.typ === 'krank' && e.datum && e.datum.startsWith(String(year))).length;
 
-    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - Urlaub: ${urlaubGenommen}/${urlaubJahr} Tage - Krank: ${krankGesamt} Tage</p>`;
+    html += `<p class="section-title">${esc(user.username)} (${esc(user.role)}) - Soll: ${esc(sollBeschreibung)} - Urlaub: ${bkFormatTage(urlaubGenommen)}/${bkFormatTage(urlaubJahr)} Tage - Krank: ${krankGesamt} Tage</p>`;
     html += `<table><thead><tr><th>Monat</th><th>Werktage</th><th>Soll (h)</th><th>Ist (h)</th><th>+/- (h)</th><th>Urlaub</th><th>Krank</th></tr></thead><tbody>`;
 
     let totalIst = 0, totalSoll = 0;
@@ -20120,7 +20143,7 @@ function exportZeituebersichtPDF() {
       const ist = sumIstStunden(me, user)
         + sumIstStunden(getVirtuelleFeiertagEintraege(allEntries, user, year, m), user);
       const soll = calcSollMonat(user, year, m);
-      const urlaub = me.filter(e => e.typ === 'urlaub').length;
+      const urlaub = bkUrlaubTage(me);
       const krank = me.filter(e => e.typ === 'krank').length;
       const diff = ist - soll;
       const wd = getWorkingDaysInMonth(year, m, user);
@@ -20128,13 +20151,13 @@ function exportZeituebersichtPDF() {
       totalSoll += soll;
       const cls = diff >= 0 ? 'positive' : 'negative';
       const sign = diff >= 0 ? '+' : '';
-      html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${urlaub}</td><td>${krank}</td></tr>`;
+      html += `<tr><td>${getMonthName(m)}</td><td>${wd}</td><td>${soll.toFixed(2)}</td><td>${ist.toFixed(2)}</td><td class="${cls}">${sign}${diff.toFixed(2)}</td><td>${bkFormatTage(urlaub)}</td><td>${krank}</td></tr>`;
     });
 
     const totalDiff = totalIst - totalSoll;
     const totalCls = totalDiff >= 0 ? 'positive' : 'negative';
     const totalSign = totalDiff >= 0 ? '+' : '';
-    html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalCls}">${totalSign}${totalDiff.toFixed(2)}</td><td>${urlaubGenommen}</td><td>${krankGesamt}</td></tr>`;
+    html += `<tr style="font-weight:700;background:#f5f5f7"><td>Gesamt</td><td></td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${totalCls}">${totalSign}${totalDiff.toFixed(2)}</td><td>${bkFormatTage(urlaubGenommen)}</td><td>${krankGesamt}</td></tr>`;
     html += `</tbody></table>`;
   });
 
@@ -24859,7 +24882,7 @@ function renderMitarbeiterContent(users, year) {
     const jahreswerte = calcJahresSollIst(user, awData.zeit[user.username]?.entries || [], year);
     const totalSoll = jahreswerte.soll;
     const totalIst = jahreswerte.ist;
-    const urlaubGenommen = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubGenommen = bkUrlaubTage(entries);
     const krankTage = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
     const buchungen = awData.gleitzeit[user.username] || [];
@@ -24870,7 +24893,7 @@ function renderMitarbeiterContent(users, year) {
       <td style="text-align:left;font-weight:600">${esc(user.username)}</td>
       <td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td>
       <td style="font-weight:600;${diffCls}">${diff>=0?'+':''}${diff.toFixed(2)}</td>
-      <td>${urlaubGenommen}</td><td>${urlaubJahr - urlaubGenommen}</td>
+      <td>${bkFormatTage(urlaubGenommen)}</td><td>${bkFormatTage(urlaubJahr - urlaubGenommen)}</td>
       <td>${krankTage}</td>
       ${gleitSaldo !== null ? `<td style="font-weight:600;${gleitCls}">${gleitSaldo>=0?'+':''}${gleitSaldo.toFixed(2)} h</td>` : ''}
     </tr>`;
@@ -24918,12 +24941,12 @@ function exportAuswertungMitarbeiterCSV() {
     const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
     const totalSoll = jahreswerte.soll;
     const totalIst = jahreswerte.ist;
-    const urlaubG = entries.filter(e => e.typ === 'urlaub').length;
+    const urlaubG = bkUrlaubTage(entries);
     const krank = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
     const buchungen = awData.gleitzeit[u.username] || [];
     const gleit = calcGleitzeitSaldo(awData.zeit[u.username]?.entries || [], u, year, buchungen);
-    return [u.username, totalSoll.toFixed(2), totalIst.toFixed(2), diff.toFixed(2), urlaubG, urlaubJahr - urlaubG, krank, gleit.toFixed(2)];
+    return [u.username, totalSoll.toFixed(2), totalIst.toFixed(2), diff.toFixed(2), bkFormatTage(urlaubG), bkFormatTage(urlaubJahr - urlaubG), krank, gleit.toFixed(2)];
   });
   awCsvDownload('Auswertung_Mitarbeiter_' + year + '.csv', header, rows);
 }
@@ -25004,7 +25027,7 @@ function printAuswertungMitarbeiter() {
     const jahreswerte = calcJahresSollIst(u, awData.zeit[u.username]?.entries || [], year);
     const totalSoll = jahreswerte.soll;
     const totalIst = jahreswerte.ist;
-    const urlG = entries.filter(e => e.typ === 'urlaub').length;
+    const urlG = bkUrlaubTage(entries);
     const urlR = urlaubJahr - urlG;
     const kr = entries.filter(e => e.typ === 'krank').length;
     const diff = totalIst - totalSoll;
@@ -25013,7 +25036,7 @@ function printAuswertungMitarbeiter() {
     sumSoll += totalSoll; sumIst += totalIst; sumUrl += urlG; sumUrlR += urlR; sumKr += kr;
     const dc = diff >= 0 ? 'pos' : 'neg';
     const gc = gleit >= 0 ? 'pos' : 'neg';
-    rows += `<tr><td>${esc(u.username)}</td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${dc}" style="font-weight:600">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${urlG}</td><td>${urlR}</td><td>${kr}</td><td class="${gc}" style="font-weight:600">${gleit>=0?'+':''}${gleit.toFixed(2)} h</td></tr>`;
+    rows += `<tr><td>${esc(u.username)}</td><td>${totalSoll.toFixed(2)}</td><td>${totalIst.toFixed(2)}</td><td class="${dc}" style="font-weight:600">${diff>=0?'+':''}${diff.toFixed(2)}</td><td>${bkFormatTage(urlG)}</td><td>${bkFormatTage(urlR)}</td><td>${kr}</td><td class="${gc}" style="font-weight:600">${gleit>=0?'+':''}${gleit.toFixed(2)} h</td></tr>`;
   });
   const sumDiff = sumIst - sumSoll;
   const w = window.open('', '_blank', 'width=1000,height=700');
@@ -25032,7 +25055,7 @@ function printAuswertungMitarbeiter() {
 <h1>Mitarbeiter-Auswertung ${year}${bisHeuteLabel}</h1><div class="sub">Stand: ${now} - ${users.length} Mitarbeiter</div>
 <table><thead><tr><th style="text-align:left">Mitarbeiter</th><th>Soll (h)${bisHeuteLabel}</th><th>Ist (h)${bisHeuteLabel}</th><th>+/- (h)${bisHeuteLabel}</th><th>Urlaub</th><th>Urlaub Rest</th><th>Krank</th><th>Gleitzeitkonto</th></tr></thead><tbody>
 ${rows}
-<tr style="font-weight:700;border-top:2px solid #333"><td>Summe</td><td>${sumSoll.toFixed(2)}</td><td>${sumIst.toFixed(2)}</td><td class="${sumDiff>=0?'pos':'neg'}">${sumDiff>=0?'+':''}${sumDiff.toFixed(2)}</td><td>${sumUrl}</td><td>${sumUrlR}</td><td>${sumKr}</td><td></td></tr>
+<tr style="font-weight:700;border-top:2px solid #333"><td>Summe</td><td>${sumSoll.toFixed(2)}</td><td>${sumIst.toFixed(2)}</td><td class="${sumDiff>=0?'pos':'neg'}">${sumDiff>=0?'+':''}${sumDiff.toFixed(2)}</td><td>${bkFormatTage(sumUrl)}</td><td>${bkFormatTage(sumUrlR)}</td><td>${sumKr}</td><td></td></tr>
 </tbody></table></body></html>`);
   w.document.close();
   setTimeout(() => w.print(), 300);
@@ -25127,7 +25150,7 @@ function drawMitarbeiterCharts(year) {
     users.forEach(u => {
       const entries = (awData.zeit[u.username]?.entries || []).filter(e => e.datum && e.datum.startsWith(String(year)));
       const urlJ = bkUrlaubsanspruch(u, year);
-      const urlG = entries.filter(e => e.typ === 'urlaub').length;
+      const urlG = bkUrlaubTage(entries);
       const krG = entries.filter(e => e.typ === 'krank').length;
       urlArr.push(urlG); urlRestArr.push(Math.max(0, urlJ - urlG)); krArr.push(krG);
     });

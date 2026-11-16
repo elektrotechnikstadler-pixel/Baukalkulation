@@ -65,6 +65,51 @@
       "expected": 8
     },
     {
+      "name": "Halber Urlaubstag zählt halbes Tages-Soll",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "urlaub",
+        "stunden": 0,
+        "tagesanteil": 0.5
+      },
+      "customTypen": [],
+      "expected": 4
+    },
+    {
+      "name": "Ungültiger Tagesanteil zählt als ganzer Urlaubstag",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "urlaub",
+        "stunden": 0,
+        "tagesanteil": 0.3
+      },
+      "customTypen": [],
+      "expected": 8
+    },
+    {
+      "name": "Tagesanteil wirkt nur bei Urlaub",
+      "mitarbeiter": {
+        "sollstundenTag": 8,
+        "arbeitstage": "1,2,3,4,5"
+      },
+      "eintrag": {
+        "datum": "2025-03-17",
+        "typ": "krank",
+        "stunden": 0,
+        "tagesanteil": 0.5
+      },
+      "customTypen": [],
+      "expected": 8
+    },
+    {
       "name": "Custom Ist gleich Soll",
       "mitarbeiter": {
         "sollstundenTag": 8,
@@ -250,6 +295,16 @@
       },
       "jahr": 2025,
       "expected": 0
+    },
+    {
+        "name": "Halbe Tage im Anspruch bleiben erhalten",
+        "mitarbeiter": {
+          "urlaubstageProJahr": {
+            "2025": 27.5
+          }
+        },
+        "jahr": 2025,
+        "expected": 27.5
     }
   ]
 }

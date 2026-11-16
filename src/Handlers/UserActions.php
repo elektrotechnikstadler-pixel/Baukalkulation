@@ -389,7 +389,9 @@ class UserActions
             $fields[] = $field . ' = ?'; $params[] = (float)$value;
         }
         if (array_key_exists('urlaubstageProJahr', $this->body)) {
-            $fields[] = 'urlaubstageProJahr = ?'; $params[] = json_encode($this->body['urlaubstageProJahr']);
+            $upj = is_array($this->body['urlaubstageProJahr']) ? $this->body['urlaubstageProJahr'] : [];
+            foreach ($upj as $jahr => $tage) $upj[$jahr] = \App\Services\Sollzeit::urlaubstageNormalisieren($tage);
+            $fields[] = 'urlaubstageProJahr = ?'; $params[] = json_encode((object)$upj);
         }
         if (array_key_exists('stundenKategorie', $this->body)) {
             $fields[] = 'stundenKategorie = ?'; $params[] = trim($this->body['stundenKategorie']);

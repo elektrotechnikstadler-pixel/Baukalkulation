@@ -76,7 +76,8 @@
     const type = entry.typ;
     const hours = numericValue(entry.stunden) ?? 0;
     if (type === 'arbeit') return hours;
-    if (type === 'urlaub' || type === 'krank' || type === 'feiertag') return bkTagesSoll(user, entry.datum);
+    if (type === 'urlaub') return bkTagesSoll(user, entry.datum) * bkTagesanteil(entry);
+    if (type === 'krank' || type === 'feiertag') return bkTagesSoll(user, entry.datum);
     if (type === 'abwesend' || type === 'gleitzeit' || type === 'sonstig') return 0;
 
     const custom = Array.isArray(customTypen) ? customTypen : [];
@@ -292,6 +293,35 @@
     return value === null ? 30 : value;
   }
 
+  // Tagesanteil eines Urlaubseintrags: 0.5 = halber Tag, sonst 1 (auch für alle anderen Typen).
+  function bkTagesanteil(entry) {
+    if (!entry || typeof entry !== 'object' || entry.typ !== 'urlaub') return 1;
+    const anteil = numericValue(entry.tagesanteil);
+    return anteil !== null && Math.abs(anteil - 0.5) < 0.001 ? 0.5 : 1;
+  }
+
+  // Summe der Urlaubstage (halbe Tage zählen 0,5); optional nur für ein Jahr.
+  function bkUrlaubTage(entries, jahr) {
+    const prefix = jahr === undefined || jahr === null || jahr === '' ? '' : String(jahr);
+    return (Array.isArray(entries) ? entries : []).reduce((summe, entry) => {
+      if (!entry || entry.typ !== 'urlaub') return summe;
+      if (prefix && !(typeof entry.datum === 'string' && entry.datum.startsWith(prefix))) return summe;
+      return summe + bkTagesanteil(entry);
+    }, 0);
+  }
+
+  // Urlaubsanspruch-Eingabe: Komma erlaubt, auf 0,5-Schritte gerundet, nie negativ; leer/ungültig = Standard.
+  function bkUrlaubstageEingabe(value, standard = 30) {
+    const number = numericValue(String(value ?? '').trim().replace(',', '.'));
+    if (number === null) return standard;
+    return Math.max(0, Math.round(number * 2) / 2);
+  }
+
+  function bkFormatTage(value) {
+    const number = Number(value) || 0;
+    return String(Math.round(number * 2) / 2).replace('.', ',');
+  }
+
   function formatHours(value) {
     const rounded = Math.round(value * 100) / 100;
     return `${String(Number(rounded.toFixed(2))).replace('.', ',')} h`;
@@ -348,5 +378,9 @@
   global.bkVirtuelleFeiertage = bkVirtuelleFeiertage;
   global.bkGleitzeitSaldo = bkGleitzeitSaldo;
   global.bkUrlaubsanspruch = bkUrlaubsanspruch;
+  global.bkTagesanteil = bkTagesanteil;
+  global.bkUrlaubTage = bkUrlaubTage;
+  global.bkUrlaubstageEingabe = bkUrlaubstageEingabe;
+  global.bkFormatTage = bkFormatTage;
   global.bkSollBeschreibung = bkSollBeschreibung;
 })(window);

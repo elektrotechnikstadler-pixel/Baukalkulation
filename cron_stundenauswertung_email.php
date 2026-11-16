@@ -103,7 +103,7 @@ foreach ($rows as $r) {
         . '<td class="num">' . $fmt($r['ist']) . '</td>'
         . '<td class="num" style="color:' . $diffColor . ';font-weight:700">' . ($r['diff'] >= 0 ? '+' : '') . $fmt($r['diff']) . '</td>'
         . '<td class="num">' . $fmt($r['arbeit']) . '</td>'
-        . '<td class="num">' . (int)$r['urlaub'] . '</td>'
+        . '<td class="num">' . str_replace('.', ',', (string)(float)$r['urlaub']) . '</td>'
         . '<td class="num">' . (int)$r['krank'] . '</td>'
         . '</tr>';
 }

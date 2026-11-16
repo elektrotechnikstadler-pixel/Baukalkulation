@@ -183,7 +183,7 @@
         <thead><tr><th>Kategorie</th><th>Stunden-Eingabe</th><th>Zählt als Ist</th><th>Hinweise</th></tr></thead>
         <tbody>
           <tr><td><strong>Arbeit</strong></td><td>Stunden; bei erweiterter Erfassung aus Von/Bis abzüglich Pause</td><td>Erfasste Stunden</td><td>Baustelle und Stundenkategorie können zugeordnet werden.</td></tr>
-          <tr><td><strong>Urlaub</strong></td><td>Keine Stundeneingabe</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Wird auf das Jahreskontingent angerechnet.</td></tr>
+          <tr><td><strong>Urlaub</strong></td><td>Keine Stundeneingabe; optional „Halber Tag“</td><td>Tages-Soll des Datums (halber Tag: halbes Tages-Soll); an freien Tagen 0 h</td><td>Wird auf das Jahreskontingent angerechnet (halber Tag = 0,5 Tage).</td></tr>
           <tr><td><strong>Krank</strong></td><td>Keine Stundeneingabe</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Der Kranktag wird in Übersichten gezählt.</td></tr>
           <tr><td><strong>Feiertag</strong></td><td>Automatisch, wenn für den Feiertag kein anderer Eintrag besteht</td><td>Tages-Soll des Datums; an freien Tagen 0 h</td><td>Automatische Gutschrift nur bei positivem Tages-Soll.</td></tr>
           <tr><td><strong>Gleitzeit</strong></td><td>Keine Stundeneingabe</td><td>0 h</td><td>Markiert einen Gleittag; der Eintrag selbst schreibt keine Ist-Stunden gut.</td></tr>
@@ -204,6 +204,7 @@
       <h3 id="ze-urlaub">Urlaub</h3>
       <p>Der Urlaubsanspruch wird je Mitarbeiter und Jahr in den Mitarbeiterdaten festgelegt. Der Wert 0 ist möglich; nur wenn für ein Jahr kein Anspruch eingetragen ist, verwendet die Anwendung 30 Tage als Vorgabe. Bei einer Urlaubsbuchung prüft das System das verbleibende Jahreskontingent; ist es ausgeschöpft, wird die Buchung abgelehnt. Urlaub zählt im Ist mit dem Tages-Soll des jeweiligen Datums, an Tagen ohne Soll mit 0 Stunden. Eine mehrtägige Eingabe legt einzelne Tagesbuchungen an; Wochenenden und hinterlegte Feiertage werden bei der Erfassung übersprungen.</p>
       <p>In der Stundenerfassung sehen Sie genommene Urlaubstage und den Anspruch. Im Jahreswechsel-Assistenten können berechtigte Personen den Anspruch für das Folgejahr übernehmen und anpassen.</p>
+      <p><strong>Halbe Urlaubstage:</strong> Urlaub lässt sich in 0,5-Schritten eintragen, nehmen und hinterlegen. Beim Typ Urlaub setzen Sie dazu den Haken <strong>„Halber Tag“</strong> (am PC, in der mobilen Ansicht, beim Nachtragen in der Stundenauswertung und in der Jahresplanung). Ein halber Tag zählt 0,5 Tage auf das Kontingent und im Ist das halbe Tages-Soll; die übrige Tageshälfte können Sie als Arbeit erfassen. In Listen erscheint der Eintrag als „Urlaub (½ Tag)“. Der Jahresanspruch kann ebenfalls halbe Tage enthalten, z.&nbsp;B. 27,5; Eingaben werden auf 0,5 gerundet.</p>
 
       <h3 id="ze-krank">Krankheit</h3>
       <p>Erfassen Sie Krankheit mit Typ <strong>Krank</strong>, bei Bedarf für einen Datumsbereich. Krankheit zählt pro Datum mit dem aktuellen Tages-Soll; an einem freien Tag werden 0 Stunden angerechnet. Die Zahl der Krankheitstage wird in der Stundenerfassung und den Mitarbeiterübersichten angezeigt.</p>
