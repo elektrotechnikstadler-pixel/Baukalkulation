@@ -1,12 +1,12 @@
-# AP-20261119-sammel-aenderungen: Sammelplan Änderungen vom 2026-11-19
+﻿# AP-20261119-sammel-aenderungen: Sammelplan Änderungen vom 2026-11-19
 
 | Feld | Wert |
 |---|---|
-| Status | in Umsetzung (B1 abgeschlossen, B2–B9 offen) |
+| Status | in Umsetzung (B1 + B2a abgeschlossen; B2b–B2d, B3–B9 offen) |
 | Typ | Feature · Bugfix · Sicherheit (Sammelplan) |
 | Testläufe rot | 1 |
-| Review-Runden | 1 |
-| Commit | 4e8997c (B1) |
+| Review-Runden | 2 |
+| Commit | 4e8997c (B1), 95fbc02 (B2a) |
 
 ## 1. Auftrag
 
@@ -112,6 +112,143 @@ Tests: JS-Test der Anzeigenamen-Funktion (reine Funktion extrahieren), Klicktest
 Schritte: (1) Rechte-Inventar als Tabelle in §3 des Umsetzungs-APs, (2) Lücken schließen (Reihenfolge 404→403→405 beibehalten, vgl. AP-20261101 Review), (3) anonyme Endpunkte prüfen, (4) Tests.
 Risiken: alte Clients (`mobile.html` Vorversion) dürfen nicht durch neue 403 brechen (E-088) – Rechte nur dort verschärfen, wo die UI das Recht ohnehin voraussetzt; keine DB-Änderung (Rechte-JSON bleibt kompatibel, Backups importierbar).
 Abnahme: (a) jede zustandsändernde Aktion lehnt GET mit 405 ab; (b) Aktionen ohne Rechtevergabe-Eintrag sind dokumentiert begründet; (c) `ai_scan_material` verlangt ein definiertes Recht; (d) Rechtematrix-Test grün auf SQLite + PostgreSQL.
+
+##### B2 – Feinplanung (Architekt, 2026-11-19)
+
+Grundlage: grep über alle Handler-Methoden (`requireAuth`/`requireRole`/`canDo`/`canSeeBaustelle`/`REQUEST_METHOD`/`getMessage()`), `public/api.php`, `src/Core/ModuleLoader.php:134–164`, `modules/*/backend/Module.php`, `modules/din1090/Din1090Actions.php:24–83`, `public/din1090_api.php`, Frontend-Aufrufer per grep. Die unkommittierten Dateien des Klicktest-APs (`tests/Unit/EndpunktInventarTest.php`, `tests/fixtures/endpunkt-luecken.json`, Erweiterung `tests/Support/ApiClient.php`) wurden **nicht** als Grundlage genutzt. Keine Schemaänderung, **keine neuen Rechte-Keys** nötig.
+
+**Inventar-Kennzahlen** (≈ = gezählt aus Inventartabellen, Entwickler bestätigt in Schritt 1)
+
+| Einstieg | Aktionen | anonym | nur `requireAuth` (davon schreibend) | zustandsändernd | davon mit 405 | mit Sichtbarkeitsprüfung |
+|---|---|---|---|---|---|---|
+| `public/api.php` | 183 (180 Routen + `features`/`list_modules`/`module`) | 10 | ≈ 47 (≈ 17) | ≈ 113 | 9 (davon `metallzuschlag_auto_fetch` nur für `force`) | ≈ 12 (`load`, `save`, 7× `FileActions`, `export_inform_csv`, `subunternehmer_report`, `move_position` bedingt) |
+| Module via `ModuleLoader` | 43 (lager 12, aufmass 8, vde0100 23) | 0 | 3 (`ping`) | 27 | 0 | 0 |
+| `din1090_api.php` (gleiche Logik via `module=din1090`) | 32 | 0 | 0 (alle `canReadDin1090`) | 19 (+ `canWriteDin1090`) | 0 | 0 |
+| Interne Fehlertexte an Client (E-014) | ≈ 27 Stellen | | | | | |
+
+Anonym (E-013): `check` (anonym nur Leerwerte + Lizenz-Tier ohne Kunde/Ablauf – ok), `setup` (nur ohne User – ok), `login`, `logout`, `features` (ok), `get_logo` (nur Logo – ok), `export_wochenplan_ical` (Token aus `cal_tokens`, DB-Vergleich – ok), `oci_start`/`oci_hook` (32-Byte-Nonce, TTL, Einmalverbrauch – ok), **`load_wochenplanung_display` (Lücke L7)**.
+
+**Prüfreihenfolge (Konvention bestätigt und präzisiert):** 401 (`requireAuth`) → 403 globales Aktionsrecht (Rolle/`canDo`, objektunabhängig) → 404 Objekt → 403 objektbezogen (Typrecht, Sichtbarkeit, Eigentümer) → **405** → 400/409 Eingabeprüfung. Grundlage: E-015, AP-20261101 (`updateSchnellnotiz` liest `id` auch aus `$_GET`, 404 → 403 → 405, `PlanActions.php:502–518`), `renderBelegPdf` (403 `canSeePrices` vor 404). Präzisierung: Wird das Objekt nur über den JSON-Body adressiert, kann ein GET es nicht finden → `requirePost()` direkt nach dem globalen Recht (also vor 404/400); Objektprüfung vor 405 nur, wenn die Aktion das Objekt (auch) per Query adressiert.
+
+**Warum 405 nötig ist:** Session-Cookie `SameSite=Lax` (`api.php:57–63`) wird bei Top-Level-GET-Navigation von Fremdseiten mitgesendet; die Origin-Prüfung (`api.php:84–99`) greift nur bei POST. Aktionen, die per GET ohne Body wirken, sind damit per Link auslösbar (CSRF).
+
+**Lückenliste**
+
+| L | Schwere | Aktion(en) · Fundstelle | Befund |
+|---|---|---|---|
+| L1 | **Blocker** | `send_rechnung`, `send_angebot` · `EmailActions.php:113,174` | nur `requireAuth`: jeder Angemeldete mailt jede Rechnung/jedes Angebot (Kunde, Preise) an beliebige Adresse; PDF-Ansicht derselben Belege verlangt Rechte (`ExportActions.php:256–300`) |
+| L2 | Major | `send_vde`, `send_din1090` · `EmailActions.php:60,227` | nur `requireAuth`; `send_din1090` versendet beliebiges PDF an beliebigen Empfänger mit Firmenabsender, auch ohne DIN-Recht/Feature |
+| L3 | Major | `ai_scan_material` · `AiActions.php:25,145` | nur `requireAuth` (externe Kosten); Gemini-Fehlertext an Client (E-014) |
+| L4 | Major | Lager `foto_ai` · `modules/lager/backend/Module.php:57` | Gemini-Aufruf mit `canReadLager` (normal-Default **true**) |
+| L5 | Major | GET-wirksame Schreibaktionen (ohne Body/mit Query): `clear_archive&confirm=1`, `repair_archiv_projekte&confirm=1` (Frontend ruft selbst per GET: `script.js:9549,9576`), `trigger_erinnerung`, `trigger_material_erinnerung`, `trigger_backup_email`, `trigger_stundenauswertung_email`, `auto_import_stunden`, `archive_all_schnellnotizen`, `datanorm_clear`, `datanorm_reindex`, `metallprofile_auto_update`, `hicad_import`, `backup_create` | kein 405 → per Link auslösbar (admin/master-Session) |
+| L6 | Major | `din1090_api.php:72–76,114–131` | eigene Session-Prüfung statt `requireAuth` → Rollenänderung/`sessionInvalidatedAt` und `mustChangePassword` wirken nicht; Timeout-Zweig startet leere Session und läuft mit Default-Rolle `normal` weiter; kein Feature-Flag-/Lizenz-Gate (`ModuleLoader::userHasAccess` umgangen); alle GET-Parameter werden in den Body gemischt → `?sub=delete_project&id=…` per GET wirksam |
+| L7 | Major | `load_wochenplanung_display` · `PlanActions.php:89–126` | **anonym**: alle Zeitbuchungen aller User (inkl. `krank`, Bemerkung, Stunden) und alle Baustellennamen; Display nutzt nur Teilmenge (`wochenplan_display.html:526–576`) |
+| L8 | Major | `load_all_zeiterfassung` · `ZeiterfassungActions.php:1766` | jeder Angemeldete erhält alle Buchungen aller User inkl. Bemerkung/Von-Bis/Fehlertexte → **F-B2-2** |
+| L9 | Major/Minor | Sichtbarkeit (IDOR): `save_tagesbericht`, `save_tagebuch_export` (Major: Dateien in fremde Projektordner, `FileActions.php:551,580`); `save_sub_sort_order`, `mark_ordered`, `toggle_auswertung_flag` (`BaustelleActions.php:820–949`), `save_schnellnotiz`/`load_schnellnotizen` mit `baustelleId` (`PlanActions.php:408–489`), `save_termin` mit `baustelleId` (`TerminActions.php:65`) (Minor) | keine `canSeeBaustelle`-Prüfung |
+| L10 | Minor | `delete_file` ohne Kategorie · `FileActions.php:470–480` | löscht in der Altablage (Wurzel) ohne Schreibrecht |
+| L11 | Minor | `rename_file` (kein Schreibrecht), `move_file` (nur Zielrecht), `save_generated_file` (kein Ordnerrecht) · `FileActions.php:237,355,502` | Ordnerrechte unvollständig → **F-B2-4** |
+| L12 | Minor | ≈ 113 übrige Schreibaktionen api.php, 27 Modul-, 19 DIN-Schreibaktionen | kein 405 (GET ohne Body meist wirkungslos – Härtung/Abnahme a) |
+| L13 | Minor | E-014 in Pfaden für Nicht-Admins: `EmailActions.php:87,103,146,164,199,217,249`, `BaustelleActions.php:933`, `AiActions.php:145`, `modules/aufmass/backend/Module.php:232,322`, `modules/lager/backend/Module.php:267`, `Din1090Actions.php:737`, `CatalogActions::metallprofileCatalog` `fetchError` | Exception-/Upstream-Texte an Client |
+| L14 | Minor | `get_permissions` · `AdminActions.php:17` | `requireAuth` liefert komplette Rechtematrix aller Rollen; Aufrufer nur Admin-Editor (`script.js:14470,14605`) |
+| L15 | Minor | `Auth::getCurrentUserPerms` (admin) · `Auth.php:382–408` | Admin-Liste fehlen 17 Keys: 14 Dokumentenordner-Rechte, `canReadDin1090`, `canWriteDin1090`, `canSeeWochenpruefung`; `mobile_light.html:565` `canDo` hat keinen Admin-Kurzschluss |
+| L16 | Minor | `Din1090Actions::dispatch` `:31–41` | Rechte-Ablehnung mit HTTP 200 (`ok:false`) statt 403 |
+
+**Maßnahmenliste** (Reihenfolge = Priorität; alle ohne neue Rechte-Keys)
+
+| M | Aktion(en) | Neue Prüfung | Begründung | E-088: UI-Stelle, die das Recht schon voraussetzt |
+|---|---|---|---|---|
+| M1 | `send_rechnung`, `send_angebot` | 401 → 403 Typrecht wie gespeicherter Beleg in `renderBelegPdf`: Rechnung `canManageRechnungen` ODER `canSeeRechnungen`, Angebot `canManageAngebote` ODER `canSeeAngebote` → 405 → 400/404 | L1; gleiches Recht wie PDF-Ansicht desselben Belegs | Mail-Dialog nur in Rechnungs-/Angebotsansicht (`script.js:14064,14076`), Menü nur bei `canSeeRe`/`canSeeAn` (`script.js:≈8490–8495`; Entwickler bestätigt See ODER Manage). `canSeePrices` zusätzlich nur nach F-B2-3b |
+| M2 | `send_vde`, `send_din1090` | `send_vde`: `canReadVde0100`; `send_din1090`: `canReadDin1090` + `feature_enabled('din1090')`; danach 405 | L2 | Versand nur aus dem Modul (`vde0100.js:637`, `din1090.js:1646`), das nur mit Leserecht nutzbar ist (DIN-Dispatch verlangt `canReadDin1090` für jeden Aufruf). Strengeres Recht für DIN nur nach F-B2-5 |
+| M3 | `ai_scan_material` | `canEditMaterial` ODER `canEditArbeitszeit` (403) → 405; Gemini-Fehler → feste Meldung + `error_log` (E-014) | L3; Scan-Ergebnis wird nur in Material-/Arbeitszeitpositionen übernommen; Recht = exakt das bestehende UI-Gate | Kopf-Knopf `btnKiScanHeader` nur bei genau dieser Bedingung (`script.js:8498`), Material-Scan bei `canEditMaterial` (`script.js:≈2516`), mobil `canDo('canEditMaterial')` (`mobile.html:2003`); Aufrufe bereits POST (`script.js:3444`, `mobile.html:3669`). **Für B6:** `ai_list_models` = `requireRole('admin')` + POST (KI-Einstellungen nur Admin, `save_settings` admin-only) |
+| M4 | Lager `foto_ai` | `canWriteLager` statt `canReadLager` (+405); `foto_ai_available` bleibt `canReadLager` (liefert nur bool) | L4 (Kosten) | Aufruf nur aus Artikeldialog (`lager.js:684–692,988`), der nur mit `canWriteLager` öffnet (`lager.js:155,214` – Entwickler verifiziert) |
+| M5 | `public/din1090_api.php` | Session-Prüfung → `Auth::requireAuth()` **nach** DB-Connect und Timeout (Reihenfolge wie `api.php`); `mustChangePassword` → 403 wie `api.php:448–458`; `feature_enabled('din1090')` und `LicenseService::isModuleAllowed('din1090')` → 403; GET-Merge bleibt (nur Lese-subs nach M7 wirksam) | L6 | DIN-Modul erscheint nur, wenn `list_modules` es liefert (gleiche Gates); `din1090.js:19–27` sendet immer POST |
+| M6 | `clear_archive`, `repair_archiv_projekte` | Vorschau per GET bleibt; `confirm=1` nur per POST (405 nach `requireRole`) – analog `force` (E-015/E-016) | L5 (destruktiv per Link) | Frontend `script.js:9549,9576` auf POST umstellen (+ Cache-Busting); alter Client erhält beim Bestätigen 405 mit Meldung – nur admin/master, nach Neuladen behoben (vertretbar wie `update_start`) |
+| M7 | Alle zustandsändernden `api.php`-Aktionen | neuer Helfer `Auth::requirePost()` (405, feste Meldung) in jeder Schreibmethode an der Stelle gemäß Prüfreihenfolge; **zuerst** die L5-Gruppe, dann Rest (L12). Bestehende 405-Stellen (`DataActions:326`, `SystemJobActions:79,204,274,322,448`, `PlanActions:516`, `AdminActions:453`, `CatalogActions:400`) auf den Helfer umstellen ohne Verhaltensänderung | L5, L12, Abnahme (a) | Regel: POST-Pflicht nur, wenn grep **alle** Aufrufer (`public/*.html`, `public/*.js` ohne `.min`, `public/modules/**`) **und** die Vorversion (`git show <letztes Release-Tag>:public/script.js`/`mobile.html`/`mobile_light.html`) als POST belegt; sonst GET-Ausnahme. **GET-Ausnahmen (dokumentiert, idempotent/lesend):** `logout` (`mobile_light.html:450`), `get_wochenplan_cal_token` ohne `users` (`mobile.html:6100`), `project_presence` (`script.js:1681`), `oci_prepare` (`script.js:6339`), `oci_start` (Browser-Navigation), `oci_hook` (Lieferanten-POST), `metallzuschlag_auto_fetch` ohne `force` (`mobile.html:3307`), `metallprofile_catalog`, `list_files`, `load_kunden`, `datanorm_status`, `backup_download`, `download_archive_*`, `update_check` ohne `force` |
+| M8 | Modul-Schreib-subs (lager 5, aufmass 4, vde0100 18) und DIN (19) | Modul: `Auth::requirePost()` im `dispatch`-Zweig direkt nach `requirePerm`; DIN: in `Din1090Actions::dispatch` nach der `canWriteDin1090`-Prüfung; DIN-Ablehnungen als `jsonOut([...ok:false, error...], 403)` (Body-Felder unverändert) | L6 (GET-Merge), L12, L16 | Entwickler belegt per grep, dass Modul-Wrapper (`lager.js` `api()`, Aufmaß, VDE) Schreib-subs per POST senden; `din1090.js` prüft nur `j.ok`, Status 403 statt 200 bricht nichts |
+| M9 | `load_wochenplanung_display` | Datenminimierung ohne Feldumbenennung: nur User mit `showInWochenplanung`; je Eintrag nur `datum`, `typ`, `baustelleId`, `tagesanteil`, `stunden` nur bei `typ=arbeit`, `bemerkung` nur bei `typ=sonstig`; `baustellenNamen` nur für referenzierte IDs; Zeitfenster = vom Display tatsächlich angezeigter Bereich (Entwickler ermittelt in `wochenplan_display.html`) | L7 (DSGVO, `krank` bleibt nur als Typ) | Display liest genau diese Felder (`wochenplan_display.html:391,526–576`); Zugriffsschutz nur nach F-B2-1 |
+| M10 | `save_tagesbericht`, `save_tagebuch_export`, `save_sub_sort_order`, `mark_ordered`, `toggle_auswertung_flag`, `save_schnellnotiz`/`load_schnellnotizen` (mit `baustelleId`), `save_termin` (mit `baustelleId`) | `Auth::canSeeBaustelle()` für jede übergebene Baustellen-ID → 403 (nach globalem Recht, vor 405) | L9 | UI bietet nur Baustellen aus `load` an, das per `getEffectiveVisibility` filtert (`DataActions.php:26`) → kein Bestandsnutzer verliert Zugriff; Restfall: Termin/Notiz an inzwischen unsichtbarer Baustelle → 403 beim Speichern (gewollt) |
+| M11 | `delete_file` ohne/ungültige Kategorie | Schreibrecht `canWriteDateien` (Altablage ≙ „Dateien“) | L10 | Desktop und mobil senden immer `category` (`script.js:14790,14933`, `mobile.html:6332` – Entwickler bestätigt) |
+| M12 | L13-Stellen (nur für Nicht-Admins erreichbar) | feste Meldung + `error_log()` (E-014); eigene, bewusst formulierte Domänenmeldungen (z. B. `MailService.php:71`) dürfen bleiben, `ErrorInfo`/PDO/PHP-Texte nicht | L13 | Antwortfeld `error` bleibt, nur Text ändert sich |
+| M13 | `get_permissions` | `requireRole('admin')` | L14 | einzige Aufrufer Admin-Rechteeditor (`script.js:14470,14605`); `set_permissions` ist bereits admin-only |
+| M14 | `Auth::getCurrentUserPerms` (admin) | Admin-Liste aus allen Keys von `getDefaultPermissions()['master']` + `canSeeWochenpruefung` erzeugen (statt Handliste) | L15 | rein additiv; `canDo()` serverseitig unverändert (admin immer true) |
+
+**Bewusst nur `requireAuth` (Abnahme b, Grundfunktion jedes Mitarbeiters, intern eigen-/objektgeprüft):** `change_password`, `set_theme`, `list_users_basic`, `load`/`save` (Sichtbarkeit + bedingte `canDo` intern), `project_heartbeat`, `project_presence`, `load_zeiterfassung`/`save_zeiterfassung` (nur eigener User), `get_user_sollstunden`, `get_zeiterfassung_historie`/`get_gleitzeitkonto_buchungen` (fremd nur mit `canSeeStundenauswertung`), `load_wochenplanung`/`save_wochenplanung` (normal nur eigener Plan), `get_wochenplan_cal_token`, Schnellnotizen (Zuweisungslogik, AP-20261101), `load_termine` (`canSeeOwn/AllTermine` intern), `load_gruppen_for_user`, `list_dienstleister`, `datanorm_search`, `metallzuschlag_get`, `metallprofile_catalog`, `hicad_list`, `material_top_used`, `oci_list_lieferanten`, `oci_prepare`, `list_modules`, `save_tagesbericht`/`save_tagebuch_export` (+ Sichtbarkeit M10), `save_weekly_export` (Folgepunkt). Diese Liste wird als Kommentar/Konstante in der neuen Testklasse geführt.
+
+**Betroffene Dateien**
+
+| Datei | Grund |
+|---|---|
+| `src/Auth.php` | `requirePost()` (M7), Admin-Liste (M14) |
+| `src/Handlers/EmailActions.php` | M1, M2, M12, 405 |
+| `src/Handlers/AiActions.php` | M3 |
+| `src/Handlers/AdminActions.php`, `AuthActions.php`, `UserActions.php`, `DataActions.php`, `SystemJobActions.php`, `BaustelleActions.php`, `ZeiterfassungActions.php`, `PlanActions.php`, `TerminActions.php`, `DashboardActions.php`, `GruppenActions.php`, `CrudActions.php`, `FileActions.php`, `CatalogActions.php`, `OciActions.php` | M6, M7, M9, M10, M11, M12, M13 |
+| `modules/lager/backend/Module.php`, `modules/aufmass/backend/Module.php`, `modules/vde0100/backend/Module.php`, `modules/din1090/Din1090Actions.php` | M4, M8, M12 |
+| `public/din1090_api.php` | M5 |
+| `public/script.js`, `public/script.min.js`, `public/index.html` (`?v=`), `public/sw.js` (`CACHE_VERSION`) | nur M6 (zwei `fetch` auf POST) + Cache-Busting |
+| `public/bedienungsanleitung.html` | Abschnitt Berechtigungen: KI-Scan (Material- oder Arbeitszeitrecht), Lager-KI-Foto (Lager-Schreibrecht), E-Mail-Versand von Belegen/Protokollen (jeweiliges Leserecht) (E-081) |
+| `tests/Api/RechteHaertungTest.php`, `tests/Api/PostPflichtTest.php` (neu) | Testplan unten |
+
+**Struktur (copier-astral):** keine neuen Ordner/Make-Targets/CLI/CI-Jobs; Tests in bestehender Suite `tests/Api/` (E-050).
+
+**Schritte (Commit-Reihenfolge)**
+
+1. **B2a Rechte** (M1–M4, M10, M11, M13, M14) + `RechteHaertungTest` → gezielte PHPUnit-Läufe SQLite + PostgreSQL → Commit.
+2. **B2b DIN-Einstieg** (M5, M8-DIN-Teil, L16) + Tests → Commit.
+3. **B2c POST-Pflicht**: (a) grep-Nachweis je Schreibaktion (Aufrufer aktuell + Vorversion, Ergebnis als Tabelle in §3), (b) `Auth::requirePost()`, (c) L5-Gruppe + M6 inkl. Frontend/Cache-Busting, (d) Rest-Handler + Module, (e) `PostPflichtTest` inkl. Klassifizierungs-Wächter → `npm.cmd run test:js`, `node scripts/check-versions.mjs --strict` → Commit.
+4. **B2d Ausgaben** (M9, M12) + Tests + Anleitung → Commit.
+5. Gesamtlauf PHPUnit SQLite + PostgreSQL, PHPStan ohne neue Baseline.
+
+**Testplan** (neue Klassen, keine Änderung an Fremddateien; je Maßnahme mind. ein Test, der **ohne Fix rot** ist; Rechte über `set_permissions` als Admin setzen, Sichtbarkeit über `set_visibility`)
+
+| Test | rot ohne Fix, weil … |
+|---|---|
+| M1 `testNormalOhneBelegrechtKannRechnungNichtMailen` (403 für `send_rechnung`/`send_angebot`, kein SMTP nötig, da 403 vor Versand) + Gegenprobe Master ≠ 403 | heute 400/500 statt 403 |
+| M2 `send_vde`/`send_din1090` ohne Leserecht → 403 | heute erreicht Handler den Versand |
+| M3 normal ohne beide Rechte → 403; nur `canEditArbeitszeit` → nicht 403; GET mit Recht → 405 | heute 400 („Kein API-Key“) |
+| M4 `module=lager&sub=foto_ai` mit Lese-, ohne Schreibrecht → 403 | heute erreicht Handler |
+| M5 DIN-Endpunkt: nach `set_role` (Session-Invalidierung) → 401; `mustChangePassword` → 403 | heute 200 |
+| M6 `clear_archive?confirm=1` per GET → 405, Archiv unverändert; Vorschau-GET → 200 | heute wird geleert |
+| M7/M8 Datenprovider über Schreibaktionen: Admin-GET → 405 (Objekt-ID als Query, wo Objektprüfung vor 405); Normal-GET auf admin-Aktion → 403 (Reihenfolge); Wächtertest: jede Route aus `public/api.php` (Regex auf `$routes`-Keys) ist in genau einer Liste SCHREIB/LESE/GET-AUSNAHME – neue Routen müssen klassifiziert werden | heute 200/400 statt 405 |
+| M8 DIN `delete_project` per GET → 405, Projekt existiert noch; Schreib-sub ohne `canWriteDin1090` → HTTP 403 | heute gelöscht bzw. 200 |
+| M9 anonym: kein Eintrag von User mit `showInWochenplanung=0`, kein `bemerkung` bei `typ=krank`/`arbeit`, keine nicht referenzierten Baustellennamen | heute enthalten |
+| M10 normal mit eingeschränkter Sichtbarkeit: `save_tagesbericht`, `save_sub_sort_order`, `save_schnellnotiz` mit fremder `baustelleId` → 403 | heute ok |
+| M11 `delete_file` ohne Kategorie, Rolle ohne `canWriteDateien` → 403 | heute ok |
+| M12 `send_rechnung` mit absichtlich falschem SMTP-Host (Master) → `error` enthält keinen Hostnamen/`ErrorInfo` | heute enthalten |
+| M13 normal `get_permissions` → 403 | heute 200 |
+| M14 Admin `check` → `permissions.canReadDin1090`, `canWriteEingangsbelege` = true | heute fehlen Keys |
+
+Abhängigkeit: Tests direkt gegen `din1090_api.php` brauchen einen Skript-Aufruf im `ApiClient`. Liegt `skript()`/`din1090()` nur in der **unkommittierten** Erweiterung des Klicktest-APs, entscheidet der Leitstand: zuerst jenes AP committen oder M5-Tests bis dahin zurückstellen (M8-DIN-Tests laufen über `module=din1090` mit `post('module', …, ['module'=>…,'sub'=>…])`).
+
+**Risiken**
+
+- **SQLite/PostgreSQL:** keine Schemaänderung; nur Tests auf beiden DBs (`scripts/test-pgsql.ps1`). Sichtbarkeits-Cache `Auth::expandVisibleBaustellenIds` ist `static` – im Testserver je Request neu, unkritisch.
+- **Migration/Fixture/Backup:** keine; Rechte-JSON unverändert, alte Sicherungen importierbar.
+- **Alte Clients (E-088):** größtes Risiko ist M7 → harte Regel „POST-Pflicht nur mit grep-Nachweis aktueller **und** vorheriger Clients“, sonst GET-Ausnahme. M6 bewusst mit 405 für alte Admin-Clients.
+- **Rechte:** M1–M4, M10, M11, M13 entsprechen bestehenden UI-Gates; Sonderkonfigurationen (z. B. Belegrecht ohne Preisrecht) siehe F-B2-3.
+- **Cache-Busting:** nur durch M6 (`script.js`).
+- **Modul-Lizenz/Flag:** M5 erzwingt Flag/Lizenz am Legacy-Einstieg – Instanzen ohne DIN-Lizenz, die den Endpunkt bisher direkt nutzten, erhalten 403 (UI zeigte das Modul dort ohnehin nicht).
+- **Umfang:** M7 berührt ≈ 100 Methoden mechanisch → Unterbündel B2c, schmale Review-Runde (E-094).
+
+**Abnahme (Konkretisierung von a–d):** (a) jede Aktion der SCHREIB-Liste (api.php, Module, DIN) liefert bei GET 405, GET-Ausnahmen sind im Test und hier begründet; (b) Liste „bewusst nur `requireAuth`“ oben + im Test; (c) `ai_scan_material` verlangt `canEditMaterial` ODER `canEditArbeitszeit`; (d) `RechteHaertungTest` + `PostPflichtTest` grün auf SQLite und PostgreSQL; zusätzlich: keine Rolle verliert eine Funktion, die ihre UI heute anbietet (Gegenproben Master/normal mit Default-Rechten ≠ 403).
+
+**Nicht Teil von B2 (Folgepunkte):** CSP-Header und Frontend-Härtung (`innerHTML`/`esc`-Audit); Origin-Ausnahme für private IPs (`api.php:91–94`); E-014 in admin/master-only Pfaden (`DataActions` Backup/Restore, `SystemJobActions:124`, `BaustelleActions:543,713`, `CatalogActions:855,907,1022`; `test_smtp` behält SMTP-Text bewusst als Diagnose); Baustellen-Sichtbarkeit in Modulen (Aufmaß/VDE/DIN) und bei Zeitbuchung auf unsichtbare Baustelle (Offline-Queue, E-088); `save_weekly_export` nur `requireAuth`; `material_top_used` projektübergreifend; Rate-Limit für KI-Scan; `logout` per GET.
+
+**Offene Fragen an den Nutzer (B2)**
+
+- **F-B2-1 (Wochenplan-Anzeige):** Die TV-Anzeige `wochenplan_display.html` ist ohne Anmeldung abrufbar. B2 reduziert die Daten auf das Angezeigte (M9). Soll sie zusätzlich per geheimem Link (Token wie beim iCal-Abo) geschützt werden? Folge: bestehende Anzeigen brauchen einmalig eine neue URL.
+- **F-B2-2 (Zeitbuchungen aller Kollegen):** Jeder angemeldete Mitarbeiter erhält heute alle Buchungen aller Kollegen inkl. Bemerkung und Von/Bis (genutzt u. a. in der mobilen Wochenplanung, `mobile.html:5599`). Sollen Mitarbeiter ohne „Alle Stunden sehen“/„Stundenauswertung“ von Kollegen nur noch Datum, Typ, Baustelle und Stunden erhalten?
+- **F-B2-3 (Belege):** (a) Sollen Rechnungen/Angebote (Liste, PDF, Versand) zusätzlich auf die sichtbaren Baustellen des Nutzers beschränkt werden? (b) Soll der E-Mail-Versand – wie die PDF-Ansicht – zusätzlich „Preise sehen“ verlangen (betrifft nur selbst angepasste Rollen)?
+- **F-B2-4 (Dateien):** Sollen Umbenennen und Verschieben (aus dem Quellordner) sowie „In Dateien speichern“ dasselbe Ordner-Schreibrecht verlangen wie Löschen? Rollen mit nur Leserecht verlieren dann Umbenennen/Verschieben; für „In Dateien speichern“ aus Rechnungen/Angeboten würde das Belegrecht als Ersatz gelten.
+- **F-B2-5 (DIN-Versand):** Soll der E-Mail-Versand von DIN-1090-Protokollen das Schreibrecht DIN 1090 verlangen (Server prüft den PDF-Inhalt nicht)? Mitarbeiter mit Standardrechten könnten dann nicht mehr versenden.
+
+**Entscheidungen Nutzer B2 (2026-11-19):**
+- **F-B2-1:** Ja – Wochenplan-Anzeige zusätzlich per geheimem Token-Link (Muster iCal-Abo); bestehende Anzeigen werden einmalig neu eingerichtet (Hinweis in Anleitung + Admin-UI zum Erzeugen/Erneuern des Links). Umsetzung in B2d zusammen mit M9.
+- **F-B2-2:** Ja – Nutzer ohne `canSeeAllStunden`/`canSeeStundenauswertung` erhalten von Kollegen nur Datum, Typ, Baustelle, Stunden (eigene Buchungen vollständig). Umsetzung in B2d.
+- **F-B2-3a:** Ja – Rechnungen/Angebote (Liste, PDF, Versand) auf sichtbare Baustellen beschränken (Admin/„alle“ unverändert). Umsetzung in B2a.
+- **F-B2-3b:** Ja – Belegversand zusätzlich `canSeePrices` (wie PDF-Ansicht). Umsetzung in B2a (M1).
+- **F-B2-4:** Ja – Umbenennen, Verschieben (Quell- und Zielordner) und „In Dateien speichern“ verlangen das Ordner-Schreibrecht. Das Belegrecht gilt als Ersatz **nur** für „In Dateien speichern“ aus Rechnungen/Angeboten (`save_generated_file`), nicht für `move_file`/`rename_file`/`delete_file` (präzisiert durch Leitstand nach Review B2a R1). Umsetzung in B2a (M11).
+- **F-B2-5:** Nein – DIN-Versand bleibt beim Leserecht (M2).
+- **Leitstand:** Der committete `tests/Support/ApiClient.php` hat bereits `skript()` und `post('module', …, ['module'=>…,'sub'=>…])` – B2-Tests nutzen nur diese, NICHT die unkommittierten Helfer `module()`/`din1090()` des Klicktest-APs.
 
 #### B3 – Kalkulation & Summen
 
@@ -323,6 +460,107 @@ Abweichungen vom Plan:
 
 Modell laut Aufruf (E-097, alle B1-Runden): Entwickler-Agent `entwickler.agent.md`, Tester-Agent `tester.agent.md`, Reviewer-Agent `reviewer.agent.md` – jeweils Agent-Standardmodell, kein Override durch den Leitstand.
 
+**B2a** (Runde 1) – Umfang: M1, M2 (api.php-Teil: `send_vde`/`send_din1090`), M3, M4, M10, M11, M13, M14 + F-B2-3a, F-B2-3b, F-B2-4.
+
+Geänderte/neue Dateien:
+- `src/Auth.php` – M14: `getCurrentUserPerms()` (admin-Zweig) leitet die Rechteliste jetzt aus `array_keys(getDefaultPermissions()['master'])` + `canSeeWochenpruefung` ab statt einer zweiten Handliste (L15, 17 vorher fehlende Keys inkl. Dokumentenordner, `canReadDin1090`/`canWriteDin1090`); `canDo()` unverändert (admin weiter Kurzschluss `true`). Neuer Helfer `Auth::canSeeBelegBaustelle(db, baustelleId, hasManageRecht)` (F-B2-3a): Baustellen-ID → `canSeeBaustelle()`; ohne Baustellenbezug → nur mit Verwaltungsrecht oder Sichtbarkeit `'all'` (Entscheidung: Beleg „für niemanden" ausgeschlossen).
+- `src/Handlers/CrudActions.php` – `listRechnungen()`: Ergebnis nach dem Laden zusätzlich über `canSeeBelegBaustelle()` gefiltert (F-B2-3a), je Zeile das passende Verwaltungsrecht (`canManageRechnungen`/`canManageAngebote`).
+- `src/Handlers/ExportActions.php` – `renderBelegPdf()`: nach der bestehenden Typrecht-Prüfung zusätzlich `canSeeBelegBaustelle()` auf die (ggf. aus dem Formular übernommene) `baustelleId` (F-B2-3a).
+- `src/Handlers/EmailActions.php` – `sendRechnung`/`sendAngebot` (M1): 401 → 403 Typrecht (`canManageRechnungen`/`canSeeRechnungen` bzw. Angebot-Pendant) + `canSeePrices` (F-B2-3b) → 404 → 403 `canSeeBelegBaustelle()` (F-B2-3a) → bestehender Ablauf. `sendVde`/`sendDin1090` (M2, nur api.php-Teil): 403 `canReadVde0100` bzw. `canReadDin1090` + `require_feature('din1090', …)` vor dem bisherigen Ablauf; `send_din1090` bewusst **ohne** Schreibrecht (F-B2-5: Nutzerentscheidung „Nein").
+- `src/Handlers/AiActions.php` – `scanMaterial()` (M3): 403 `canEditMaterial` ODER `canEditArbeitszeit` direkt nach `requireAuth()`, danach 405 bei Nicht-POST (E-015); Gemini-Fehlertext durch feste Meldung ersetzt, Original nur noch per `error_log()` (E-014, Teil von L13 der im M3-Scope liegt).
+- `modules/lager/backend/Module.php` – `foto_ai` (M4): Recht von `canReadLager` auf `canWriteLager` verschärft (Kostenschutz, L4); `foto_ai_available` unverändert (`canReadLager`, liefert nur ein bool).
+- `src/Handlers/AdminActions.php` – `getPermissions()` (M13): `requireAuth()` → `requireRole('admin')` (L14; einziger Aufrufer ist der Admin-Rechteeditor, bereits admin-only gated).
+- `src/Handlers/BaustelleActions.php` (M10, L9) – `toggleAuswertungFlag()`, `markOrdered()`: `canSeeBaustelle()` nach dem 404-Fetch der Baustelle ergänzt; `saveSubSortOrder()`: `canSeeBaustelle()` auf das Oberprojekt (`parentId`) vor der Schleife ergänzt.
+- `src/Handlers/PlanActions.php` (M10) – `loadSchnellnotizen()`: bei übergebener `baustelleId` zusätzlich `canSeeBaustelle()`; `saveSchnellnotiz()`: bei gesetzter `baustelleId` ebenso. `updateSchnellnotiz()`/`kannSchnellnotizSehen()` bewusst **nicht** angefasst (nicht Teil der 8 benannten M10-Aktionen, eigener Mechanismus aus AP-20261101).
+- `src/Handlers/TerminActions.php` (M10) – `saveTermin()`: bei gesetzter `baustelleId` zusätzlich `canSeeBaustelle()` vor dem Insert/Update.
+- `src/Handlers/FileActions.php` (M10 + M11/F-B2-4) – `saveTagesbuchExport()`, `saveTagesbericht()`: `canSeeBaustelle()` ergänzt (M10). Neuer privater Helfer `canWriteFolder(category)`: Ordner-Schreibrecht, bei `Ausgangsbelege`/`Angebote` zusätzlich das jeweilige Belegrecht als Ersatz (F-B2-4). `deleteFile()`: bei fehlender/leerer Kategorie zusätzlich `canWriteDateien` verlangt (L10, Altablage ≙ „Dateien"); Zweig mit gesetzter Kategorie unverändert. `renameFile()`: neue Prüfung über `canWriteFolder()` (vorher kein Schreibrecht nötig, L11). `moveFile()`: Zielrechte-Prüfung um die Quellordner-Prüfung ergänzt, beide über `canWriteFolder()` (vorher nur Zielrecht, L11). `saveGeneratedFile()`: neue Prüfung über `canWriteFolder()` (vorher kein Ordnerrecht nötig, L11).
+- `public/script.js` – Datei-Browser (`loadBaustelleFiles()`/`renderCard`): „Umbenennen"/„In anderen Ordner verschieben"-Icons werden nur noch gerendert, wenn `canDo('canWrite'+kategorie)` (bzw. Belegrecht-Ersatz für Ausgangsbelege/Angebote) zutrifft – **E-088-Nachkopplung**, da die UI diese Aktionen vorher ungated anbot (siehe unten).
+- `public/script.min.js`, `public/index.html` (`script.min.js?v=251`), `public/sw.js` (`CACHE_VERSION` `bk-es-v255`→`bk-es-v256`, Precache-Eintrag `script.min.js?v=251`) – Cache-Busting für die `script.js`-Änderung.
+- `public/bedienungsanleitung.html` – Abschnitt „Dateien & Fotos": Hinweis, dass Umbenennen/Verschieben das Ordner-Schreibrecht (Quell- und Zielordner) verlangen; Abschnitt „Kunden & Rechnungen": Hinweis, dass Liste/PDF/Versand von Rechnungen/Angeboten auf sichtbare Baustellen beschränkt sind und der Versand zusätzlich „Preise sehen" verlangt (E-081).
+- `tests/Api/RechteHaertungTest.php` (neu) – 46 Tests, je Maßnahme/Teilaspekt mindestens ein Negativ- (403 ohne Fix) und ein Positivfall; nur committete `ApiClient`-Helfer (`get/post`, `module`-Aufrufe per `post('module', …, ['module'=>…,'sub'=>…])`) verwendet, `tests/Unit/EndpunktInventarTest.php`/`tests/fixtures/endpunkt-luecken.json` nicht angefasst.
+
+E-088-Nachweise (UI setzt das Recht bereits voraus → nur Backend verschärft):
+- M1: Mail-Dialog nur in Rechnungs-/Angebotsansicht (`script.js:14064,14076`), Menüeintrag nur bei `canSeeRe`/`canSeeAn` (`script.js:8487–8495`); „In Dateien speichern"/„Vorschau" nur innerhalb `openRechnungForm()`, das selbst `canManageRechnungen`/`canManageAngebote` voraussetzt (`script.js:13394–13396`).
+- M2: `send_vde` nur aus `vde0100.js:637` (Modul nur mit `canReadVde0100` nutzbar, `modules/vde0100/backend/Module.php:46f`); `send_din1090` nur aus `din1090.js:1646` (Dispatch verlangt `canReadDin1090` für jeden Aufruf, `Din1090Actions.php:31`).
+- M3: Kopf-Knopf `btnKiScanHeader` nur bei `canEditMaterial` ODER `canEditArbeitszeit` (`script.js:8498`), mobil `btnKiScanMat` bei `canEditMaterial` (`mobile.html:2003`); beide Aufrufe bereits POST (`script.js:3444`, `mobile.html:3669`).
+- M4: Aufruf nur aus dem Artikeldialog (`lager.js:988`), der nur bei `canWriteLager` öffnet (`lager.js:155,214`, „+ Artikel"/„Bearbeiten"-Buttons gated).
+- M10: UI bietet nur Baustellen aus `load` an, das per `getEffectiveVisibility()` filtert (`DataActions.php:26`) – kein Bestandsnutzer verliert eine ihm angebotene Funktion.
+- M11/F-B2-4: `delete_file` sendet Desktop/mobil immer eine Kategorie (unverändertes Altverhalten bleibt M11-irrelevant); **„Umbenennen"/„Verschieben" waren bislang ungated** (jeder mit Lesezugriff auf den Dateibrowser sah die Icons) → Frontend-Kopplung in `script.js` ergänzt (s. o.), da sonst Leser mit reinem Leserecht nach dem Fix einen Fehler statt eines ausgeblendeten Knopfes gesehen hätten. „In Dateien speichern" ist bereits über `openRechnungForm()`/`canManage…` gated (s. M1).
+- M13: einziger Aufrufer `loadPermissionsEditor()` wird nur aus `openUserModal()` gerufen, das selbst nur über den admin-only Menüpunkt `btnUserMgmt` erreichbar ist (`script.js:349–351`, `index.html:101`).
+
+Ausgeführte Prüfungen:
+- `php vendor/bin/phpunit --filter RechteHaertungTest` (SQLite) → **GRÜN** (46 Tests, 690 Assertions).
+- `php vendor/bin/phpunit --filter RechteHaertungTest` (PostgreSQL, `scripts/test-pgsql.ps1`) → **GRÜN** (46 Tests, 690 Assertions).
+- `php vendor/bin/phpunit --filter "RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest|AuthTest|KundenTest|KundenArchivTest|ZeiterfassungTest|SollzeitProfilTest|GleitzeitSaldoTest|ZeiterfassungAdminTest|MetallzuschlagTest|BackupTest|BackupImportTest|BackupFixtureImportTest"` – betroffene/berührte Klassen je Datei – SQLite → **GRÜN** (124 Tests, 1723 Assertions); PostgreSQL → **GRÜN** (124 Tests, 1723 Assertions).
+- `php vendor/bin/phpunit --testsuite unit` (SQLite, Gesamtlauf) → 349 Tests, 997 Assertions, 3 skipped, **1 Fehler** (siehe Abweichungen: `EndpunktInventarTest`, fremdes AP).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → `[OK] No errors` (keine neuen Baseline-Einträge).
+- `npm.cmd run minify` → `script.min.js` neu erzeugt.
+- `npm.cmd run test:js` → **GRÜN** (43/43).
+- `node scripts/check-versions.mjs --strict` → OK, keine Versions-Drift.
+
+Abweichungen vom Plan:
+- **Cross-AP-Konflikt (gemeldet, nicht behoben):** `php vendor/bin/phpunit --testsuite unit` schlägt mit genau einem Fehler fehl: `Tests\Unit\EndpunktInventarTest::testAlleEndpunkteGetestetOderInLueckenliste` verlangt, 18 jetzt getestete Aktionen (u. a. `send_rechnung`, `delete_file`, `get_permissions`, `module`/`foto_ai`) aus `tests/fixtures/endpunkt-luecken.json` zu entfernen. Beide Dateien gehören laut Auftrag zu einem anderen (unkommittierten) AP und durften hier **nicht geändert werden** – der Leitstand muss die Lückenliste nach Zusammenführen beider APs aktualisieren.
+- **Befund außerhalb des Plans (gemeldet, nicht behoben):** `moveFile()`/`downloadFile()` enthalten einen vorbestehenden, von B2a unabhängigen Windows-spezifischen Bug im `realpath()`-Pfadvergleich (`$real... . '/'` vergleicht einen Backslash-Pfad gegen ein angehängtes `/` → schlägt auf Windows für **jede** erfolgreiche Operation fehl, unabhängig von Rechten; unter Linux/Docker mit „/"-Pfaden tritt der Fehler nicht auf). Dadurch liefert `testM11MoveFileMitBeidenRechtenKommtDurch` auf diesem Windows-Dev-Rechner nach bestandener Rechteprüfung ein 404 statt 200 – der Test prüft deshalb nur „kein 403" statt `assertOk`. Nicht Teil der Lückenliste/Maßnahmenliste von B2a, daher nicht gefixt; zur Kenntnisnahme an Leitstand/Reviewer gemeldet.
+- M11 „bei Belegen gilt das Belegrecht als Ersatz" wurde (wie in der Aufgabenbeschreibung kombiniert) einheitlich über `canWriteFolder()` auch für `rename_file`/`move_file` umgesetzt, nicht nur für `save_generated_file` – geringfügig weiter gefasst als der ursprüngliche M11-Tabelleneintrag (der nur `save_generated_file` nannte), aber genau im Rahmen der kombinierten F-B2-4-Entscheidung des Nutzers.
+- Keine sonstigen Abweichungen.
+
+**B2a Korrekturrunde 1** (E-094, schmal; Review CHANGES_REQUESTED, Befundtabelle B2a Runde 1 + präzisierter F-B2-4)
+
+Befund → Änderung:
+- **Major** `ExportActions.php:282–286, 302–307` (`renderBelegPdf`, Formularmodus-IDOR): Direkt nach dem 404-Fetch des gespeicherten Belegs wird jetzt `Auth::canSeeBelegBaustelle()` auf die **gespeicherte** `baustelleId` geprüft (403) – noch bevor das Formular-Overlay (`beleg.baustelleId` u. a.) den gespeicherten Wert überschreibt. Die bestehende zweite Prüfung nach dem Overlay bleibt erhalten (deckt neue Belege und beabsichtigte Baustellenwechsel im Formular ab) und ist jetzt entsprechend kommentiert.
+- **Major** `ExportActions.php:200–223` (`generate_zugferd`): Nach dem 404-Fetch und der Typ-Prüfung (`typ='rechnung'`) zusätzlich `Auth::canSeeBelegBaustelle($rechnung['baustelleId'] ?? null, canManageRechnungen)` ergänzt (403, feste Meldung wie bei `renderBelegPdf`) – identische F-B2-3a-Prüfung wie im PDF-Pfad.
+- **Minor** `CrudActions.php:355–426` (`save_rechnung`/`delete_rechnung`): `saveRechnung()` prüft bei Update zuerst die gespeicherte Baustelle (vor dem Merge), danach zusätzlich die neue/gemergte Baustelle aus dem Request; beim Neuanlegen wird die Baustelle aus dem Request geprüft. `deleteRechnung()` lädt zusätzlich `baustelleId` und prüft sie nach der bestehenden Typrecht-Prüfung, vor dem `DELETE`. Reihenfolge 401→403(Recht)→404→403(Objekt) eingehalten (Objekt-404/Typrecht-Reihenfolge dieser beiden Methoden war bereits vorher so und wurde nicht umgestellt, nur um die Sichtbarkeitsprüfung ergänzt).
+- **Minor** `FileActions.php:29–35, 392–398` (F-B2-4 präzisiert): `canWriteFolder()` (Belegrecht-Ersatz) wird jetzt **nur noch** von `saveGeneratedFile()` aufgerufen (Doku-Kommentar angepasst). `moveFile()` und `renameFile()` prüfen Quell-/Zielordner bzw. Zielordner jetzt direkt über `Auth::canDo('canWrite'+Kategorie)` ohne Belegrecht-Fallback – die ursprüngliche (vor B2a-Runde-1-Fix bestehende) Zielprüfung von `move_file` ist damit nicht gelockert. `delete_file` war bereits korrekt (kein Belegrecht-Ersatz) und wurde nicht verändert. Frontend-Gating in `script.js` (Umbenennen-/Verschieben-Icons) an die geschärfte Regel angepasst (kein Belegrecht-Fallback mehr für diese beiden Aktionen) – Cache-Busting nachgezogen.
+- **Minor** `PlanActions.php:562–570` (`kannSchnellnotizSehen`): Für Notizen mit `baustelleId` wird jetzt `Auth::canSeeBaustelle()` geprüft statt pauschal `true` zurückzugeben – konsistent zu `load_schnellnotizen` (M10). `update_schnellnotiz` nutzt diese Methode bereits, daher kein weiterer Code dort nötig.
+- **Minor** `CrudActions.php:327–332` (N+1 in `listRechnungen`): `Auth::getEffectiveVisibility()` wird jetzt **einmal** vor der Filterschleife aufgerufen; die sichtbaren IDs werden per `array_flip(array_map('intval', …))` in ein Set normalisiert (E-096) und die Filterfunktion prüft nur noch `isset($visSet[$id])` statt pro Zeile `canSeeBaustelle()`/`getEffectiveVisibility()` (und damit eine SQL-Abfrage) auszuführen. Ergebnislogik 1:1 identisch zu `Auth::canSeeBelegBaustelle()` nachgebildet (keine Verhaltensänderung, nur Performance).
+
+Geänderte Dateien:
+- `src/Handlers/ExportActions.php` – `renderBelegPdf()` (früher Sichtbarkeits-Check vor Overlay), `generateZugferd()` (F-B2-3a ergänzt).
+- `src/Handlers/CrudActions.php` – `listRechnungen()` (N+1-Fix), `saveRechnung()`/`deleteRechnung()` (Sichtbarkeitsprüfung gespeicherte + neue Baustelle).
+- `src/Handlers/FileActions.php` – `moveFile()`/`renameFile()` auf direkte `canWrite<Kategorie>`-Prüfung ohne Belegrecht-Ersatz umgestellt; Doku-Kommentar `canWriteFolder()` präzisiert (nur noch für `saveGeneratedFile()`).
+- `src/Handlers/PlanActions.php` – `kannSchnellnotizSehen()`: Sichtbarkeitsprüfung für Notizen mit `baustelleId`.
+- `public/script.js` – Datei-Browser: Umbenennen-/Verschieben-Icons zeigen sich nur noch bei Ordner-Schreibrecht (kein Belegrecht-Fallback mehr), konsistent zum geschärften Backend.
+- `public/script.min.js`, `public/index.html` (`script.min.js?v=252`), `public/sw.js` (`CACHE_VERSION` `bk-es-v256`→`bk-es-v257`, Precache-Eintrag `script.min.js?v=252`) – Cache-Busting für die `script.js`-Änderung.
+- `tests/Api/RechteHaertungTest.php` – 15 neue Tests (siehe §4): Formular-IDOR (`render_beleg_pdf`), `generate_zugferd` (403/kein 403), `save_rechnung`/`delete_rechnung` fremd (403, Löschen bleibt in DB erhalten – nachgewiesen), Positivfälle F-B2-3a (Manage-Recht, Sichtbarkeit `all`, Unterprojekt-Cascade), `move_file` nur mit Belegrecht ohne Ordnerrecht (403), `update_schnellnotiz` fremd/sichtbar.
+
+Ausgeführte Prüfungen:
+- SQLite: `php vendor/bin/phpunit --filter "RechteHaertungTest|RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest|Zugferd"` → **GRÜN** (91 Tests, 1542 Assertions).
+- SQLite: `php vendor/bin/phpunit --filter "RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest|AuthTest|KundenTest|KundenArchivTest|ZeiterfassungTest|SollzeitProfilTest|GleitzeitSaldoTest|ZeiterfassungAdminTest|MetallzuschlagTest|BackupTest|BackupImportTest|BackupFixtureImportTest"` → **GRÜN** (124 Tests, 1723 Assertions).
+- PostgreSQL (`scripts/test-pgsql.ps1`, gleiche Filter): beide Läufe → **GRÜN** (91 bzw. 124 Tests, identische Assertion-Zahlen).
+- `php vendor/bin/phpunit --testsuite unit` (SQLite, Gesamtlauf) → 349 Tests, 997 Assertions, 3 skipped, **1 Fehler** – derselbe, bereits in Runde 1 gemeldete Cross-AP-Konflikt (`EndpunktInventarTest` vs. unkommittierte `tests/fixtures/endpunkt-luecken.json` eines anderen APs); die Liste der jetzt zusätzlich getesteten Aktionen enthält neu `generate_zugferd` (durch diese Korrekturrunde), ansonsten unverändert. Weiterhin nicht behoben, da Fremddatei.
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → `[OK] No errors` (vor und nach den Testergänzungen).
+- `npm.cmd run minify` → `script.min.js` neu erzeugt.
+- `npm.cmd run test:js` → **GRÜN** (43/43).
+- `node scripts/check-versions.mjs --strict` → OK (`bk-es-v257`, `script.min.js?v=252` konsistent in `index.html`/`sw.js`).
+
+Abweichungen vom Plan:
+- Für den Positivtest `testFB2_3aZugferdAnSichtbareBaustelleKommtDurch` wurde zusätzlich `firma_steuernr` per `save_settings` gesetzt, da `ZugferdService::generate()` ohne Steuernummer/USt-IdNr. eine `RuntimeException` wirft (fachliche Pflichtangabe, unabhängig von B2a) – ohne diese Einstellung wäre der Test zwar auch „nicht 403“ (da die Exception erst nach der neuen Sichtbarkeitsprüfung geworfen wird), aber weniger aussagekräftig. Keine Produktivcode-Änderung dafür nötig.
+- Der vorbestehende Windows-`realpath`-Befund (`moveFile()`) aus Runde 1 bleibt unverändert bestehen und ist weiterhin nicht Teil dieser Korrekturrunde (nicht in der Leitstand-Liste der zu behebenden Punkte enthalten).
+- Keine sonstigen Abweichungen; die vom Reviewer vorgeschlagenen Hinweise zu E-Mail-405 (B2c), `baustelleId`-Typnormalisierung, Endungs-Sperrliste und archivierten Unterprojekten wurden – wie von der Leitstand-Anweisung „Nicht in dieser Runde“ vorgegeben – nicht angefasst.
+
+**B2a Korrekturrunde 2** (E-094, sehr schmal; Review APPROVE Runde 2, Befundtabelle B2a Runde 2)
+
+Befund → Änderung:
+- **Minor** `PlanActions.php:569–571` (`kannSchnellnotizSehen`, Regression aus Korrekturrunde 1): Die Baustellen-Sichtbarkeitsprüfung gab bei gesetzter `baustelleId` per `return Auth::canSeeBaustelle(...)` sofort `false` zurück, wenn die Baustelle nicht sichtbar war – die übrigen Freigaben (Ersteller, zugewiesen an User/„alle“/Gruppe) liefen dann nicht mehr. Jetzt: `if ($note['baustelleId'] !== null && Auth::canSeeBaustelle(...)) return true;` als zusätzliche Bedingung, danach läuft die Prüfung in jedem Fall in die bestehende Ersteller-/Zuweisungs-Kette weiter (statt mit `return` an deren Stelle zu treten). Docblock korrigiert, damit er wieder zu `loadSchnellnotizen()` passt (Baustellen-Sichtbarkeit ergänzt die übrigen Freigaben, ersetzt sie nicht).
+- **Minor** `CrudActions.php:361–385` (`saveRechnung`, Typwechsel-IDOR, vorbestehend im selben Overlay-Muster wie der Korrekturrunde-1-Fund): Beim Update wurde der Typ des **gespeicherten** Belegs nicht gegen das Typrecht geprüft – mit nur `canManageRechnungen` konnte ein fremdes Angebot über `{id:<Angebot>, typ:'rechnung'}` gelesen (Antwort `rechnung`), überschrieben und in eine Rechnung umgewandelt werden. Jetzt direkt nach dem 404-Fetch: (1) Typrecht auf `$existing['typ']` prüfen (`canManageRechnungen`/`canManageAngebote` je nach gespeichertem Typ) → 403 „Keine Berechtigung für diesen Beleg.“ bei Fehlen; (2) Typwechsel ablehnen, falls `$existing['typ'] !== $rechnung['typ']` → 409 „Der Belegtyp kann nicht nachträglich geändert werden.“ (feste Meldung). Status 409 statt 400 gewählt: `400` ist im Handler für fehlerhafte Eingabeformate reserviert (`Ungültiger Typ.` bei unbekanntem/fehlendem `typ`-Wert), ein Typwechsel ist dagegen ein **Konflikt** zwischen Request und gespeichertem Zustand – 409 ist im Codebase bereits dieser Semantik vorbehalten (`ZeiterfassungActions.php:157,176`, `zeit_conflict`/Lösch-Guard). Beide Prüfungen laufen vor dem Overlay (Merge) und vor den bestehenden Baustellen-Sichtbarkeitsprüfungen.
+  - Frontend-Check (grep `public/script.js`): `saveRechnungForm(typ, existingId)`/`openRechnungForm(typ, editId)` übergeben `typ` immer fest (aus dem Aufrufkontext der jeweiligen Rechnungen-/Angebote-Liste bzw. „+ Neue Rechnung“/„+ Neues Angebot“); die beiden Stellen, die Positionen aus einer Baustelle übernehmen (≈14273, ≈14417), rufen `openRechnungForm(typ, null)` mit `existingId=null` auf – legen also **immer einen neuen** Beleg an, keinen Typwechsel an einem bestehenden. Keine UI-Stelle gefunden, die `save_rechnung` mit abweichendem `typ` auf eine bestehende `id` aufruft → kein Umbau nötig, keine offene Frage.
+- **Hinweis** `tests/Api/RechteHaertungTest.php` (aus Review Runde 2): `testSaveRechnungAenderungAnFremderGespeicherterBaustelleIst403` deckt nur die zweite (gemergte) Baustellen-Prüfung ab, nicht die erste (gespeichert vor dem Merge) eigenständig. Ergänzt um einen Test mit sichtbarer Request-`baustelleId`, die die fremde gespeicherte Baustelle nicht überschreiben darf. Ebenso `rename_file` nur mit Belegrecht (ohne Ordner-Schreibrecht) ergänzt (analog zum bestehenden `move_file`-Test aus Korrekturrunde 1).
+
+Geänderte Dateien:
+- `src/Handlers/PlanActions.php` – `kannSchnellnotizSehen()`: Baustellen-Sichtbarkeit als zusätzliche (nicht ersetzende) Freigabe, Docblock korrigiert.
+- `src/Handlers/CrudActions.php` – `saveRechnung()`: Typrecht auf gespeicherten Typ geprüft (403), Typwechsel abgelehnt (409).
+- `tests/Api/RechteHaertungTest.php` – 6 neue Tests: `update_schnellnotiz` für zugewiesene Notiz an unsichtbarer Baustelle (200), `save_rechnung` mit sichtbarer Request-Baustelle aber fremder gespeicherter Baustelle (403, Beleg unverändert), Typwechsel abgelehnt (403 bei fehlendem Typrecht, 409 bei vorhandenem Typrecht), Update ohne Typwechsel kommt durch (200), `rename_file` nur mit Belegrecht ohne Ordnerrecht (403).
+
+Ausgeführte Prüfungen:
+- SQLite: `php vendor/bin/phpunit --filter "RechteHaertungTest|RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest"` → **GRÜN** (96 Tests, 1661 Assertions).
+- PostgreSQL (`scripts/test-pgsql.ps1`, gleicher Filter) → **GRÜN** (96 Tests, 1661 Assertions, identisch zu SQLite).
+- `php vendor/bin/phpstan analyse --memory-limit=2G` → `[OK] No errors`.
+- Keine Frontend-Produktivcode-Änderung in dieser Runde (nur `grep`-Prüfung, kein Edit) → `node scripts/check-versions.mjs --strict`/`npm run test:js` nicht erforderlich, nicht ausgeführt.
+
+Abweichungen vom Plan:
+- Status 409 statt 400 für den Typwechsel gewählt (im Auftrag als Option genannt und zu begründen) – siehe Begründung oben.
+- Keine sonstigen Abweichungen.
+
 ## 4. Tests
 
 <!-- Tester: GRÜN/ROT, neue Tests, Ergebnis SQLite/PostgreSQL (je Runde) -->
@@ -348,6 +586,51 @@ Ausgeführte Läufe:
 | B1-b Bei langem Menü bleibt Projektliste sichtbar und scrollt eigenständig | `tests/js/sidebar-scrollstruktur.test.mjs::Projektbereich behält Mindesthöhe und delegiert Scrollen an die Liste`; `tests/js/sidebar-scrollstruktur.test.mjs::Sidebar in index.html trennt Menü und Projekte in eigene Bereiche` | n/a | n/a | **GRÜN** |
 | B1-c Menü scrollt eigenständig | `tests/js/sidebar-scrollstruktur.test.mjs::Menü ist höhenbegrenzt und nutzt eigenen Scrollbereich`; `tests/js/sidebar-scrollstruktur.test.mjs::Sidebar-Wrapper scrollt nicht mehr als Ganzes` | n/a | n/a | **GRÜN** |
 
+
+**B2a** (Runde 1) – **GRÜN**
+
+Neue/geänderte Tests:
+- `tests/Api/RechteHaertungTest.php` erweitert von 46 auf 55 Tests.
+- Neu ergänzt:
+  - `testFB2_3aPdfAnSichtbareBaustelleKommtDurch`
+  - `testFB2_3aListeMitSichtbarerBaustelleZeigtBeleg`
+  - `testM3AnonymIst401VorRechtepruefung`
+  - `testM3OhneRechtBeiGetWeiterhin403Vor405`
+  - `testM10LoadSchnellnotizenSichtbareBaustelleKommtDurch`
+  - `testM10SaveTagebuchExportSichtbareBaustelleKommtDurch`
+  - `testM10SaveTerminSichtbareBaustelleKommtDurch`
+  - `testM10MarkOrderedSichtbareBaustelleKommtDurch`
+  - `testM10ToggleAuswertungFlagSichtbareBaustelleKommtDurch`
+
+Ausgeführte Läufe:
+- SQLite: `php vendor/bin/phpunit --filter RechteHaertungTest` → **GRÜN** (55 Tests, 857 Assertions)
+- SQLite: `php vendor/bin/phpunit --filter "RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest|AuthTest|KundenTest|KundenArchivTest|ZeiterfassungTest|SollzeitProfilTest|GleitzeitSaldoTest|ZeiterfassungAdminTest|MetallzuschlagTest|BackupTest|BackupImportTest|BackupFixtureImportTest"` → **GRÜN** (124 Tests, 1723 Assertions)
+- PostgreSQL (`scripts/test-pgsql.ps1`, gleiche Filter):
+  - `RechteHaertungTest` → **GRÜN** (55 Tests, 857 Assertions)
+  - betroffene Klassen-Filter → **GRÜN** (124 Tests, 1723 Assertions)
+- `php vendor/bin/php-cs-fixer check --diff` → **GRÜN**
+- `npm.cmd run test:js` → **GRÜN** (43/43)
+
+| Abnahmekriterium / Maßnahme | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
+|---|---|---|---|---|
+| M1 (Rechnungs-/Angebotsversand Recht) negativ/positiv | `RechteHaertungTest::testM1NormalOhneBelegrechtKannRechnungNichtMailen`; `::testM1MasterKannRechnungMailenVersuchen`; `::testM1NormalOhneBelegrechtKannAngebotNichtMailen` | **GRÜN** | **GRÜN** | n/a |
+| F-B2-3b (`canSeePrices`) negativ/positiv | `RechteHaertungTest::testM1SeeRechtOhnePreisrechtBleibt403`; `::testM1SeeUndPreisrechtKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| F-B2-3a Versand sichtbar/unsichtbar | `RechteHaertungTest::testFB2_3aVersandAnUnsichtbareBaustelleIst403`; `::testFB2_3aVersandAnSichtbareBaustelleKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| F-B2-3a PDF sichtbar/unsichtbar | `RechteHaertungTest::testFB2_3aPdfAnUnsichtbareBaustelleIst403`; `::testFB2_3aPdfAnSichtbareBaustelleKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| F-B2-3a Liste sichtbar/unsichtbar | `RechteHaertungTest::testFB2_3aListeFiltertUnsichtbareBaustelle`; `::testFB2_3aListeMitSichtbarerBaustelleZeigtBeleg` | **GRÜN** | **GRÜN** | n/a |
+| M2 (`send_vde`, `send_din1090`) negativ/positiv | `RechteHaertungTest::testM2SendVdeOhneLeserechtIst403`; `::testM2SendVdeMitLeserechtKommtDurch`; `::testM2SendDin1090OhneLeserechtIst403`; `::testM2SendDin1090MitLeserechtKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| M3 Recht + POST-Pflicht + Reihenfolge 401→403→405 | `RechteHaertungTest::testM3AnonymIst401VorRechtepruefung`; `::testM3OhneRechtBeiGetWeiterhin403Vor405`; `::testM3GetMitRechtIst405`; `::testM3OhneRechtIst403`; `::testM3MitArbeitszeitrechtKeine403`; `::testM3MitMaterialrechtKeine403` | **GRÜN** | **GRÜN** | n/a |
+| M4 (`lager/foto_ai`) negativ/positiv | `RechteHaertungTest::testM4FotoAiOhneSchreibrechtIst403`; `::testM4FotoAiMitSchreibrechtKommtDurch`; `::testM4FotoAiAvailableBleibtBeimLeserecht` | **GRÜN** | **GRÜN** | n/a |
+| M10 (alle 8 Aktionen, je negativ/positiv) | `RechteHaertungTest::testM10SaveTagesberichtUnsichtbareBaustelleIst403`; `::testM10SaveTagesberichtSichtbareBaustelleKommtDurch`; `::testM10SaveSubSortOrderUnsichtbaresOberprojektIst403`; `::testM10SaveSubSortOrderSichtbaresOberprojektKommtDurch`; `::testM10SaveSchnellnotizUnsichtbareBaustelleIst403`; `::testM10SaveSchnellnotizSichtbareBaustelleKommtDurch`; `::testM10LoadSchnellnotizenUnsichtbareBaustelleIst403`; `::testM10LoadSchnellnotizenSichtbareBaustelleKommtDurch`; `::testM10SaveTagebuchExportUnsichtbareBaustelleIst403`; `::testM10SaveTagebuchExportSichtbareBaustelleKommtDurch`; `::testM10SaveTerminUnsichtbareBaustelleIst403`; `::testM10SaveTerminSichtbareBaustelleKommtDurch`; `::testM10MarkOrderedUnsichtbareBaustelleIst403`; `::testM10MarkOrderedSichtbareBaustelleKommtDurch`; `::testM10ToggleAuswertungFlagUnsichtbareBaustelleIst403`; `::testM10ToggleAuswertungFlagSichtbareBaustelleKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| M11 (`delete`/`rename`/`move` Quelle+Ziel/`save_generated_file`) | `RechteHaertungTest::testM11DeleteFileOhneKategorieVerlangtCanWriteDateien`; `::testM11DeleteFileOhneKategorieMitRechtLoescht`; `::testM11RenameFileOhneSchreibrechtIst403`; `::testM11RenameFileMitSchreibrechtKommtDurch`; `::testM11MoveFileOhneQuellrechtIst403`; `::testM11MoveFileOhneZielrechtIst403`; `::testM11MoveFileMitBeidenRechtenKommtDurch`; `::testM11SaveGeneratedFileOhneOrdnerrechtIst403`; `::testM11SaveGeneratedFileBelegrechtErsatzFuerAusgangsbelege`; `::testM11SaveGeneratedFileMitOrdnerrechtKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| M13 (`get_permissions` nur Admin) | `RechteHaertungTest::testM13GetPermissionsNormalIst403`; `::testM13GetPermissionsMasterIst403`; `::testM13GetPermissionsAdminKommtDurch` | **GRÜN** | **GRÜN** | n/a |
+| M14 (Admin-Rechteliste vollständig) | `RechteHaertungTest::testM14AdminPermsEnthaeltDokumentenordnerUndDin1090` | **GRÜN** | **GRÜN** | n/a |
+| E-088 Kompatibilität (Standardrechte `normal`) | `RechteHaertungTest::testM2SendVdeMitLeserechtKommtDurch` (Default `canReadVde0100=true`) | **GRÜN** | **GRÜN** | n/a |
+
+Befunde:
+- Kein neuer Produktivfehler im B2a-Scope gefunden.
+- Bekannter, vorbestehender Windows-`realpath`-Bug (`moveFile()`/`downloadFile()`) bleibt dokumentiert; deshalb bei `testM11MoveFileMitBeidenRechtenKommtDurch` bewusst „nicht 403“ statt hartem 200-Assert.
+
 ## 5. Review
 
 <!-- Reviewer: Urteil, Befundtabelle, Lernpunkt-Kandidaten (je Runde) -->
@@ -372,6 +655,59 @@ Lernpunkt-Kandidaten:
 
 **Entscheidung Leitstand zu den Befunden (2026-11-19):** Minor (Leerraum eingeklappter Projektbereich) → behoben in **B1 Korrekturrunde 2** (siehe §3, `:has()`-Lösung akzeptiert, 43/43 grün, check-versions OK). Hinweise: Statiktest-Brüchigkeit + Collapse-Falle als Lernpunkt-Kandidaten erfasst (§6); kleine Fensterhöhe beobachten; Anführungszeichen-Kosmetik bei nächster Anleitungsänderung; Modellvermerk nachgetragen (§3); Commit erfolgt strikt mit expliziten B1-Pfaden (E-076).
 
+**B2a** Runde 1 – **CHANGES_REQUESTED**
+
+Geprüft: Diff aller B2a-Dateien (`git diff`), angrenzender Code gezielt (`Auth::getEffectiveVisibility/expandVisibleBaustellenIds/canSeeBaustelle`, `ExportActions::renderBelegPdf/generateZugferd`, `CrudActions::saveRechnung/deleteRechnung`, `BelegPdfService::belegDaten`, `FileActions` move/rename/delete/saveGenerated, `PlanActions` Schnellnotizen, `lager.js` foto_ai-Aufrufer, `script.js` `canDo`/Dateikarten/`_reFormularBeleg`). Selbst ausgeführt: `phpunit --filter "RechteHaertungTest|RechnungenTest|BelegPdfTest"` (SQLite) → GRÜN 64/941; `phpstan analyse` → OK; `node scripts/check-versions.mjs --strict` → OK (v251/bk-es-v256), `script.min.js` enthält das neue Gating. PostgreSQL nicht selbst gelaufen (Tester: GRÜN). Bestätigt OK: M13; M14 (Skript-Abgleich aller `canDo`/`requirePerm`-Keys in `src/`, `modules/`, `public/` → außer `canSeeWochenpruefung` und dynamischem `canWrite`+Kategorie keine Keys außerhalb `master`, alte Handliste war Teilmenge → rein additiv, `normal` ⊂ `master`); M3 (401→403→405, feste Meldung); M4 (einziger Aufrufer im Artikeldialog, `lager.js:330/884/988`, nur bei `canWriteLager`); M10 (8 Aktionen, Unterprojekte über Cascade des Oberprojekts); M11 Quell- **und** Zielordner; keine Schema-/SQL-Änderung (kein PostgreSQL-/Backup-Risiko); kein `@` neu, keine Secrets; Tests nutzen nur committete Helfer (`get/post/skript`, kein `module()`/`din1090()`), keine Abhängigkeit von Fremddateien (`phpunit.xml.dist`-Diff betrifft nur Coverage-Quelle).
+
+| Schwere | Datei:Zeile | Problem | Vorschlag |
+|---|---|---|---|
+| Major | src/Handlers/ExportActions.php:282–286, 302–307 | IDOR (A01) in `renderBelegPdf`: Im Formularmodus mit `beleg.id` überschreibt `beleg.baustelleId` den **gespeicherten** Wert, bevor F-B2-3a geprüft wird. Nutzer mit `canManageRechnungen`+`canSeePrices` und eingeschränkter Sichtbarkeit sendet `{beleg:{id:<fremd>, typ:'rechnung', baustelleId:<eigene>}}` (oder `null` → Manage-Ersatz greift) → Prüfung besteht; das PDF enthält Kunde (gespeicherte `kundeId`, wenn Feld weggelassen), Nummer, Datum, Fälligkeit, Beschreibung, Notizen und Absender des fremden Belegs (`BelegPdfService.php:47–70`). Genau der Fall „Baustelle aus Request statt aus DB“. | Direkt nach dem 404-Fetch (vor dem Overlay) `canSeeBelegBaustelle()` mit dem gespeicherten `baustelleId` prüfen (404 → 403); nach dem Overlay zusätzlich das Formular-`baustelleId` prüfen (neue Belege/Baustellenwechsel). Test: Formularpfad mit fremder ID + eigener bzw. leerer `baustelleId` → 403. |
+| Major | src/Handlers/ExportActions.php:200–223 | `generate_zugferd` liefert das ZUGFeRD-PDF (Kunde, Positionen, Preise) eines Belegs per `rechnungId` **ohne** F-B2-3a-Prüfung → Umgehung der Nutzerentscheidung „PDF nur für sichtbare Baustellen“; die Anleitung (`bedienungsanleitung.html:166–167`) verspricht die Beschränkung der PDF-Ansicht und nennt ZUGFeRD als PDF-Weg (E-081). | Nach dem 404 `Auth::canSeeBelegBaustelle($db, $rechnung['baustelleId'] ?? null, canDo('canManageRechnungen'))` → 403 (feste Meldung wie in `renderBelegPdf`); Test analog `testFB2_3aPdfAnUnsichtbareBaustelleIst403`. |
+| Minor | src/Handlers/CrudActions.php:355–369, 412, 415–426 | `save_rechnung`/`delete_rechnung` ohne Sichtbarkeitsprüfung: mit Manage-Recht und fremder ID liefert die Antwort `rechnung` den vollständigen gemergten fremden Beleg (Lesen über Speichern), außerdem Überschreiben/Löschen bzw. Umhängen auf eine fremde `baustelleId`. Nicht in der Entscheidung F-B2-3a (Liste/PDF/Versand) genannt, untergräbt sie aber. | Leitstand entscheidet: in B2a mitnehmen (404 → 403 auf gespeichertes **und** neues `baustelleId`) oder als dokumentierter Folgepunkt (B2-Rest/B9). |
+| Minor | src/Handlers/FileActions.php:29–35, 392–398; public/script.js:14782–14784 | `canWriteFolder()` lockert die bisherige Zielprüfung von `move_file` (vorher nur `canWrite<Ziel>`): mit `canManageRechnungen`/`canManageAngebote` ohne Ordner-Schreibrecht darf man jetzt in Ausgangsbelege/Angebote verschieben und dort umbenennen. Der F-B2-4-Fragetext begrenzte den Ersatz auf „In Dateien speichern“; §3 meldet die Ausweitung, benennt sie aber nicht als Lockerung einer bestehenden Prüfung (E-084). | Nutzer/Leitstand bestätigen lassen; sonst Ersatz nur in `saveGeneratedFile` und Frontend-Gating angleichen. |
+| Minor | src/Handlers/PlanActions.php:562–570 | `kannSchnellnotizSehen()` gibt Notizen mit `baustelleId` jedem frei („werden jedem Angemeldeten in der Baustellenansicht gezeigt“) – diese Prämisse gilt nach M10 nicht mehr (`load_schnellnotizen` mit `baustelleId` jetzt sichtbarkeitsgeprüft). `update_schnellnotiz` ändert damit weiter Notizen unsichtbarer Baustellen (IDs fortlaufend). | Für Notizen mit `baustelleId` zusätzlich `canSeeBaustelle()`; Test. Alternativ als Folgepunkt in §2.4 B2 dokumentieren. |
+| Minor | src/Handlers/CrudActions.php:327–332; src/Auth.php:475–486 | N+1: je Belegzeile `canSeeBaustelle()` → `getEffectiveVisibility()` → eine `SELECT visibleBaustellen`-Abfrage (auch bei Sichtbarkeit `all`). Bei mehreren tausend Belegen spürbar. | Sichtbarkeit einmal vor dem Filter ermitteln (z. B. `$vis` an den Helfer übergeben oder im Request zwischenspeichern). |
+| Minor | tests/Api/RechteHaertungTest.php:184–199 | `testFB2_3aBelegOhneBaustelleNurMitManageRechtSichtbar` prüft nur den Negativfall. Es fehlen: Manage-Recht → sichtbar, Sichtbarkeit `all` → sichtbar, Unterprojekt-Cascade (Beleg an Unterprojekt eines sichtbaren Oberprojekts) sowie Formular- und ZUGFeRD-Pfad – deshalb blieben beide Major-Befunde unentdeckt. | Nach dem Fix ergänzen (Tester, E-094). |
+| Hinweis | tests/Api/RechteHaertungTest.php:551–560 | `testM11DeleteFileOhneKategorieMitRechtLoescht` legt die Datei in `Dateien/` an, löscht aber ohne Kategorie in der Wurzel → kein Löschen; nachgewiesen wird nur „kein 403“, der Name verspricht mehr. | Datei in der Altablage anlegen und Löschung prüfen oder Test umbenennen. |
+| Hinweis | src/Handlers/EmailActions.php:60–66, 117–128, 191–201, 257–265 | Plan M1/M2 nennen „→ 405“; nicht umgesetzt und in §3 nicht als Verschiebung nach B2c (M7) vermerkt. GET ohne Body ist hier wirkungslos (400), daher kein Risiko. | In §3 als B2c-Teil vermerken. |
+| Hinweis | src/Handlers/PlanActions.php:472–487; src/Handlers/TerminActions.php:97–101 | Geprüft wird `(int)$baustelleId`, gespeichert der Rohwert aus dem Body. Keine Umgehung gefunden (jeder Rohwert, der auf eine echte ID passt, castet auf dieselbe ID), aber uneinheitlicher Typ. | Normalisierten int bzw. `null` speichern. |
+| Hinweis | src/Handlers/FileActions.php:250–288 | Vorbestehend: `save_generated_file` hat keine Endungs-Sperrliste wie `uploadFile` (`.php`, `.htaccess` nach `basename`+Regex zulässig). Durch B2a nun ordnerrechtsgebunden, bleibt aber eine Defense-in-depth-Lücke. | Folgepunkt B2: dieselben `$blockedExts` + Punktdateien ablehnen. |
+| Hinweis | src/Handlers/FileActions.php:503–512 | `delete_file` kennt keinen Belegrecht-Ersatz, das Löschen-Icon ist ungated: Nutzer nur mit Belegrecht sehen Umbenennen/Verschieben, Löschen liefert 403. Von F-B2-4 gedeckt, aber inkonsistent. | Bei B7/B9 vereinheitlichen. |
+| Hinweis | src/Auth.php:427–441 | Cascade berücksichtigt nur nicht archivierte Baustellen → Beleg an einem archivierten Unterprojekt eines sichtbaren Oberprojekts ist für eingeschränkte Nutzer unsichtbar (bestehende `canSeeBaustelle`-Semantik). | Zur Kenntnis. |
+
+Lernpunkt-Kandidaten:
+- (Sicherheit) Objektbezogene Rechte immer am **gespeicherten** DB-Datensatz prüfen, bevor Request-Daten darübergelegt werden (Overlay/Merge) – keine bestehende E-Nr (E-013/E-015 nur verwandt); 1. Auftreten.
+- (Planung) Neue Objektregeln (hier „Beleg nur bei sichtbarer Baustelle“) über **alle Zugriffswege des Objekts** inventarisieren (grep auf Tabelle `rechnungen` / `BelegPdfService::belegDaten`), nicht nur über die in der Nutzerfrage genannten Aktionen – `generate_zugferd` und `save_rechnung` fehlten im Inventar. Keine bestehende E-Nr; 1. Auftreten.
+- (Tests) Je Sichtbarkeitsregel Positiv- und Negativfall pro Zugriffsweg einschließlich Override-/Formularpfad – keine eigene E-Nr (E-090 allgemein).
+
+**B2a** Runde 2 (nur Korrekturrunde 1, E-094) – **APPROVE**
+
+Geprüft: `git diff` der 8 Dateien, `Auth::canSeeBelegBaustelle/getEffectiveVisibility/expandVisibleBaustellenIds`, `PlanActions::loadSchnellnotizen/updateSchnellnotiz`, `FileActions::listFiles` (Kategorie immer aus `DOC_CATEGORIES`), Frontend-`canDo` (Admin → true), `script.min.js` (neues Gating enthalten). Selbst ausgeführt: `phpunit --filter "RechteHaertungTest|RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest"` (SQLite) → GRÜN 90/1539; `phpstan` → OK; `check-versions --strict` → OK (`bk-es-v257`, `script.min.js?v=252`). Behoben bestätigt: Major 1 (gespeicherte Baustelle vor dem Overlay, zweite Prüfung danach), Major 2 (`generate_zugferd` gespeicherte Baustelle + `canManageRechnungen`), `save_rechnung` alt + neu, `delete_rechnung`, `move_file`/`rename_file` ohne Belegrecht-Ersatz (Backend und Icon konsistent, `canWriteFolder` nur noch in `saveGeneratedFile`), N+1 (Ergebnis identisch zu `canSeeBelegBaustelle`, `(int)`-Set, Cascade über `getEffectiveVisibility`, `all`/Admin → `null` → unverändert). Feste Meldungen. Neue Tests ohne Fix rot (Formular-IDOR, ZUGFeRD, save/delete, `move_file` mit Belegrecht, `update_schnellnotiz`); Lösch-Test weist den Erhalt per Admin-`list_rechnungen` nach.
+
+| Schwere | Datei:Zeile | Problem | Vorschlag |
+|---|---|---|---|
+| Minor | src/Handlers/PlanActions.php:569–571 | Regression durch die Korrektur: Notiz mit unsichtbarer `baustelleId` liefert sofort `false`, die Prüfungen auf Ersteller/`zugewiesen_an`/Gruppe laufen nicht mehr. Eigene oder zugewiesene (auch „alle“) Notizen zu einer unsichtbaren Baustelle erscheinen in `load_schnellnotizen` ohne `baustelleId` (Z. 442–448, kein Baustellenfilter), `update_schnellnotiz` liefert aber 403 (vorher 200). Der Docblock („wie loadSchnellnotizen“) stimmt nicht mehr. | `if ($note['baustelleId'] !== null && Auth::canSeeBaustelle(...)) return true;` und danach in die Ersteller-/Zuweisungsprüfung weiterlaufen; Test „zugewiesene Notiz an unsichtbarer Baustelle bleibt bearbeitbar“. |
+| Minor | src/Handlers/CrudActions.php:361–363, 369–385 | Vorbestehend, im selben Overlay-Muster: Bei einem Update wird der Typ des **gespeicherten** Belegs nicht geprüft. `$hasManageSave` und die Typprüfung nutzen den Request-`typ`, `UPDATE … typ=?` übernimmt ihn. Wer nur `canManageRechnungen` hat, kann mit `{id:<Angebot>, typ:'rechnung'}` ein Angebot lesen (Antwort `rechnung`), überschreiben und in eine Rechnung umwandeln (umgekehrt genauso). | Folgepunkt (B2-Rest/B9, hoch priorisiert): nach dem 404 `typ` von `$existing` gegen das Typrecht prüfen und Typwechsel ablehnen (400) oder `typ` nicht aus dem Request übernehmen. |
+| Hinweis | tests/Api/RechteHaertungTest.php:314–329 | `testSaveRechnungAenderungAnFremderGespeicherterBaustelleIst403` sendet keine `baustelleId`. Die zweite Prüfung (gemergter Stand) fängt den Fall allein ab, die neue Prüfung „gespeichert vor dem Merge“ ist nicht eigenständig abgesichert. Ebenso fehlt ein Test „`rename_file` nur mit Belegrecht → 403“. | Variante mit `baustelleId: <eigene>` bzw. `rename_file` in Ausgangsbelege nur mit `canManageRechnungen` ergänzen (Tester nach APPROVE, E-094). |
+| Hinweis | src/Handlers/ExportActions.php:279–289 vs. 305–316 | In `renderBelegPdf` kommt die Objektprüfung (gespeicherte Baustelle) vor der Typrechtprüfung, also 404 → 403 (Objekt) → 403 (Recht) statt 403 (Recht) → 403 (Objekt). Es bleibt bei 403 mit fester Meldung, ein Leck entsteht nicht. | Bei Gelegenheit die Typrechtprüfung für den gespeicherten Typ direkt nach dem 404 vorziehen. |
+| Hinweis | src/Handlers/CrudActions.php:146–148 | Vorbestehend, weiterer Zugriffsweg auf `rechnungen`: `export_kunde` gibt Belege mit `positionen` nur mit `canWriteKunden` aus. Es fehlen Belegrecht, `canSeePrices` und F-B2-3a. | Folgepunkt B2-Rest/B9 (Inventar „alle Zugriffswege“, siehe Lernpunkt-Kandidat aus Runde 1). |
+
+Lernpunkt-Kandidaten:
+- (Sicherheit) Beim Ergänzen einer Sichtbarkeitsprüfung in eine bestehende Freigabekette („A **oder** B **oder** C“) als zusätzliche Bedingung einfügen, nicht mit `return` an die Stelle eines Zweigs setzen – sonst fallen die übrigen Freigaben weg. Keine E-Nr; 1. Auftreten.
+- (Sicherheit) Ergänzung zum Runde-1-Kandidaten „gespeicherten Datensatz vor dem Overlay prüfen“: Das gilt für **alle** rechterelevanten Felder (hier `typ`), nicht nur für das gemeldete (`baustelleId`). Keine E-Nr; 2. Auftreten derselben Ursache.
+
+**Entscheidung Leitstand nach Runde 2 (2026-11-19):** APPROVE angenommen. Vor dem Commit schmal nachgebessert (**B2a Korrekturrunde 2**, §3): Schnellnotiz-Regression behoben (Sichtbarkeit wieder additiv) und Typwechsel-IDOR geschlossen (gespeicherter Typ gegen Typrecht, Typwechsel → 409) – beide im B2a-Thema und klein; dazu die zwei fehlenden Tests aus den Hinweisen. Leitstand-Gegenprüfung: Diff `kannSchnellnotizSehen` gesichtet, `phpunit --filter "RechteHaertungTest|RechnungenTest|BelegPdfTest|SchnellnotizUpdateTest"` SQLite selbst → 96/96 GRÜN (PostgreSQL laut Entwickler 96/96). Kein drittes Review, da beide Änderungen exakt den Reviewer-Vorschlägen folgen und testgesichert sind.
+
+**Folgepunkte aus B2a** (offen, nicht Teil von B2a):
+- 405 für `send_rechnung`/`send_angebot`/`send_vde`/`send_din1090` → **B2c** (POST-Pflicht).
+- `export_kunde` gibt Belege mit Positionen nur mit `canWriteKunden` aus (ohne Belegrecht, `canSeePrices`, F-B2-3a) → B2-Rest bzw. B9 (E-099 „alle Zugriffswege“).
+- Reihenfolge in `renderBelegPdf`: Typrecht vor Objektprüfung ziehen (kosmetisch, kein Leck).
+- Endungs-Sperrliste für `save_generated_file` (vorbestehend).
+- Belege an archivierten Unterprojekten für eingeschränkte Nutzer unsichtbar – fachlich klären.
+- `baustelleId` wird als Rohwert gespeichert, aber als `int` geprüft – beim Speichern normalisieren.
+- Windows-`realpath`-Vergleich in `moveFile()`/`downloadFile()` (Backslash vs. „/“) lässt die Aktionen unter Windows scheitern (vorbestehend, Linux/Docker nicht betroffen).
+- `tests/Unit/EndpunktInventarTest.php` (Klicktest-AP, unkommittiert) wird rot, bis dessen `endpunkt-luecken.json` die in B2a neu getesteten Aktionen austrägt – beim Zusammenführen des Klicktest-APs anpassen.
+
 ## 6. Lernpunkte
 
 <!-- Leitstand: neue Einträge in erkenntnisse.md (E-Nr) und ggf. übernommene Regeln -->
@@ -380,3 +716,7 @@ Lernpunkt-Kandidaten:
 (1) Statische Strukturtests nicht an exakte CSS-Werte/Reihenfolge koppeln (Tests);
 (2) Collapse-Zustand bei Flex-/min-height-Konstruktionen mit abnehmen (Frontend).
 Hinweis: `lernprotokoll.md` trägt zum Zeitpunkt des B1-Commits unkommittierte Fremdänderungen des Klicktest-APs – Einträge werden mit dem nächsten `docs(ki)`-Commit dieser Datei versioniert.
+
+**B2a (2026-11-19):** Neu **E-099** (Sicherheit): Objektrechte am gespeicherten Datensatz, für alle rechterelevanten Felder und alle Zugriffswege prüfen (2. Auftreten → E-Nr). Lernprotokoll: Kandidat „Zusatzbedingung nicht als Ersatz in Freigabeketten“ (1. Auftreten); E-087 erneut aufgetreten (Pipe an `node -` kodiert ASCII, Commit-Nachricht vor Push per `--amend` korrigiert). `erkenntnisse.md`/`lernprotokoll.md` enthalten weiterhin Fremdänderungen des Klicktest-APs und bleiben deshalb vorerst unkommittiert.
+Modell laut Aufruf (E-097): Architekt, Entwickler, Tester, Reviewer jeweils mit dem Standardmodell ihrer `.agent.md`, ohne Override durch den Leitstand.
+
