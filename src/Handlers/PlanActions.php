@@ -413,6 +413,10 @@ class PlanActions
         $baustelleId = $_GET['baustelleId'] ?? null;
 
         if ($baustelleId !== null) {
+            // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+            if (!Auth::canSeeBaustelle($this->db, (int)$baustelleId)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
             // Baustelle notes view: all notes for this Baustelle
             $stmt = $this->db->prepare("SELECT * FROM schnellnotizen WHERE baustelleId = ? ORDER BY id");
             $stmt->execute([(int)$baustelleId]);
@@ -463,6 +467,14 @@ class PlanActions
         Auth::requireAuth();
         $text = trim($this->body['text'] ?? '');
         if ($text === '') jsonOut(['error' => 'Notiztext fehlt.'], 400);
+
+        $baustelleId = $this->body['baustelleId'] ?? null;
+        if ($baustelleId !== null && (int)$baustelleId > 0) {
+            // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+            if (!Auth::canSeeBaustelle($this->db, (int)$baustelleId)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
+        }
 
         $role        = $_SESSION['role'] ?? 'normal';
         $canAssign   = in_array($role, ['admin', 'master'], true);
@@ -543,9 +555,11 @@ class PlanActions
 
     /**
      * Sichtbarkeitsregel wie loadSchnellnotizen(): admin/master sehen alles;
-     * sonst Baustellen-Notizen (werden jedem Angemeldeten in der
-     * Baustellenansicht gezeigt), eigene Notizen (Ersteller), sowie an
-     * den Nutzer/"alle"/eine eigene Gruppe zugewiesene Notizen.
+     * sonst zusätzlich zur Baustellen-Sichtbarkeit (M10/B2a Korrekturrunde 1:
+     * bei gesetzter baustelleId, konsistent zu load_schnellnotizen) weiterhin
+     * eigene Notizen (Ersteller) sowie an den Nutzer/"alle"/eine eigene Gruppe
+     * zugewiesene Notizen (B2a Korrekturrunde 2: die Baustellen-Sichtbarkeit
+     * ersetzt diese übrigen Freigaben nicht, sie ergänzt sie nur).
      */
     private function kannSchnellnotizSehen(array $note): bool
     {
@@ -553,7 +567,7 @@ class PlanActions
         if (in_array($role, ['admin', 'master'], true)) {
             return true;
         }
-        if ($note['baustelleId'] !== null) {
+        if ($note['baustelleId'] !== null && Auth::canSeeBaustelle($this->db, (int)$note['baustelleId'])) {
             return true;
         }
         $user = $_SESSION['username'] ?? '';

@@ -14777,6 +14777,14 @@ async function loadBaustelleFiles() {
         const sizeStr = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : sizeKb + ' KB';
         const displayName = bkDateiAnzeigeName(f);
         const fileUrl = `api.php?action=download_file&baustelleId=${b.id}&category=${encodeURIComponent(f.category)}&fileName=${encodeURIComponent(f.name)}`;
+        // F-B2-4 (B2a, 2026-11-19), präzisiert Korrekturrunde 1: Umbenennen/Verschieben
+        // verlangen serverseitig ausschließlich das Ordner-Schreibrecht (kein
+        // Belegrecht-Ersatz – der gilt nur für "In Dateien speichern").
+        const canWriteCat = typeof canDo !== 'function' || canDo('canWrite' + f.category);
+        const renameMoveBtns = canWriteCat
+          ? `<button class="icon-btn" onclick="event.stopPropagation();editFileAliasPrompt('${esc(f.name)}',${b.id},'${esc(f.alias||'')}','${esc(f.category)}')" title="Umbenennen">${ico('edit')}</button>
+              <button class="icon-btn" onclick="event.stopPropagation();moveFilePrompt('${esc(f.name)}',${b.id},'${esc(f.category)}')" title="In anderen Ordner verschieben">${ico('folder')}</button>`
+          : '';
         if (f.isImage) {
           return `<div class="file-card file-card-image file-card-lazy" onclick="loadFilePreview(this,'${fileUrl.replace(/'/g,"\\'")}')">
             <div class="file-card-placeholder">${ico('image','ico-xl')}<span style="font-size:.7rem;color:#888;margin-top:4px">Klicken zum Laden</span></div>
@@ -14785,8 +14793,7 @@ async function loadBaustelleFiles() {
               <span class="file-card-meta">${sizeStr} - ${f.modified}</span>
             </div>
             <div class="file-card-actions">
-              <button class="icon-btn" onclick="event.stopPropagation();editFileAliasPrompt('${esc(f.name)}',${b.id},'${esc(f.alias||'')}','${esc(f.category)}')" title="Umbenennen">${ico('edit')}</button>
-              <button class="icon-btn" onclick="event.stopPropagation();moveFilePrompt('${esc(f.name)}',${b.id},'${esc(f.category)}')" title="In anderen Ordner verschieben">${ico('folder')}</button>
+              ${renameMoveBtns}
               <button class="icon-btn danger" onclick="event.stopPropagation();deleteBaustelleFile('${esc(f.name)}','${esc(f.category)}')" title="Löschen">${ico('trash')}</button>
             </div>
           </div>`;
@@ -14799,8 +14806,7 @@ async function loadBaustelleFiles() {
               <span class="file-card-meta">${sizeStr} - ${f.modified}</span>
             </div>
             <div class="file-card-actions">
-              <button class="icon-btn" onclick="editFileAliasPrompt('${esc(f.name)}',${b.id},'${esc(f.alias||'')}','${esc(f.category)}')" title="Umbenennen">${ico('edit')}</button>
-              <button class="icon-btn" onclick="moveFilePrompt('${esc(f.name)}',${b.id},'${esc(f.category)}')" title="In anderen Ordner verschieben">${ico('folder')}</button>
+              ${renameMoveBtns}
               <button class="icon-btn danger" onclick="deleteBaustelleFile('${esc(f.name)}','${esc(f.category)}')" title="Löschen">${ico('trash')}</button>
             </div>
           </div>`;

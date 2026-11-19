@@ -54,7 +54,10 @@ class Module extends AbstractModule
             case 'foto_ocr':          $this->requirePerm('canReadLager'); $this->fotoOcr();         break;
 
             // ── KI-Bilderkennung (Google Gemini) ──────────
-            case 'foto_ai':           $this->requirePerm('canReadLager'); $this->fotoAi();           break;
+            // M4 (B2a, 2026-11-19): Kostenpflichtiger Gemini-Aufruf verlangt
+            // Schreibrecht (L4); foto_ai_available liefert nur ein bool und
+            // bleibt beim Leserecht.
+            case 'foto_ai':           $this->requirePerm('canWriteLager'); $this->fotoAi();           break;
             case 'foto_ai_available': $this->requirePerm('canReadLager'); $this->fotoAiAvailable(); break;
 
             default:

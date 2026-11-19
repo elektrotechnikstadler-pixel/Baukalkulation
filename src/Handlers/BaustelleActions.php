@@ -829,6 +829,10 @@ class BaustelleActions
         $row->execute([$baustelleId]);
         $bRow = $row->fetch();
         if (!$bRow) jsonOut(['error' => 'Baustelle nicht gefunden.'], 404);
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+        if (!Auth::canSeeBaustelle($this->db, $baustelleId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $bData = json_decode($bRow['data'], true) ?: [];
         $bData['includeInAuswertung'] = $include;
@@ -856,6 +860,10 @@ class BaustelleActions
         $row->execute([$baustelleId]);
         $bRow = $row->fetch();
         if (!$bRow) jsonOut(['error' => 'Baustelle nicht gefunden.'], 404);
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+        if (!Auth::canSeeBaustelle($this->db, $baustelleId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $bData   = json_decode($bRow['data'], true) ?: [];
         $today   = date('Y-m-d');
@@ -910,6 +918,10 @@ class BaustelleActions
         $order    = $this->body['order'] ?? [];
         if (!$parentId || !is_array($order) || empty($order)) {
             jsonOut(['error' => 'Ungültige Parameter.'], 400);
+        }
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung auf das Oberprojekt (L9).
+        if (!Auth::canSeeBaustelle($this->db, $parentId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
         }
 
         $stmt = $this->db->prepare("SELECT id, data FROM baustellen WHERE id = ?");

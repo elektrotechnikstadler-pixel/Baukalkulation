@@ -220,6 +220,12 @@ class ExportActions
             jsonOut(['error' => 'ZUGFeRD ist nur für Rechnungen verfügbar, nicht für Angebote.'], 400);
         }
 
+        // B2a Korrekturrunde 1 (F-B2-3a, Major-Befund): dieselbe Sichtbarkeitsprüfung
+        // der gespeicherten Baustelle wie in renderBelegPdf.
+        if (!Auth::canSeeBelegBaustelle($this->db, $rechnung['baustelleId'] ?? null, Auth::canDo($this->db, 'canManageRechnungen'))) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
+
         $daten    = \App\Services\BelegPdfService::belegDaten($this->db, $rechnung);
         $settings = Auth::loadSettings($this->db);
 
@@ -270,6 +276,17 @@ class ExportActions
             $stmt->execute([$rechnungId]);
             $rechnung = $stmt->fetch(\PDO::FETCH_ASSOC);
             if (!$rechnung) jsonOut(['error' => 'Beleg nicht gefunden.'], 404);
+
+            // B2a Korrekturrunde 1 (Major, IDOR): Sichtbarkeit der GESPEICHERTEN
+            // Baustelle direkt nach dem Laden prüfen – BEVOR Formulardaten
+            // (beleg.baustelleId u. a.) den gespeicherten Wert überlagern.
+            $storedTyp = ($rechnung['typ'] ?? 'rechnung') === 'angebot' ? 'angebot' : 'rechnung';
+            $hasManageStored = $storedTyp === 'rechnung'
+                ? Auth::canDo($this->db, 'canManageRechnungen')
+                : Auth::canDo($this->db, 'canManageAngebote');
+            if (!Auth::canSeeBelegBaustelle($this->db, $rechnung['baustelleId'] ?? null, $hasManageStored)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
         }
 
         if ($formular !== null) {
@@ -297,6 +314,16 @@ class ExportActions
                 ? Auth::canDo($this->db, 'canManageAngebote')
                 : (Auth::canDo($this->db, 'canManageAngebote') || Auth::canDo($this->db, 'canSeeAngebote'));
             if (!$darf) jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
+        }
+        // F-B2-3a (B2a, 2026-11-19), B2a Korrekturrunde 1: zusätzlich die
+        // (ggf. aus dem Formular übernommene) Baustelle prüfen – nur sichtbare
+        // Baustelle (Admin/'all' unverändert). Für gespeicherte Belege wurde die
+        // gespeicherte Baustelle bereits oben vor dem Overlay geprüft.
+        $hasManage = $typ === 'rechnung'
+            ? Auth::canDo($this->db, 'canManageRechnungen')
+            : Auth::canDo($this->db, 'canManageAngebote');
+        if (!Auth::canSeeBelegBaustelle($this->db, $rechnung['baustelleId'] ?? null, $hasManage)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
         }
 
         $settings = Auth::loadSettings($this->db);

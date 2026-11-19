@@ -23,6 +23,15 @@ class AiActions
     public function scanMaterial(): void
     {
         Auth::requireAuth();
+        // M3 (B2a, 2026-11-19): Kosten-/Externe-API-Aufruf nur mit Material- oder
+        // Arbeitszeitrecht (L3) – deckt sich mit dem bestehenden UI-Gate.
+        if (!Auth::canDo($this->db, 'canEditMaterial') && !Auth::canDo($this->db, 'canEditArbeitszeit')) {
+            \jsonOut(['error' => 'Keine Berechtigung für die KI-Belegerkennung.'], 403);
+        }
+        // Zustandsändernd/kostenpflichtig – nicht per GET-Link auslösbar (E-015).
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            \jsonOut(['error' => 'Nur per POST erlaubt.'], 405);
+        }
 
         $settings = Auth::loadSettings($this->db);
         $apiKey   = trim((string)($settings['gemini_api_key'] ?? ''));
@@ -107,10 +116,11 @@ class AiActions
             \jsonOut(['error' => 'Ungültige Antwort der KI-API.'], 502);
         }
 
-        // Fehler von Gemini selbst weiterleiten
+        // Fehler von Gemini selbst – feste Meldung an den Client, Details nur ins Log (E-014).
         if (isset($resp['error'])) {
             $msg = strip_tags((string)($resp['error']['message'] ?? 'Unbekannter API-Fehler'));
-            \jsonOut(['error' => 'Gemini-Fehler: ' . $msg], 502);
+            error_log('[AiActions] Gemini-Fehler: ' . $msg);
+            \jsonOut(['error' => 'Die KI-Analyse ist fehlgeschlagen. Bitte später erneut versuchen.'], 502);
         }
 
         // Gemini 2.5+ Thinking-Modelle: ersten Non-Thought-Part verwenden

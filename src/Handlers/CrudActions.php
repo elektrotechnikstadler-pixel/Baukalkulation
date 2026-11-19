@@ -321,6 +321,24 @@ class CrudActions
         $sql .= " ORDER BY r.createdAt DESC";
 
         $rows = Database::fetchAll($this->db, $sql, $params);
+        // F-B2-3a (B2a, 2026-11-19): nur Belege zu sichtbaren Baustellen
+        // (Admin/Sichtbarkeit 'all' unverändert); Belege ohne Baustellenbezug
+        // nur mit 'all' oder dem jeweiligen Verwaltungsrecht.
+        // B2a Korrekturrunde 1 (Minor, N+1): Sichtbarkeit einmal vorab ermitteln
+        // (E-096: IDs als int normalisiert) statt je Zeile neu abzufragen.
+        $vis = Auth::getEffectiveVisibility($this->db);
+        $visSet = is_array($vis) ? array_flip(array_map('intval', $vis)) : null;
+        $hasManageRe = Auth::canDo($this->db, 'canManageRechnungen');
+        $hasManageAn = Auth::canDo($this->db, 'canManageAngebote');
+        $rows = array_values(array_filter($rows, function ($r) use ($visSet, $hasManageRe, $hasManageAn) {
+            $hasManage = (($r['typ'] ?? '') === 'rechnung') ? $hasManageRe : $hasManageAn;
+            $bId = (int)($r['baustelleId'] ?? 0);
+            if ($bId > 0) {
+                return $visSet === null || isset($visSet[$bId]);
+            }
+            if ($hasManage) return true;
+            return $visSet === null; // Sichtbarkeit 'all'
+        }));
         $all = array_map(fn($r) => $this->castRechnung($r), $rows);
         jsonOut(['ok' => true, 'rechnungen' => $all]);
     }
@@ -338,6 +356,11 @@ class CrudActions
         if ($rechnung['typ'] === 'angebot' && !Auth::canDo($this->db, 'canManageAngebote')) {
             jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
         }
+        // B2a Korrekturrunde 1 (Minor, F-B2-3a): Sichtbarkeit der Baustelle prüfen
+        // (gespeicherte Baustelle bei Update, neue Baustelle aus dem Request).
+        $hasManageSave = $rechnung['typ'] === 'rechnung'
+            ? Auth::canDo($this->db, 'canManageRechnungen')
+            : Auth::canDo($this->db, 'canManageAngebote');
 
         $settings = Auth::loadSettings($this->db);
 
@@ -345,7 +368,27 @@ class CrudActions
             // Update
             $existing = Database::fetchOne($this->db, "SELECT * FROM rechnungen WHERE id = ?", [$rechnung['id']]);
             if (!$existing) jsonOut(['error' => 'Nicht gefunden.'], 404);
+            // B2a Korrekturrunde 2 (Minor, Typwechsel-IDOR): Typrecht auf den
+            // gespeicherten Typ prüfen (nicht nur auf den Request-Typ) und
+            // einen Typwechsel ablehnen, bevor Request-Daten überlagert werden.
+            $hasManageExisting = $existing['typ'] === 'rechnung'
+                ? Auth::canDo($this->db, 'canManageRechnungen')
+                : Auth::canDo($this->db, 'canManageAngebote');
+            if (!$hasManageExisting) {
+                jsonOut(['error' => 'Keine Berechtigung für diesen Beleg.'], 403);
+            }
+            if ($existing['typ'] !== $rechnung['typ']) {
+                jsonOut(['error' => 'Der Belegtyp kann nicht nachträglich geändert werden.'], 409);
+            }
+            // Gespeicherte Baustelle zuerst prüfen (vor dem Überlagern mit Request-Daten).
+            if (!Auth::canSeeBelegBaustelle($this->db, $existing['baustelleId'] ?? null, $hasManageSave)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
             $merged = array_merge(json_decode(json_encode($existing), true), $rechnung);
+            // Neue (ggf. geänderte) Baustelle aus dem Request zusätzlich prüfen.
+            if (!Auth::canSeeBelegBaustelle($this->db, $merged['baustelleId'] ?? null, $hasManageSave)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
             $merged['updatedAt'] = date('c');
             $this->db->prepare(
                 "UPDATE rechnungen SET typ=?, nummer=?, kundeId=?, baustelleId=?, datum=?, faelligAm=?, status=?, absender=?, positionen=?, notizen=?, beschreibung=?, zahlungsziel=?, updatedAt=? WHERE id=?"
@@ -358,7 +401,11 @@ class CrudActions
             ]);
             $rechnung = $merged;
         } else {
-            // Neu
+            // Neu: Baustelle aus dem Request prüfen (es gibt noch keinen
+            // gespeicherten Datensatz).
+            if (!Auth::canSeeBelegBaustelle($this->db, $rechnung['baustelleId'] ?? null, $hasManageSave)) {
+                jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+            }
             $prefix = $rechnung['typ'] === 'rechnung' ? 'RE' : 'AN';
             $year   = date('Y');
             $rows = Database::fetchAll($this->db, "SELECT nummer FROM rechnungen WHERE nummer LIKE ?", [$prefix . '-' . $year . '-%']);
@@ -407,13 +454,21 @@ class CrudActions
     {
         Auth::requireAuth();
         $delId = $this->body['id'] ?? '';
-        $existing = Database::fetchOne($this->db, "SELECT typ FROM rechnungen WHERE id = ?", [$delId]);
+        $existing = Database::fetchOne($this->db, "SELECT typ, baustelleId FROM rechnungen WHERE id = ?", [$delId]);
         if (!$existing) jsonOut(['error' => 'Nicht gefunden.'], 404);
         if ($existing['typ'] === 'rechnung' && !Auth::canDo($this->db, 'canManageRechnungen')) {
             jsonOut(['error' => 'Keine Berechtigung für Rechnungen.'], 403);
         }
         if ($existing['typ'] === 'angebot' && !Auth::canDo($this->db, 'canManageAngebote')) {
             jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
+        }
+        // B2a Korrekturrunde 1 (Minor, F-B2-3a): Sichtbarkeit der gespeicherten
+        // Baustelle prüfen.
+        $hasManageDel = $existing['typ'] === 'rechnung'
+            ? Auth::canDo($this->db, 'canManageRechnungen')
+            : Auth::canDo($this->db, 'canManageAngebote');
+        if (!Auth::canSeeBelegBaustelle($this->db, $existing['baustelleId'] ?? null, $hasManageDel)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
         }
         $this->db->prepare("DELETE FROM rechnungen WHERE id = ?")->execute([$delId]);
         AuditService::log('rechnung_delete', 'ID=' . $delId);

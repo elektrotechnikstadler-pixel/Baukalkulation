@@ -16,7 +16,9 @@ class AdminActions
     // ── Berechtigungen ───────────────────────────────────────
     public function getPermissions(): void
     {
-        Auth::requireAuth();
+        // M13 (B2a, 2026-11-19): nur Admin – einziger Aufrufer ist der
+        // Admin-Rechteeditor; liefert sonst die komplette Rechtematrix (L14).
+        Auth::requireRole('admin');
         jsonOut(['ok' => true, 'permissions' => Auth::loadPermissions($this->db)]);
     }
 

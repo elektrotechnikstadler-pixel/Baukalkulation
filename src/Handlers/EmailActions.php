@@ -60,6 +60,10 @@ class EmailActions
     public function sendVde(): void
     {
         Auth::requireAuth();
+        // M2 (B2a, 2026-11-19): Versand verlangt das Leserecht des Moduls (L2).
+        if (!Auth::canDo($this->db, 'canReadVde0100')) {
+            \jsonOut(['error' => 'Keine Berechtigung für VDE 0100.'], 403);
+        }
         [$to, $subject] = $this->_params();
         $protokollId = (int)($this->body['protokollId'] ?? 0);
         if ($protokollId <= 0) \jsonOut(['error' => 'protokollId fehlt.'], 400);
@@ -113,6 +117,14 @@ class EmailActions
     public function sendRechnung(): void
     {
         Auth::requireAuth();
+        // M1 (B2a, 2026-11-19): Typrecht wie bei der PDF-Ansicht desselben Belegs
+        // (renderBelegPdf) + Preisrecht (F-B2-3b) – objektunabhängiger Teil (L1).
+        if (!Auth::canDo($this->db, 'canSeePrices')) {
+            \jsonOut(['error' => 'Keine Berechtigung für Preisexport.'], 403);
+        }
+        if (!Auth::canDo($this->db, 'canManageRechnungen') && !Auth::canDo($this->db, 'canSeeRechnungen')) {
+            \jsonOut(['error' => 'Keine Berechtigung für Rechnungen.'], 403);
+        }
         [$to, $subject] = $this->_params();
         $rechnungId = (int)($this->body['rechnungId'] ?? 0);
         if ($rechnungId <= 0) \jsonOut(['error' => 'rechnungId fehlt.'], 400);
@@ -121,6 +133,11 @@ class EmailActions
         $stmt->execute([$rechnungId]);
         $rechnung = $stmt->fetch();
         if (!$rechnung) \jsonOut(['error' => 'Rechnung nicht gefunden.'], 404);
+
+        // F-B2-3a: objektbezogene Sichtbarkeitsprüfung erst nach dem Laden möglich.
+        if (!Auth::canSeeBelegBaustelle($this->db, $rechnung['baustelleId'] ?? null, Auth::canDo($this->db, 'canManageRechnungen'))) {
+            \jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $daten    = BelegPdfService::belegDaten($this->db, $rechnung);
         $kunde    = $daten['kunde'];
@@ -174,6 +191,14 @@ class EmailActions
     public function sendAngebot(): void
     {
         Auth::requireAuth();
+        // M1 (B2a, 2026-11-19): Typrecht wie bei der PDF-Ansicht desselben Belegs
+        // (renderBelegPdf) + Preisrecht (F-B2-3b) – objektunabhängiger Teil (L1).
+        if (!Auth::canDo($this->db, 'canSeePrices')) {
+            \jsonOut(['error' => 'Keine Berechtigung für Preisexport.'], 403);
+        }
+        if (!Auth::canDo($this->db, 'canManageAngebote') && !Auth::canDo($this->db, 'canSeeAngebote')) {
+            \jsonOut(['error' => 'Keine Berechtigung für Angebote.'], 403);
+        }
         [$to, $subject] = $this->_params();
         // Der Client sendet `angebotId`; `rechnungId` bleibt für ältere Aufrufer gültig.
         $rechnungId = (int)($this->body['angebotId'] ?? $this->body['rechnungId'] ?? 0);
@@ -183,6 +208,11 @@ class EmailActions
         $stmt->execute([$rechnungId]);
         $angebot = $stmt->fetch();
         if (!$angebot) \jsonOut(['error' => 'Angebot nicht gefunden.'], 404);
+
+        // F-B2-3a: objektbezogene Sichtbarkeitsprüfung erst nach dem Laden möglich.
+        if (!Auth::canSeeBelegBaustelle($this->db, $angebot['baustelleId'] ?? null, Auth::canDo($this->db, 'canManageAngebote'))) {
+            \jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $kunde    = $this->_loadKunde(isset($angebot['kundeId']) ? (int)$angebot['kundeId'] : null);
         $settings = Auth::loadSettings($this->db);
@@ -227,6 +257,12 @@ class EmailActions
     public function sendDin1090(): void
     {
         Auth::requireAuth();
+        // M2 (B2a, 2026-11-19): Versand verlangt das Leserecht des Moduls (L2);
+        // F-B2-5: Nutzer-Entscheidung – Schreibrecht wird NICHT verlangt.
+        if (!Auth::canDo($this->db, 'canReadDin1090')) {
+            \jsonOut(['error' => 'Keine Berechtigung für DIN EN 1090.'], 403);
+        }
+        require_feature('din1090', 'DIN EN 1090');
         [$to, $subject] = $this->_params();
         $pdfBase64 = trim($this->body['pdf_base64'] ?? '');
         if (!$pdfBase64) \jsonOut(['error' => 'pdf_base64 fehlt.'], 400);

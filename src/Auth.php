@@ -383,29 +383,13 @@ class Auth
     {
         $role = $_SESSION['role'] ?? 'normal';
         if ($role === 'admin') {
-            $keys = [
-                'canSeePrices','canEditMaterial','canEditArbeitszeit','canEditPauschalen',
-                'canArchive','canOrderMaterial','canExport','canManageKatalog',
-                'canManageStundenKatalog','canSeeBautagebuch','canSeeOffenesMaterial',
-                'canSeeAbschlagsrechnungen','canSeeZeituebersicht','canSeeGewinn',
-                'canDeleteBaustelle','canCreateBaustelle','canSeeAllWochenplan','canSeeAllStunden',
-                'canReadKunden','canWriteKunden','canManageUnterprojekte','canExportInform',
-                'canManageDienstleister','canSeeSubunternehmerReport',
-                'canSeeRechnungen','canManageRechnungen','canSeeAngebote','canManageAngebote',
-                'canSeeOwnWochenplan',
-                'canSeeOwnTermine','canSeeAllTermine','canManageTermine',
-                'canSeeStundenauswertung',
-                'canSeeAuswertung',
-                // Aufmaß / Lager (v2.1)
-                'canReadAufmass','canWriteAufmass','canApproveAufmass',
-                'canReadLager','canWriteLager','canManageLagerorte',
-                // Dashboard (v2.4)
-                'canReadDashboard','canWriteDashboard','canManageDashboard',
-                // VDE 0100 (v2.7.0)
-                'canReadVde0100','canWriteVde0100','canFixateVde0100',
-            ];
-            $result = array_fill_keys($keys, true);
-            return $result;
+            // M14 (B2a, 2026-11-19): Admin sieht alle Rechte – aus der
+            // Master-Standardliste abgeleitet statt einer zweiten Handliste,
+            // die sonst bei neuen Rechten veraltet (L15: 17 fehlende Keys,
+            // u. a. Dokumentenordner, canReadDin1090/canWriteDin1090).
+            $keys   = array_keys(self::getDefaultPermissions()['master']);
+            $keys[] = 'canSeeWochenpruefung'; // kein Default-Key, nur per canDo() genutzt – rein additiv
+            return array_fill_keys($keys, true);
         }
         $perms = self::loadPermissions($db);
         return $perms[$role] ?? self::getDefaultPermissions()[$role] ?? [];
@@ -512,5 +496,24 @@ class Auth
         if ($vis === 'all') return true;
         if (!is_array($vis)) return true;
         return in_array($baustelleId, $vis, true);
+    }
+
+    /**
+     * F-B2-3a (B2a, 2026-11-19): Prüft, ob ein Beleg (Rechnung/Angebot) anhand
+     * seiner Baustelle für den aktuellen User sichtbar ist. Belege ohne
+     * Baustellenbezug sind nur mit globaler Sichtbarkeit ('all') oder dem
+     * jeweiligen Verwaltungsrecht (canManageRechnungen/canManageAngebote)
+     * sichtbar (Entscheidung des Nutzers: kein Beleg „für niemanden").
+     *
+     * @param mixed $baustelleId Baustellen-ID des Belegs oder null/0.
+     */
+    public static function canSeeBelegBaustelle(\PDO $db, mixed $baustelleId, bool $hasManageRecht): bool
+    {
+        $id = (int)($baustelleId ?? 0);
+        if ($id > 0) {
+            return self::canSeeBaustelle($db, $id);
+        }
+        if ($hasManageRecht) return true;
+        return self::getEffectiveVisibility($db) === 'all';
     }
 }

@@ -21,6 +21,22 @@ class FileActions
         return preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_\- ]/u', '_', $bName);
     }
 
+    /**
+     * F-B2-4 (B2a, 2026-11-19), präzisiert Korrekturrunde 1 (Leitstand):
+     * Schreibrecht für einen Dokumentordner; der Belegrecht-Ersatz
+     * (Ausgangsbelege → canManageRechnungen, Angebote → canManageAngebote)
+     * gilt NUR für "In Dateien speichern" (save_generated_file) – NICHT für
+     * move_file/rename_file/delete_file, die ausschließlich das
+     * Ordner-Schreibrecht verlangen (siehe dort: direkte canDo-Prüfung).
+     */
+    private function canWriteFolder(string $category): bool
+    {
+        if (Auth::canDo($this->db, 'canWrite' . $category)) return true;
+        if ($category === 'Ausgangsbelege') return Auth::canDo($this->db, 'canManageRechnungen');
+        if ($category === 'Angebote') return Auth::canDo($this->db, 'canManageAngebote');
+        return false;
+    }
+
     /** Ordnerstruktur für eine Baustelle sicherstellen */
     private function ensureFolderStructure(string $baseDir): void
     {
@@ -254,6 +270,11 @@ class FileActions
             jsonOut(['error' => 'Datei zu groß (max. 20 MB).'], 400);
         }
         if (!in_array($category, self::DOC_CATEGORIES)) $category = 'Dateien';
+        // M11/F-B2-4 (B2a, 2026-11-19): Ordner-Schreibrecht erforderlich;
+        // bei Rechnungs-/Angebots-PDFs gilt das jeweilige Belegrecht als Ersatz.
+        if (!$this->canWriteFolder($category)) {
+            jsonOut(['error' => "Keine Schreibberechtigung für $category."], 403);
+        }
 
         $folderName = $this->getBaustelleFolder($baustelleId);
         $baseDir = UPLOADS_DIR . $folderName . '/';
@@ -371,7 +392,13 @@ class FileActions
             jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
         }
 
-        // Schreibberechtigung für Zielordner
+        // Schreibberechtigung für Quell- und Zielordner (F-B2-4, B2a 2026-11-19).
+        // B2a Korrekturrunde 1 (Leitstand): Belegrecht-Ersatz gilt NUR für
+        // save_generated_file – move_file verlangt ausschließlich das
+        // Ordner-Schreibrecht (Zielprüfung darf gegenüber vorher nicht gelockert werden).
+        if (!Auth::canDo($this->db, 'canWrite' . $fromCat)) {
+            jsonOut(['error' => "Keine Schreibberechtigung für $fromCat."], 403);
+        }
         if (!Auth::canDo($this->db, 'canWrite' . $toCat)) {
             jsonOut(['error' => "Keine Schreibberechtigung für $toCat."], 403);
         }
@@ -482,6 +509,13 @@ class FileActions
         if ($category && !Auth::canDo($this->db, 'canWrite' . $category)) {
             jsonOut(['error' => 'Keine Schreibberechtigung.'], 403);
         }
+        if (!$category) {
+            // L10 (B2a, 2026-11-19): ohne/ungültige Kategorie landet die Datei in
+            // der Altablage (Wurzelordner) ≙ "Dateien" – dafür gilt deren Schreibrecht.
+            if (!Auth::canDo($this->db, 'canWriteDateien')) {
+                jsonOut(['error' => 'Keine Schreibberechtigung.'], 403);
+            }
+        }
 
         $folderName = $this->getBaustelleFolder($baustelleId);
         $baseDir = UPLOADS_DIR . $folderName . '/';
@@ -510,6 +544,12 @@ class FileActions
         // H5 (v1.8.0): Sichtbarkeitsprüfung
         if (!Auth::canSeeBaustelle($this->db, $baustelleId)) {
             jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
+        // F-B2-4 (B2a, 2026-11-19): Umbenennen verlangt das Schreibrecht des Ordners.
+        // B2a Korrekturrunde 1 (Leitstand): kein Belegrecht-Ersatz für rename_file.
+        $writeCategory = ($category && in_array($category, self::DOC_CATEGORIES)) ? $category : 'Dateien';
+        if (!Auth::canDo($this->db, 'canWrite' . $writeCategory)) {
+            jsonOut(['error' => "Keine Schreibberechtigung für $writeCategory."], 403);
         }
 
         $folderName = $this->getBaustelleFolder($baustelleId);
@@ -554,6 +594,10 @@ class FileActions
         $baustelleId = (int)($_GET['baustelleId'] ?? 0);
         $htmlContent = $this->body['html'] ?? '';
         if (!$baustelleId || !$htmlContent) jsonOut(['error' => 'Fehlende Parameter.'], 400);
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+        if (!Auth::canSeeBaustelle($this->db, $baustelleId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $folderName = $this->getBaustelleFolder($baustelleId);
         $dir = TAGEBUCH_DIR . $folderName . '/';
@@ -587,6 +631,10 @@ class FileActions
         $signature   = $this->body['signature'] ?? '';
         $pdfBase64   = $this->body['pdfData'] ?? '';
         if (!$baustelleId || !$htmlReport) jsonOut(['error' => 'Fehlende Parameter.'], 400);
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+        if (!Auth::canSeeBaustelle($this->db, $baustelleId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
 
         $folderName = $this->getBaustelleFolder($baustelleId);
         $baseDir = UPLOADS_DIR . $folderName . '/';

@@ -95,6 +95,10 @@ class TerminActions
         $ganztags     = !empty($this->body['ganztags']) ? 1 : 0;
         $ort          = trim($this->body['ort'] ?? '');
         $baustelleId  = $this->body['baustelleId'] ?? null;
+        // M10 (B2a, 2026-11-19): Sichtbarkeitsprüfung (L9).
+        if ($baustelleId !== null && (int)$baustelleId > 0 && !Auth::canSeeBaustelle($this->db, (int)$baustelleId)) {
+            jsonOut(['error' => 'Keine Berechtigung für diese Baustelle.'], 403);
+        }
         $farbe        = trim($this->body['farbe'] ?? '#00B4D8');
         $wiederholung = trim($this->body['wiederholung'] ?? '');
         $zugJson      = json_encode($zugewiesen, JSON_UNESCAPED_UNICODE);
