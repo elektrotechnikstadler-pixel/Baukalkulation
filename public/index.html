@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>Planning Dashboard – Baukalkulation</title>
-  <link rel="stylesheet" href="style.css?v=147">
+  <link rel="stylesheet" href="style.css?v=149">
   <script>
     // M5 (v1.8.0): Mobile-Redirect respektiert User-Override.
     // Nutzer (z. B. auf Tablet) können per ?desktop=1 oder Flag im
@@ -123,8 +123,8 @@
         <button class="btn btn-primary btn-sm" id="btnAddBaustelle" onclick="addBaustelle()">+ Neu</button>
       </div>
       <div class="sidebar-scrollable">
-        <!-- Collapsible: Menü -->
-        <div class="sidebar-collapse-section">
+        <!-- Collapsible: Menü (eigener Scrollcontainer, sidebar-section-menu) -->
+        <div class="sidebar-collapse-section sidebar-section-menu">
           <button class="sidebar-collapse-toggle" onclick="toggleSidebarSection('secMenu')" id="toggleMenu">
             <span class="collapse-arrow" id="arrowMenu">▾</span> Menü
           </button>
@@ -157,8 +157,8 @@
             </div>
           </div>
         </div>
-        <!-- Collapsible: Projekte -->
-        <div class="sidebar-collapse-section">
+        <!-- Collapsible: Projekte (eigener Scrollcontainer, sidebar-section-projekte) -->
+        <div class="sidebar-collapse-section sidebar-section-projekte">
           <button class="sidebar-collapse-toggle" onclick="toggleSidebarSection('secProjekte')" id="toggleProjekte">
             <span class="collapse-arrow" id="arrowProjekte">▾</span> Projekte
           </button>
@@ -1043,7 +1043,8 @@
   <script src="sollzeit.js?v=233"></script>
   <script src="verwaltung-nav.js?v=3"></script>
   <script src="uebersicht-summen.js?v=2"></script>
-  <script src="script.min.js?v=249"></script>
+  <script src="datei-anzeige.js?v=2"></script>
+  <script src="script.min.js?v=250"></script>
   <!-- Phase 5: ES-Modul-Bootstrap (Companion-Modus, läuft parallel zu script.js) -->
   <!-- ROLLBACK: diese Zeile entfernen → vollständiger Rollback auf v2.9.8 -->
   <script type="module" src="dist/core.js?v=100"></script>

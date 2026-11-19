@@ -1897,6 +1897,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="sollzeit.js?v=233"></script>
+<script src="datei-anzeige.js?v=2"></script>
 <script>
 // ============================================================
 // API-BASED PERSISTENCE  (Synology NAS)
@@ -6199,7 +6200,7 @@ async function loadDateienMobile() {
     filtered.forEach(f => {
       const sizeKb = (f.size / 1024).toFixed(0);
       const sizeStr = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : sizeKb + ' KB';
-      const shortName = f.alias || (f.name.length > 20 ? f.name.substring(20) : f.name);
+      const shortName = bkDateiAnzeigeName(f);
       const url = `api.php?action=download_file&baustelleId=${b.id}&category=${encodeURIComponent(f.category)}&fileName=${encodeURIComponent(f.name)}`;
       const catBadge = `<span style="display:inline-block;padding:1px 6px;background:var(--grey-100,#eee);border-radius:8px;font-size:.65rem;color:#555;margin-right:4px">${esc(f.category)}</span>`;
       if (f.isImage) {
@@ -6207,8 +6208,8 @@ async function loadDateienMobile() {
           <img src="${url}" style="width:100%;max-height:200px;object-fit:cover;display:block" loading="lazy"
                onclick="mobileOpenFile('${url.replace(/'/g,"\\'")}','${esc(f.name)}')">
           <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
-            <div>
-              <div style="font-weight:600;font-size:0.85rem">${catBadge}${esc(shortName)}</div>
+            <div style="min-width:0;overflow:hidden">
+              <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.name)}">${catBadge}${esc(shortName)}</div>
               <div style="font-size:0.72rem;color:var(--grey-400)">${sizeStr} · ${f.modified}</div>
             </div>
             <button onclick="deleteFileMobile('${esc(f.name)}','${esc(f.category)}')" style="background:none;border:none;font-size:1.1rem;color:var(--danger);cursor:pointer">${ico('trash')}</button>
@@ -6220,7 +6221,7 @@ async function loadDateienMobile() {
           <div class="list-row">
             <div class="list-row-icon">${ext === 'PDF' ? ico('file','ico-lg') : ico('paperclip','ico-lg')}</div>
             <div class="list-row-body">
-              <div class="list-row-title" onclick="mobileOpenFile('${url.replace(/'/g,"\\'")}','${esc(f.name)}')" style="cursor:pointer;color:var(--blue)">${catBadge}${esc(shortName)}</div>
+              <div class="list-row-title" onclick="mobileOpenFile('${url.replace(/'/g,"\\'")}','${esc(f.name)}')" style="cursor:pointer;color:var(--blue)" title="${esc(f.name)}">${catBadge}${esc(shortName)}</div>
               <div class="list-row-sub">${sizeStr} · ${f.modified}</div>
             </div>
             <button onclick="deleteFileMobile('${esc(f.name)}','${esc(f.category)}')" style="background:none;border:none;font-size:1.1rem;color:var(--danger);cursor:pointer">${ico('trash')}</button>

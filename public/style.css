@@ -309,7 +309,7 @@ body.dark-theme .action-menu-pop { background: var(--surface); border-color: var
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -1229,7 +1229,39 @@ body.is-offline header {
 
 /* ── Collapsible Sidebar Sections ────────────────────────── */
 .sidebar-collapse-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-bottom: 1px solid var(--grey-100);
+}
+/* Menü: eigener, auf max. 45% der Sidebar-Höhe begrenzter
+   Scrollbereich - ein langes Menü darf die Projektliste darunter
+   nicht aus dem Sichtfeld schieben (siehe .sidebar-section-projekte).
+   Bewusste Einschränkung (B1 Korrekturrunde 2 / E-094): Diese 45%-
+   Grenze wird NICHT aufgehoben, wenn der Projektbereich eingeklappt
+   ist (optionaler Planpunkt). Vor dieser Korrekturrunde kam :has()
+   im Projekt nicht vor (per grep geprüft); laut Plan war diese
+   optionale Aufhebung an diese Vorbedingung geknüpft - daher hier
+   absichtlich weggelassen, obwohl :has() weiter unten für den
+   verpflichtenden Projekte-Fix neu eingeführt wurde (siehe dort). */
+.sidebar-section-menu {
+  flex: 0 1 auto;
+  max-height: 45%;
+}
+/* Projekte: nimmt den restlichen Platz ein und bleibt auch bei
+   langem Menü sichtbar (eigener, unabhängiger Scrollbereich). */
+.sidebar-section-projekte {
+  flex: 1 1 auto;
+  min-height: 160px;
+}
+/* B1 Korrekturrunde 2 (E-094): .collapsed wird laut toggleSidebarSection()
+   auf den Section-Body (#secProjekte, Klasse .sidebar-collapse-body) gesetzt,
+   nicht auf .sidebar-section-projekte selbst. Damit der eingeklappte
+   Projektbereich keinen Leerraum mehr reserviert, muss daher der
+   umschließende Abschnitt anhand seines Kind-Elements zurückgesetzt werden. */
+.sidebar-section-projekte:has(> .sidebar-collapse-body.collapsed) {
+  flex: 0 0 auto;
+  min-height: 0;
 }
 .sidebar-collapse-toggle {
   display: flex;
@@ -1245,6 +1277,7 @@ body.is-offline header {
   letter-spacing: 0.5px;
   color: var(--grey-600);
   cursor: pointer;
+  flex-shrink: 0;
   transition: background var(--transition);
 }
 .sidebar-collapse-toggle:hover {
@@ -1259,11 +1292,24 @@ body.is-offline header {
   transform: rotate(-90deg);
 }
 .sidebar-collapse-body {
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
   transition: max-height 0.25s ease;
 }
 .sidebar-collapse-body.collapsed {
   max-height: 0 !important;
+  overflow: hidden;
+}
+/* Projekte-Bereich: die Körperzone selbst scrollt NICHT als Ganzes
+   (sonst würden Suchfeld/Umschalter mit wegscrollen) - stattdessen
+   wächst sie flexbasiert und delegiert das Scrollen an die
+   #baustellenList (.baustellen-list hat bereits flex:1 + overflow-y:auto). */
+.sidebar-section-projekte .sidebar-collapse-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 /* Unterprojekt indent in sidebar */

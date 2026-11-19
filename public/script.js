@@ -14775,7 +14775,7 @@ async function loadBaustelleFiles() {
       const renderCard = (f) => {
         const sizeKb = (f.size / 1024).toFixed(0);
         const sizeStr = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : sizeKb + ' KB';
-        const displayName = f.alias || f.name.substring(20) || f.name;
+        const displayName = bkDateiAnzeigeName(f);
         const fileUrl = `api.php?action=download_file&baustelleId=${b.id}&category=${encodeURIComponent(f.category)}&fileName=${encodeURIComponent(f.name)}`;
         if (f.isImage) {
           return `<div class="file-card file-card-image file-card-lazy" onclick="loadFilePreview(this,'${fileUrl.replace(/'/g,"\\'")}')">
