@@ -37,6 +37,33 @@
 
 ---
 
+## v3.0.27 – Dateinamen, Seitenleiste und Rechte-Härtung
+
+### Behoben
+- **Dateinamen in Dateien & Fotos:** Die ersten 20 Zeichen des Dateinamens wurden abgeschnitten
+  (Desktop und Mobil). Jetzt wird der volle Name angezeigt und nur am Ende mit „…“ gekürzt; der
+  volle Name steht im Tooltip.
+- **Seitenleiste:** „Menü“ und „Projekte“ haben eigene Scrollbalken – ein langes Menü schiebt die
+  Projektliste nicht mehr aus dem Sichtfeld.
+
+### Sicherheit
+- **Rechnungen und Angebote:** E-Mail-Versand nur noch mit Belegrecht und „Preise sehen“ (bisher
+  konnte jeder angemeldete Nutzer Belege versenden). Liste, PDF, ZUGFeRD, Versand, Speichern und
+  Löschen nur für Baustellen, die der Nutzer sehen darf (Admin und Sichtbarkeit „alle“
+  unverändert); der Belegtyp lässt sich nachträglich nicht mehr ändern.
+- **VDE-/DIN-1090-Versand** verlangt das jeweilige Leserecht.
+- **KI-Scan** nur mit Recht „Material bearbeiten“ oder „Arbeitszeit bearbeiten“; KI-Foto im Lager
+  nur mit Lager-Schreibrecht.
+- **Baustellen-Sichtbarkeit** wird jetzt auch bei Tagesbericht, Tagebuch-Export, Notizen, Terminen
+  u. a. geprüft.
+- **Dateien:** Umbenennen, Verschieben (Quell- und Zielordner) und „In Dateien speichern“ nur mit
+  Ordner-Schreibrecht; die Symbole werden sonst ausgeblendet.
+- **Rechteverwaltung:** Rechtekonfiguration nur noch für Admins abrufbar; Admins erhalten
+  vollständig alle Rechte (auch DIN 1090 und Dokumentenordner).
+- Keine Datenbankänderung; alte Sicherungen bleiben importierbar.
+
+---
+
 ## v3.0.26 – Halbe Urlaubstage
 
 ### Neu
