@@ -8,6 +8,7 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 ## Befehle
 
 - Tests: `php vendor/bin/phpunit` (lange Läufe asynchron) · nur Unit: `--testsuite unit` · PostgreSQL: `make test-pgsql`, Windows `scripts/test-pgsql.ps1`
+- Klicktests (Playwright, `tests/e2e/`): **nur auf ausdrückliche Aufforderung** – nie automatisch, nicht per `pre-commit`, kein CI-Pflichtjob. `make clicktest` bzw. Windows `scripts/clicktest.ps1 -Php <pfad\php.exe>`.
 - Analyse: `php vendor/bin/phpstan analyse --memory-limit=2G` – keine neuen Baseline-Einträge
 - Format: `php vendor/bin/php-cs-fixer check --diff` (prüft vorerst nur `tests/`)
 - Windows: `php` fehlt in neuen Terminals oft im PATH → absoluten WinGet-Pfad nutzen; npm als `npm.cmd`
