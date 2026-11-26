@@ -10,9 +10,11 @@
         "minify":  "terser public/script.js --compress passes=2 --mangle --output public/script.min.js",
         "check-versions": "node scripts/check-versions.mjs",
         "version:sync": "node scripts/sync-version.mjs",
-        "test:js": "node --test \"tests/js/*.test.mjs\""
+        "test:js": "node --test \"tests/js/*.test.mjs\"",
+        "test:click": "playwright test"
     },
     "devDependencies": {
+        "@playwright/test": "1.65.1",
         "terser": "^5.49.0",
         "vite": "^6.3.0"
     }

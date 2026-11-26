@@ -18,6 +18,7 @@
     <source>
         <include>
             <directory>src</directory>
+            <directory>modules</directory>
         </include>
     </source>
 </phpunit>

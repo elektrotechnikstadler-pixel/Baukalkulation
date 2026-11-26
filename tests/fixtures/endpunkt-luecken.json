@@ -1,0 +1,66 @@
+{
+    "_hinweis": "Bekannte, noch ungetestete Endpunkte/Aktionen (AP-20261119-testabdeckung-klicktests, B0.4). Diese Liste darf nur schrumpfen - analog phpstan-baseline.neon. tests/Unit/EndpunktInventarTest.php schlaegt fehl, wenn ein Eintrag inzwischen getestet ist (dann hier entfernen) oder ein neuer Endpunkt weder getestet noch hier gelistet ist.",
+    "api": [
+        "delete_user", "list_users_basic", "set_role", "set_kuerzel", "set_personalnummer",
+        "set_show_in_wochenplanung", "admin_reset_password", "set_subunternehmer",
+        "set_theme",
+        "project_heartbeat", "project_presence",
+        "send_rechnung", "test_smtp",
+        "search_archive", "view_archive", "download_archive_excel", "download_archive_json",
+        "download_archive_all", "upload_archive_json", "upload_archive_all", "reimport_baustelle",
+        "repair_archiv_projekte", "delete_archive", "clear_archive",
+        "archive_offenes_material", "load_auswertung_archives",
+        "load_all_zeiterfassung", "diagnose_fehlbuchungen", "get_zeiterfassung_historie",
+        "repair_bookings_bulk", "set_sollstunden", "get_sollstunden", "set_sollstunden_tag",
+        "set_soll_tage_woche", "get_sollstunden_extended", "get_gleitzeitkonto_buchungen",
+        "save_gleitzeitkonto_buchung", "load_wochenpruefung", "save_wochenpruefung",
+        "load_tagespruefung", "save_tagespruefung",
+        "load_wochenplanung", "load_wochenplanung_display", "get_wochenplan_cal_token",
+        "export_wochenplan_ical", "archive_all_schnellnotizen", "delete_schnellnotiz",
+        "load_termine", "delete_termin",
+        "load_dashboard", "save_dashboard_item", "delete_dashboard_item",
+        "update_dashboard_item_status", "update_dashboard_sort",
+        "load_gruppen", "load_gruppen_for_user", "delete_gruppe",
+        "export_kunde", "dsgvo_delete_kunde", "add_dienstleister", "edit_dienstleister", "delete_dienstleister",
+        "upload_file", "list_files", "download_file",
+        "save_weekly_export",
+        "get_storage_paths", "save_storage_paths",
+        "browse_directory", "download_audit_log", "erinnerung_log", "trigger_erinnerung",
+        "trigger_material_erinnerung", "trigger_backup_email", "trigger_stundenauswertung_email",
+        "datanorm_status", "datanorm_upload", "datanorm_clear", "metallprofile_catalog",
+        "metallprofile_auto_update", "hicad_list", "hicad_import", "material_top_used",
+        "export_inform_csv", "subunternehmer_report",
+        "oci_list_lieferanten", "oci_save_lieferant", "oci_delete_lieferant", "oci_prepare",
+        "oci_start", "oci_hook"
+    ],
+    "vor_routen": ["list_modules", "module"],
+    "module": {
+        "aufmass": ["ping", "list", "load", "save", "delete", "status", "uebernehmen", "foto_ocr"],
+        "lager": [
+            "ping", "orte_list", "ort_save", "ort_delete", "artikel_list", "artikel_save",
+            "artikel_delete", "buchung", "match_offenes_material", "foto_ocr", "foto_ai",
+            "foto_ai_available"
+        ],
+        "vde0100": [
+            "ping", "protokoll_list", "protokoll_get", "protokoll_save", "protokoll_delete",
+            "protokoll_fixieren", "protokoll_kopieren", "protokoll_save_pruefdatum",
+            "protokoll_pdf", "gebaeude_save", "gebaeude_delete", "verteiler_save",
+            "verteiler_delete", "verteiler_ki_scan", "verteiler_ki_import", "rcd_save",
+            "rcd_delete", "sicherung_save", "sicherung_delete", "template_list", "template_save",
+            "template_delete", "template_insert"
+        ]
+    },
+    "din1090": [
+        "list_projects", "get_project", "save_project", "delete_project", "list_materials",
+        "save_material", "delete_material", "delete_welder", "list_wps", "save_wps",
+        "delete_wps", "list_weld_log", "save_weld_log", "delete_weld_log", "list_inspections",
+        "save_inspection", "delete_inspection", "list_ncr", "save_ncr", "delete_ncr",
+        "list_surface", "save_surface", "delete_surface", "get_checklists",
+        "generate_checklist", "update_checklist", "get_audit_log", "dashboard",
+        "export_project", "copy_from_project"
+    ],
+    "cli": [
+        "cron_material_erinnerung.php", "cron_stunden_erinnerung.php",
+        "cron_stundenauswertung_email.php"
+    ]
+}

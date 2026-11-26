@@ -22,6 +22,8 @@
 | Abhängigkeiten | `make install` | `composer install && npm ci` |
 | Tests | `make test` | `vendor/bin/phpunit` |
 | Tests gegen PostgreSQL | `make test-pgsql` | siehe unten |
+| Tests mit Code-Coverage | `make test-cov` | `scripts/test-cov.ps1 -Php <pfad\php.exe>` |
+| Klicktests (Playwright, nur auf Aufforderung) | `make clicktest` | `scripts/clicktest.ps1 -Php <pfad\php.exe>` |
 | Statische Analyse | `make type-check` | `vendor/bin/phpstan analyse --memory-limit=2G` |
 | Formatierung prüfen / korrigieren | `make lint` / `make fix` | `vendor/bin/php-cs-fixer check` / `fix` |
 | Frontend bauen | `make build` | `npm run minify && npm run build` |
@@ -101,6 +103,28 @@ generisch aus der SQLite-Datei (gemeinsame Spalten). Jeder Fehler rollt vollstä
 - `tests/fixtures/backups/v*.zip` – echte Backups früherer Versionen. Jede Datei muss sich in
   eine frische Installation einspielen lassen. Bei jedem Release mit Schemaänderung
   `make fixture` ausführen und die neue Datei einchecken.
+
+### Coverage, Endpunkt-Wächter, Klicktests
+
+- Code-Coverage (PHPUnit über Built-in-Server + CLI hinweg): `make test-cov` bzw.
+  `scripts/test-cov.ps1 -Php <pfad\php.exe> [-Treiber pcov|xdebug]`. Benötigt PCOV oder
+  Xdebug; Bericht unter `coverage/html/index.html` (`coverage/clover.xml` für Werkzeuge).
+  Kein Schwellwert – die CI lädt den Bericht nur als Artefakt hoch.
+- Endpunkt-Wächter: Ein Test stellt sicher, dass jede Route aus `public/api.php` von
+  mindestens einem `tests/Api/*`-Test abgedeckt ist, damit neue Endpunkte nicht ohne Test bleiben.
+- Klicktests (Playwright, `tests/e2e/`): **laufen nur auf ausdrückliche Aufforderung**, nie
+  automatisch, nicht per `pre-commit`, nicht als CI-Pflichtjob (siehe `AGENTS.md`).
+  - Aufruf: `make clicktest` bzw. unter Windows
+    `powershell -File scripts/clicktest.ps1 -Php <pfad\php.exe> [-Db sqlite|pgsql] [-Project …] [-Grep …] [-Headed] [-Install]`.
+  - Jeder Playwright-Worker startet einen eigenen PHP-Built-in-Server mit eigenem
+    Temp-Datenverzeichnis (`tests/e2e/fixtures.mjs`) – nie gegen `data/` des Repos.
+  - 9 Projekte (`{chromium,firefox,webkit} × {desktop,tablet,phone}`), Desktop/Tablet zielen auf
+    `index.html`, Phone auf `mobile.html` (`window.innerWidth`-Umleitung in `public/login.html`).
+  - `-Install` lädt die Browser-Binaries (`npx playwright install chromium firefox webkit`) –
+    einmalig bzw. nach Playwright-Updates nötig.
+  - Berichte: `playwright-report/index.html` (HTML-Report), `test-results/junit.xml`
+    (JUnit für Werkzeuge), `test-results/befunde.md` (lesbare Zusammenfassung je Fehlschlag:
+    Kategorie, Browser × Viewport, erwartet/tatsächlich, Screenshot-/Trace-Pfad).
 
 ## Statische Analyse
 

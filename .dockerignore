@@ -31,7 +31,13 @@ mkdocs.yml
 # public/dist/ wird immer frisch durch den Node-Build-Stage im Dockerfile erzeugt
 public/dist/
 
+# Klicktest-Berichte (Playwright) – nie Teil des Produktiv-Images
+/playwright-report/
+/test-results/
+
 # HiCAD-Rohbibliothek wird NICHT ins Image kopiert.
 # Stattdessen wird Materialbibliothek_Uebersicht.csv verwendet
 # (deutlich kleineres Image, identische Katalogdaten).
 Materialbibliothek HiCAD/
+
+coverage/

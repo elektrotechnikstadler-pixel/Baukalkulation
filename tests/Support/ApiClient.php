@@ -48,6 +48,18 @@ final class ApiClient
         return $this->request($method, $script, $query, $opts, $headers, $script);
     }
 
+    /** Modul-Unteraktion aufrufen (`action=module&module=…&sub=…`), z. B. aufmass/lager/vde0100. */
+    public function module(string $modul, string $sub, array $body = []): ApiResponse
+    {
+        return $this->post('module', $body, ['module' => $modul, 'sub' => $sub]);
+    }
+
+    /** DIN-1090-Unteraktion aufrufen (`din1090_api.php` mit `sub` im JSON-Body). */
+    public function din1090(string $sub, array $body = []): ApiResponse
+    {
+        return $this->skript('POST', 'din1090_api.php', [], ['sub' => $sub] + $body);
+    }
+
     private function request(string $method, string $action, array $query, array $opts = [], array $headers = [], ?string $script = null): ApiResponse
     {
         $url = $script === null

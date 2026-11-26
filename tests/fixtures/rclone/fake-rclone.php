@@ -7,23 +7,23 @@ declare(strict_types=1);
  * konfigurierbare Antworten ueber eine Steuerdatei im HOME/run-Verzeichnis.
  */
 $argv = $_SERVER['argv'] ?? [];
-$command = (string)($argv[1] ?? '');
-$runDir = (string)(getenv('HOME') ?: getcwd());
-$logFile = (string)(getenv('FAKE_RCLONE_LOG') ?: ($runDir . DIRECTORY_SEPARATOR . 'fake-rclone-log.jsonl'));
-$controlFile = (string)(getenv('FAKE_RCLONE_CONTROL') ?: ($runDir . DIRECTORY_SEPARATOR . 'fake-rclone-control.json'));
+$command = (string) ($argv[1] ?? '');
+$runDir = (string) (getenv('HOME') ?: getcwd());
+$logFile = (string) (getenv('FAKE_RCLONE_LOG') ?: ($runDir . DIRECTORY_SEPARATOR . 'fake-rclone-log.jsonl'));
+$controlFile = (string) (getenv('FAKE_RCLONE_CONTROL') ?: ($runDir . DIRECTORY_SEPARATOR . 'fake-rclone-control.json'));
 
-$stdin = (string)stream_get_contents(STDIN);
+$stdin = (string) stream_get_contents(STDIN);
 $response = fakeRclonePopResponse($controlFile, $command);
 
 if (($response['sleepMs'] ?? 0) > 0) {
-    usleep((int)$response['sleepMs'] * 1000);
+    usleep((int) $response['sleepMs'] * 1000);
 }
 
-$stdout = (string)($response['stdout'] ?? '');
-$stderr = (string)($response['stderr'] ?? '');
-$exitCode = (int)($response['exitCode'] ?? 0);
+$stdout = (string) ($response['stdout'] ?? '');
+$stderr = (string) ($response['stderr'] ?? '');
+$exitCode = (int) ($response['exitCode'] ?? 0);
 
-$mode = (string)($response['mode'] ?? '');
+$mode = (string) ($response['mode'] ?? '');
 if ($mode !== '') {
     if ($mode === 'logon-invalid') {
         $stderr = 'The attempted logon is invalid';
@@ -51,13 +51,13 @@ if ($command === 'obscure' && !array_key_exists('stdout', $response)) {
 }
 
 $env = [
-    'HOME' => (string)(getenv('HOME') ?: ''),
-    'RCLONE_CONFIG' => (string)(getenv('RCLONE_CONFIG') ?: ''),
-    'RCLONE_SMB_HOST' => (string)(getenv('RCLONE_SMB_HOST') ?: ''),
-    'RCLONE_SMB_PORT' => (string)(getenv('RCLONE_SMB_PORT') ?: ''),
-    'RCLONE_SMB_USER' => (string)(getenv('RCLONE_SMB_USER') ?: ''),
-    'RCLONE_SMB_PASS' => (string)(getenv('RCLONE_SMB_PASS') ?: ''),
-    'RCLONE_SMB_DOMAIN' => (string)(getenv('RCLONE_SMB_DOMAIN') ?: ''),
+    'HOME' => (string) (getenv('HOME') ?: ''),
+    'RCLONE_CONFIG' => (string) (getenv('RCLONE_CONFIG') ?: ''),
+    'RCLONE_SMB_HOST' => (string) (getenv('RCLONE_SMB_HOST') ?: ''),
+    'RCLONE_SMB_PORT' => (string) (getenv('RCLONE_SMB_PORT') ?: ''),
+    'RCLONE_SMB_USER' => (string) (getenv('RCLONE_SMB_USER') ?: ''),
+    'RCLONE_SMB_PASS' => (string) (getenv('RCLONE_SMB_PASS') ?: ''),
+    'RCLONE_SMB_DOMAIN' => (string) (getenv('RCLONE_SMB_DOMAIN') ?: ''),
 ];
 
 $entry = [
@@ -103,7 +103,7 @@ function fakeRclonePopResponse(string $controlFile, string $command): array
             return [];
         }
         $raw = stream_get_contents($fh);
-        $cfg = json_decode((string)$raw, true);
+        $cfg = json_decode((string) $raw, true);
         if (!is_array($cfg)) {
             return [];
         }

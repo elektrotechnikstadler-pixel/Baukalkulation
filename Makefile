@@ -3,7 +3,7 @@ COMPOSER ?= composer
 NPM      ?= npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install verify lint fix type-check test test-unit test-api test-js test-pgsql test-cov audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
+.PHONY: help install verify lint fix type-check test test-unit test-api test-js test-pgsql test-cov clicktest audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
 
 help: ## Diese Übersicht
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -45,8 +45,34 @@ test-pgsql: ## Alle Tests gegen PostgreSQL (Wegwerf-Container per Docker)
 		BK_DB_USER=bk BK_DB_PASSWORD=bk-test-pw $(PHP) vendor/bin/phpunit; \
 		status=$$?; docker rm -f bk-pg-test >/dev/null; exit $$status
 
-test-cov: ## Tests mit Coverage (benötigt Xdebug oder PCOV)
-	$(PHP) vendor/bin/phpunit --coverage-text --coverage-html coverage
+test-cov: ## Tests mit Coverage über Built-in-Server + CLI hinweg (benötigt Xdebug oder PCOV)
+	driver=pcov; \
+	if ! $(PHP) -d extension=$$driver -r "exit(extension_loaded('$$driver')?0:1);" >/dev/null 2>&1; then \
+		driver=xdebug; \
+		if ! $(PHP) -d extension=$$driver -r "exit(extension_loaded('$$driver')?0:1);" >/dev/null 2>&1; then \
+			echo "Kein Coverage-Treiber (pcov/xdebug) ladbar - siehe scripts/test-cov.ps1 Fehlermeldung/README"; \
+			exit 1; \
+		fi; \
+	fi; \
+	rm -rf coverage; \
+	mkdir -p coverage/parts; \
+	BK_COVERAGE_DIR=$(CURDIR)/coverage/parts \
+		BK_TEST_PHP_ARGS="-d extension=$$driver -d auto_prepend_file=$(CURDIR)/tests/Support/coverage-prepend.php" \
+		$(PHP) -d extension=$$driver vendor/bin/phpunit --coverage-php coverage/parts/phpunit.cov; \
+	status=$$?; \
+	$(PHP) vendor/bin/phpcov merge coverage/parts --html coverage/html --clover coverage/clover.xml --text php://stdout; \
+	exit $$status
+
+clicktest: ## Klicktests (Playwright) - nur auf ausdrückliche Aufforderung, siehe AGENTS.md
+	$(NPM) run build
+	@if [ public/script.min.js -ot public/script.js ]; then \
+		echo "public/script.min.js ist aelter als public/script.js - 'npm run minify' ausfuehren und committen."; \
+		exit 1; \
+	fi
+	BK_PHP=$(PHP) npx playwright test; \
+	status=$$?; \
+	node scripts/clicktest-befunde.mjs; \
+	exit $$status
 
 audit: ## Bekannte Sicherheitslücken in Abhängigkeiten
 	$(COMPOSER) audit

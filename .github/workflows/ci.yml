@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -81,6 +82,25 @@ jobs:
         run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
       - name: PHP-CS-Fixer
         run: vendor/bin/php-cs-fixer check --diff
+
+  coverage:
+    name: Code-Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, fileinfo, gd, zip, curl, sodium
+          coverage: pcov
+      - run: composer install --no-interaction --no-progress
+      - name: Tests mit Coverage (Built-in-Server + CLI, kein Schwellwert)
+        run: make test-cov
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
 
   frontend:
     name: Frontend
@@ -171,3 +191,34 @@ jobs:
           build-args: ENABLE_OCR=false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  clicktest:
+    name: Klicktests (Playwright)
+    # Nur auf manuellen Anstoß (workflow_dispatch) - nie bei push/pull_request,
+    # siehe AGENTS.md "Klicktests laufen nur auf ausdrückliche Aufforderung".
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, fileinfo, gd, zip, curl, sodium
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Playwright-Browser installieren
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Klicktests ausführen
+        run: make clicktest PHP="$(command -v php)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clicktest-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
