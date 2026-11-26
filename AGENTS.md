@@ -8,6 +8,7 @@ Aufbau und Struktur nach Vorlage `../copier-astral-main/template/` – Abbildung
 ## Befehle
 
 - Tests: `php vendor/bin/phpunit` (lange Läufe asynchron) · nur Unit: `--testsuite unit` · PostgreSQL: `make test-pgsql`, Windows `scripts/test-pgsql.ps1`
+- Prüfen tokenfrei: nur `node scripts/pruefen.mjs --php <php> [--filter X] [--pgsql] [--stan] [--voll]` (bzw. `make pruefen`) – nur die Kurzausgabe lesen, Volllogs nie; neue Testfälle als Daten (Falllisten/Aufzeichnungen), externe APIs nur per Fake (E-037, E-100)
 - Klicktests (Playwright, `tests/e2e/`): **nur auf ausdrückliche Aufforderung** – nie automatisch, nicht per `pre-commit`, kein CI-Pflichtjob. `make clicktest` bzw. Windows `scripts/clicktest.ps1 -Php <pfad\php.exe>`.
 - Analyse: `php vendor/bin/phpstan analyse --memory-limit=2G` – keine neuen Baseline-Einträge
 - Format: `php vendor/bin/php-cs-fixer check --diff` (prüft vorerst nur `tests/`)
