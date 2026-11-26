@@ -37,7 +37,7 @@
 
 ---
 
-## Unveröffentlicht – Lexware Office (Serie 1, in Arbeit)
+## v3.0.28 – Lexware Office (Grundlage), Prüfskript und Testabdeckung
 
 ### Neu
 - **Modul „Lexware Office“ (ehem. lexoffice)**, Standard aus: Schalter in Verwaltung → Allgemein → Module;
@@ -48,6 +48,12 @@
   Status ändern. Neues Recht „Lexware Office (Status, Projekte übertragen)“.
 - **Entwicklung:** `node scripts/pruefen.mjs` bzw. `make pruefen` – ein Prüfaufruf für PHPUnit (SQLite/PostgreSQL),
   `test:js`, PHPStan und Versionsprüfung mit Kurzausgabe; Logs unter `tests/tmp/pruefen/`.
+- **Tests:** Coverage über Built-in-Server und CLI (`make test-cov`), Endpunkt-Wächter
+  (`tests/Unit/EndpunktInventarTest.php`), Playwright-Klicktests unter `tests/e2e/` (nur auf Aufforderung).
+
+### Hinweis
+- Die Übertragung von Projekten nach Lexware Office folgt in den nächsten Versionen; diese Version enthält
+  Schalter, Schlüssel, Verbindungstest und die Betriebsart.
 
 ---
 
