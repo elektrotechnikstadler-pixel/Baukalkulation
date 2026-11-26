@@ -426,7 +426,7 @@ async function init() {
       }
       // Rechnungen & Angebote Button + Sub-Buttons
       const canSeeAnyRechnung = canDo('canSeeRechnungen') || canDo('canManageRechnungen') || canDo('canSeeAngebote') || canDo('canManageAngebote');
-      if (appSettings.modul_rechnungen !== false && canSeeAnyRechnung) {
+      if (bkRechnungenLesbar(appSettings, currentRole) && canSeeAnyRechnung) {
         const btn = document.getElementById('btnRechnungen');
         if (btn) btn.style.display = '';
         const btnReSub = document.getElementById('btnRechnungenSub');
@@ -2550,8 +2550,8 @@ function renderDetail() {
         ${actionMenuHtml([
           canEdit ? { label: 'Excel Export', icon: ico('download'), onclick: 'exportBaustelleExcel()' } : null,
           canEdit ? { label: 'PDF Export', icon: ico('download'), onclick: 'exportBaustellePDF()' } : null,
-          (appSettings.modul_rechnungen !== false && canDo('canManageRechnungen')) ? { label: 'Rechnung erstellen', icon: ico('clipboard'), onclick: 'createRechnungFromBaustelle()' } : null,
-          (appSettings.modul_rechnungen !== false && canDo('canManageAngebote')) ? { label: 'Angebot erstellen', icon: ico('clipboard'), onclick: 'createAngebotFromBaustelle()' } : null
+          (bkRechnungenAktiv(appSettings) && canDo('canManageRechnungen')) ? { label: 'Rechnung erstellen', icon: ico('clipboard'), onclick: 'createRechnungFromBaustelle()' } : null,
+          (bkRechnungenAktiv(appSettings) && canDo('canManageAngebote')) ? { label: 'Angebot erstellen', icon: ico('clipboard'), onclick: 'createAngebotFromBaustelle()' } : null
         ])}
       </div>
     </div>
@@ -8487,12 +8487,13 @@ function applyPermissions() {
   const canSeeRe = canDo('canSeeRechnungen') || canDo('canManageRechnungen');
   const canSeeAn = canDo('canSeeAngebote') || canDo('canManageAngebote');
   const hasAny = canSeeRe || canSeeAn;
+  const reLesbar = bkRechnungenLesbar(appSettings, currentRole);
   const reBtn = document.getElementById('btnRechnungen');
-  if (reBtn) reBtn.style.display = (appSettings.modul_rechnungen === false || !hasAny) ? 'none' : '';
+  if (reBtn) reBtn.style.display = (!reLesbar || !hasAny) ? 'none' : '';
   const reSub = document.getElementById('btnRechnungenSub');
-  if (reSub) reSub.style.display = (appSettings.modul_rechnungen === false || !canSeeRe) ? 'none' : '';
+  if (reSub) reSub.style.display = (!reLesbar || !canSeeRe) ? 'none' : '';
   const anSub = document.getElementById('btnAngeboteSub');
-  if (anSub) anSub.style.display = (appSettings.modul_rechnungen === false || !canSeeAn) ? 'none' : '';
+  if (anSub) anSub.style.display = (!reLesbar || !canSeeAn) ? 'none' : '';
 
   const kiBtn = document.getElementById('btnKiScanHeader');
   if (kiBtn) kiBtn.style.display = (canDo('canEditMaterial') || canDo('canEditArbeitszeit')) ? '' : 'none';
@@ -11317,7 +11318,11 @@ function renderAllgemeinSettings(view, s) {
         ${chk('modul_stundenerfassung','Stundenerfassung')}
         ${chk('modul_stundenauswertung','Stundenauswertung')}
         ${chk('modul_stundenabgleich','Stundenabgleich')}
-        ${chk('modul_rechnungen','Rechnungen & Angebote')}
+        ${bkRechnungenInLexware(s)
+          ? `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;opacity:.65" title="Umschalten unter Schnittstellen → Lexware Office">
+              <input type="checkbox" ${s.modul_rechnungen !== false ? 'checked' : ''} disabled style="width:17px;height:17px">
+              <span style="font-size:.9rem">Rechnungen &amp; Angebote <em style="font-size:.75rem;color:#888">– werden in Lexware Office erzeugt</em></span></label>`
+          : chk('modul_rechnungen','Rechnungen & Angebote')}
         ${chk('modul_datanorm','Datanormschnittstelle')}
         ${chk('modul_kupfer_del','Kupferpreis DEL')}
         ${chk('modul_metall_erfassung','Materialerfassung Metall')}
@@ -11329,6 +11334,9 @@ function renderAllgemeinSettings(view, s) {
         ${chk('modul_stundenauswertung','Stundenauswertung')}
         ${chk('modul_dashboard','Dashboard (Aufgaben, Notizen, Erinnerungen)')}
         ${chk('modul_vde0100','VDE 0100 Prüfprotokolle')}
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer${!s.modul_lexoffice && s.modul_rechnungen === false ? ';opacity:.65' : ''}">
+          <input type="checkbox" ${s.modul_lexoffice ? 'checked' : ''} ${!s.modul_lexoffice && s.modul_rechnungen === false ? 'disabled' : ''} onchange="lexofficeModulSchalten(this)" style="width:17px;height:17px;accent-color:var(--primary,#00B4D8)">
+          <span style="font-size:.9rem">Lexware Office (Schnittstelle)${!s.modul_lexoffice && s.modul_rechnungen === false ? ' <em style="font-size:.75rem;color:#888">– erst „Rechnungen &amp; Angebote“ einschalten</em>' : ''}</span></label>
       </div>
 
       ${currentRole === 'admin' ? `<div class="vw-karte" data-bereich="anmeldung" style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
@@ -11565,6 +11573,8 @@ function renderAllgemeinSettings(view, s) {
       </div>
     </div>
     <div id="settSaveStatus" style="margin-top:12px;font-size:.85rem;color:#388E3C"></div>
+
+  ${currentRole === 'admin' && s.modul_lexoffice === true ? renderLexofficeKarte(s) : ''}
 
   ${(currentRole === 'admin' || currentRole === 'master') ? `
   <div class="vw-karte" data-bereich="schnittstellen" style="padding:20px;border-top:1px solid #e0e0e0">
@@ -12625,6 +12635,91 @@ async function resetMobileBtnOrder() {
   if (listEl) listEl.innerHTML = renderMobileBtnOrderList('');
 }
 
+// ── Lexware Office (AP-20261126-lexoffice-schnittstelle, B1) ──────────────
+function renderLexofficeKarte(s) {
+  const p = (s.lexoffice_profil && typeof s.lexoffice_profil === 'object') ? s.lexoffice_profil : {};
+  const inLexware = bkRechnungenInLexware(s);
+  const geprueft = p.geprueftAm ? new Date(p.geprueftAm).toLocaleString('de-DE') : '';
+  const radio = (wert, label, hinweis) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer">
+      <input type="radio" name="lexModus" value="${wert}" ${(inLexware ? 'lexware' : 'baukalkulation') === wert ? 'checked' : ''} onchange="lexofficeModusSetzen('${wert}')" style="margin-top:3px">
+      <span style="font-size:.9rem">${label}<br><span style="font-size:.75rem;color:#777">${hinweis}</span></span></label>`;
+  return `<div class="vw-karte" data-bereich="schnittstellen" style="padding:20px;border-top:1px solid #e0e0e0">
+    <h2 style="font-size:1rem;margin-bottom:16px">🧾 Lexware Office (ehem. lexoffice)</h2>
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Rechnungen erzeugen in</h3>
+      ${radio('baukalkulation', 'Baukalkulation', 'Angebote und Rechnungen wie bisher in der Baukalkulation.')}
+      ${radio('lexware', 'Lexware Office', 'Angebote und Rechnungen der Baukalkulation werden abgeschaltet (Archiv bleibt für Administratoren lesbar); Projekte werden nach Lexware Office übertragen.')}
+    </div>
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;margin-top:12px">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">API-Schlüssel</h3>
+      <p style="font-size:.82rem;color:#555;margin-bottom:12px">Schlüssel in Lexware Office unter
+        <a href="https://app.lexware.de/addons/public-api" target="_blank" rel="noopener" style="color:var(--primary)">app.lexware.de/addons/public-api</a> erzeugen.</p>
+      <div style="display:flex;gap:8px;align-items:center;max-width:520px;flex-wrap:wrap">
+        <input type="password" id="settLexofficeKey" class="form-control" style="flex:1;min-width:220px;font-size:.9rem" value=""
+               placeholder="${s.lexoffice_api_key_gesetzt ? '•••••• gespeichert – neu eingeben zum Ändern' : 'API-Schlüssel einfügen'}"
+               autocomplete="new-password" onchange="if (this.value.trim()) updateSetting('lexoffice_api_key', this.value.trim())">
+        ${s.lexoffice_api_key_gesetzt ? `<button class="btn btn-secondary btn-sm" style="color:#e53935" onclick="if (confirm('API-Schlüssel für Lexware Office löschen?')) updateSetting('lexoffice_api_key','')">Schlüssel löschen</button>` : ''}
+      </div>
+      <p style="font-size:.75rem;color:#888;margin-top:6px">Wird verschlüsselt in der Datenbank gespeichert und nie an den Browser zurückgegeben.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="lexofficeVerbindungTesten()" ${s.lexoffice_api_key_gesetzt ? '' : 'disabled'}>Verbindung testen</button>
+        <span id="lexofficeErgebnis" style="font-size:.85rem">${!s.lexoffice_api_key_gesetzt ? '<span style="color:#C62828">Schlüssel fehlt.</span>' : p.firma ? `✓ Verbunden mit <strong>${esc(p.firma)}</strong> (Steuerart ${esc(p.steuerart || '–')}${p.kleinunternehmer ? ', Kleinunternehmer' : ''}) – geprüft ${esc(geprueft)}` : '<span style="color:#888">Noch nicht geprüft.</span>'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function lexofficeModulSchalten(el) {
+  if (!el.checked && bkRechnungenInLexware(appSettings)
+      && !confirm('Lexware Office ausschalten?\n\nAngebote und Rechnungen der Baukalkulation werden sofort wieder nutzbar. Schlüssel und Einstellungen bleiben erhalten.')) {
+    el.checked = true;
+    return;
+  }
+  updateSetting('modul_lexoffice', el.checked);
+}
+
+async function lexofficeAufruf(sub, body) {
+  const r = await fetch('api.php?action=module&module=lexoffice&sub=' + encodeURIComponent(sub), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {})
+  });
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* leere Antwort */ }
+  return { ok: r.ok && j.ok === true, j };
+}
+
+async function lexofficeVerbindungTesten() {
+  const el = document.getElementById('lexofficeErgebnis');
+  if (el) el.textContent = 'Prüfe Verbindung…';
+  try {
+    const { ok, j } = await lexofficeAufruf('verbindung_testen');
+    if (!ok) { if (el) { el.style.color = '#C62828'; el.textContent = j.error || 'Verbindung fehlgeschlagen.'; } return; }
+    appSettings.lexoffice_profil = j.profil;
+    if (el) {
+      el.style.color = '#2E7D32';
+      el.textContent = '✓ Verbunden mit ' + (j.profil.firma || '') + (j.hinweise && j.hinweise.length ? ' – Hinweis: ' + j.hinweise.join(' ') : '');
+    }
+  } catch (e) {
+    if (el) { el.style.color = '#C62828'; el.textContent = 'Netzwerkfehler.'; }
+  }
+}
+
+async function lexofficeModusSetzen(modus) {
+  const frage = modus === 'lexware'
+    ? 'Rechnungen künftig in Lexware Office erzeugen?\n\nAngebote und Rechnungen der Baukalkulation werden abgeschaltet. Bestehende Belege bleiben für Administratoren als Archiv lesbar.'
+    : 'Rechnungen wieder in der Baukalkulation erzeugen?';
+  if (!confirm(frage)) { showAllgemeinSettings(); return; }
+  try {
+    const { ok, j } = await lexofficeAufruf('modus_setzen', { modus });
+    if (!ok) { alert(j.error || 'Umschalten fehlgeschlagen.'); showAllgemeinSettings(); return; }
+    appSettings.rechnung_erzeugung = j.modus;
+    applyModuleSettings();
+    if (typeof applyPermissions === 'function') applyPermissions();
+    showAllgemeinSettings();
+  } catch (e) {
+    alert('Netzwerkfehler.');
+  }
+}
+
 async function updateSetting(key, value) {
   const statusEl = document.getElementById('settSaveStatus');
   try {
@@ -12635,7 +12730,7 @@ async function updateSetting(key, value) {
     });
     const j = await r.json();
     if (j.ok) {
-      if (key === 'smtp_pass' || key === 'gemini_api_key') {
+      if (key === 'smtp_pass' || key === 'gemini_api_key' || key === 'lexoffice_api_key') {
         // Geheimnisse bleiben nur auf dem Server
         appSettings[key + '_gesetzt'] = value !== '';
         appSettings[key] = '';
@@ -12644,6 +12739,8 @@ async function updateSetting(key, value) {
       }
       if (statusEl) { statusEl.textContent = 'Gespeichert'; setTimeout(() => statusEl.textContent = '', 2000); }
       applyModuleSettings();
+      // Lexware-Karte erscheint/verschwindet mit dem Modulschalter bzw. zeigt den Schlüsselstatus
+      if (['modul_lexoffice', 'modul_rechnungen', 'lexoffice_api_key'].includes(key) && document.getElementById('vwInhalt')) showAllgemeinSettings();
     }
   } catch(e) {}
 }
@@ -12773,7 +12870,8 @@ function applyModuleSettings() {
   toggle('btnPauschalenView', 'modul_pauschalen');
   toggle('btnSchnellnotizenSidebar', 'modul_schnellnotizen');
   toggle('btnAuswertung', 'modul_auswertung');
-  toggle('btnRechnungen', 'modul_rechnungen');
+  const btnRe = document.getElementById('btnRechnungen');
+  if (btnRe) btnRe.style.display = bkRechnungenLesbar(s, currentRole) ? '' : 'none';
   // Header dropdown items
   const toggleImportant = (id, key) => {
     const el = document.getElementById(id);
@@ -13303,6 +13401,8 @@ function renderRechnungenView(view, filterTyp) {
   const canSeeAn = canDo('canSeeAngebote') || canDo('canManageAngebote');
   const canManageRe = canDo('canManageRechnungen');
   const canManageAn = canDo('canManageAngebote');
+  // Betriebsart Lexware: Archiv – nur Ansicht und Statusänderung (AP-20261126-lexoffice-schnittstelle)
+  const reAktiv = bkRechnungenAktiv(appSettings);
 
   const baseRechnungen = rechnungenData.filter(r => r.typ === 'rechnung');
   const baseAngebote   = rechnungenData.filter(r => r.typ === 'angebot');
@@ -13325,10 +13425,11 @@ function renderRechnungenView(view, filterTyp) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
       <h2 data-ico="clipboard" style="margin:0">${filterTyp === 'rechnung' ? 'Rechnungen' : filterTyp === 'angebot' ? 'Angebote' : 'Rechnungen & Angebote'}</h2>
       <div style="display:flex;gap:8px">
-        ${showRe && canManageRe ? '<button class="btn btn-primary btn-sm" onclick="openRechnungForm(\'rechnung\')">+ Neue Rechnung</button>' : ''}
-        ${showAn && canManageAn ? '<button class="btn btn-secondary btn-sm" onclick="openRechnungForm(\'angebot\')">+ Neues Angebot</button>' : ''}
+        ${reAktiv && showRe && canManageRe ? '<button class="btn btn-primary btn-sm" onclick="openRechnungForm(\'rechnung\')">+ Neue Rechnung</button>' : ''}
+        ${reAktiv && showAn && canManageAn ? '<button class="btn btn-secondary btn-sm" onclick="openRechnungForm(\'angebot\')">+ Neues Angebot</button>' : ''}
       </div>
     </div>
+    ${reAktiv ? '' : '<p style="background:#FFF8E1;border:1px solid #FFE082;border-radius:6px;padding:8px 12px;font-size:.85rem">Archiv: Angebote und Rechnungen werden in Lexware Office erzeugt. Hier lassen sich bestehende Belege nur ansehen und im Status ändern.</p>'}
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;max-width:520px">
       <input type="text" class="form-control" style="width:100%" placeholder="Suche nach Nr., Kunde, Projekt-Nr. oder Beschreibung..." value="${esc(rechnungenSearchState[searchKey] || '')}" oninput="setRechnungenSearch(${JSON.stringify(searchKey).replace(/\"/g,'&quot;')}, this.value)">
       ${q ? '<button class="btn btn-secondary btn-sm" onclick="setRechnungenSearch(\'' + searchKey + '\',\'\')">Reset</button>' : ''}
@@ -13352,8 +13453,8 @@ function renderRechnungenView(view, filterTyp) {
       <td><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${canManageRe ? `<button class="btn btn-secondary btn-sm" onclick="openRechnungForm('rechnung',${JSON.stringify(r.id).replace(/"/g,'&quot;')})">Bearb.</button>` : ''}
       <button class="btn btn-secondary btn-sm" style="color:#C2185B" onclick="openBelegPdf(${JSON.stringify(r.id).replace(/"/g,'&quot;')})" title="Als PDF anzeigen / drucken (ohne Browser-Kopf-/Fußzeile)">📄 PDF</button>
       <button class="btn btn-secondary btn-sm" style="color:#2E7D32" onclick="downloadZugferd(${JSON.stringify(r.id).replace(/"/g,'&quot;')})" title="ZUGFeRD E-Rechnung herunterladen">ZUGFeRD</button>
-      <button class="btn btn-secondary btn-sm" style="color:#1565C0" onclick="openEmailDialog(${JSON.stringify(r.kundeEmail||'').replace(/"/g,'&quot;')}, 'Rechnung ${esc(r.nummer||'')}', (to,subj) => sendRechnungEmail(${JSON.stringify(r.id).replace(/"/g,'&quot;')},to,subj))" title="Per E-Mail senden">✉</button>
-      ${canManageRe ? `<button class="btn btn-secondary btn-sm" style="color:#e53935" onclick="deleteRechnung(${JSON.stringify(r.id).replace(/"/g,'&quot;')})">—</button>` : ''}</div></td>
+      ${reAktiv ? `<button class="btn btn-secondary btn-sm" style="color:#1565C0" onclick="openEmailDialog(${JSON.stringify(r.kundeEmail||'').replace(/"/g,'&quot;')}, 'Rechnung ${esc(r.nummer||'')}', (to,subj) => sendRechnungEmail(${JSON.stringify(r.id).replace(/"/g,'&quot;')},to,subj))" title="Per E-Mail senden">✉</button>` : ''}
+      ${reAktiv && canManageRe ? `<button class="btn btn-secondary btn-sm" style="color:#e53935" onclick="deleteRechnung(${JSON.stringify(r.id).replace(/"/g,'&quot;')})">—</button>` : ''}</div></td>
     </tr>`).join('')}
     </tbody></table></div>` : ''}
 
@@ -13372,8 +13473,8 @@ function renderRechnungenView(view, filterTyp) {
       <td><span style="padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;${r.status==='angenommen'?'background:#E8F5E9;color:#2E7D32':r.status==='abgelehnt'?'background:#FFEBEE;color:#C62828':'background:#FFF3E0;color:#E65100'}">${esc(r.status||'offen')}</span></td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${canManageAn ? `<button class="btn btn-secondary btn-sm" onclick="openRechnungForm('angebot',${JSON.stringify(r.id).replace(/"/g,'&quot;')})">Bearb.</button>` : ''}
       <button class="btn btn-secondary btn-sm" style="color:#C2185B" onclick="openBelegPdf(${JSON.stringify(r.id).replace(/"/g,'&quot;')})" title="Als PDF anzeigen / drucken (ohne Browser-Kopf-/Fußzeile)">📄 PDF</button>
-      <button class="btn btn-secondary btn-sm" style="color:#1565C0" onclick="openEmailDialog(${JSON.stringify(r.kundeEmail||'').replace(/"/g,'&quot;')}, 'Angebot ${esc(r.nummer||'')}', (to,subj) => sendAngebotEmail(${JSON.stringify(r.id).replace(/"/g,'&quot;')},to,subj))" title="Per E-Mail senden">✉</button>
-      ${canManageAn ? `<button class="btn btn-secondary btn-sm" style="color:#e53935" onclick="deleteRechnung(${JSON.stringify(r.id).replace(/"/g,'&quot;')})">—</button>` : ''}</div></td>
+      ${reAktiv ? `<button class="btn btn-secondary btn-sm" style="color:#1565C0" onclick="openEmailDialog(${JSON.stringify(r.kundeEmail||'').replace(/"/g,'&quot;')}, 'Angebot ${esc(r.nummer||'')}', (to,subj) => sendAngebotEmail(${JSON.stringify(r.id).replace(/"/g,'&quot;')},to,subj))" title="Per E-Mail senden">✉</button>` : ''}
+      ${reAktiv && canManageAn ? `<button class="btn btn-secondary btn-sm" style="color:#e53935" onclick="deleteRechnung(${JSON.stringify(r.id).replace(/"/g,'&quot;')})">—</button>` : ''}</div></td>
     </tr>`).join('')}
     </tbody></table></div>` : ''}
   </div>`;
@@ -13395,6 +13496,11 @@ function openRechnungForm(typ, editId) {
   const canManage = typ === 'rechnung' ? canDo('canManageRechnungen') : canDo('canManageAngebote');
   if (!canManage) {
     showNotification('Keine Berechtigung zum Bearbeiten.');
+    return;
+  }
+  const reAktiv = bkRechnungenAktiv(appSettings);
+  if (!reAktiv && !editId) {
+    showNotification('Angebote und Rechnungen werden in Lexware Office erzeugt.');
     return;
   }
   const existing = editId ? rechnungenData.find(r => r.id === editId) : null;
@@ -13492,6 +13598,7 @@ function openRechnungForm(typ, editId) {
         <span style="color:var(--primary,#00B4D8)">Brutto: <span id="reTotalBrutto">0,00</span> €</span>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        ${bkRechnungenInLexware(appSettings) ? '<span style="flex:1;font-size:.8rem;color:#E65100;align-self:center">Archiv (Lexware Office): Beim Speichern wird nur der Status übernommen.</span>' : ''}
         <button class="btn btn-secondary" onclick="saveRechnungAsPdf('${typ}')" title="Als PDF in Dateien &amp; Fotos der Baustelle speichern">📎 In Dateien speichern</button>
         <button class="btn btn-secondary" onclick="previewRechnung('${typ}')">Vorschau / Drucken</button>
         <button class="btn btn-primary" onclick="saveRechnungForm('${typ}',${existing ? JSON.stringify(existing.id).replace(/"/g,'&quot;') : 'null'})">Speichern</button>
@@ -13951,15 +14058,17 @@ async function saveRechnungForm(typ, existingId) {
   };
 
   try {
+    // Archiv (Betriebsart Lexware): nur den Status senden – der Server lehnt weitere Felder ab.
+    const nurStatus = bkRechnungenInLexware(appSettings);
     const r = await fetch('api.php?action=save_rechnung', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rechnung })
+      body: JSON.stringify({ rechnung: nurStatus ? { id: rechnung.id, typ, status: rechnung.status } : rechnung })
     });
     const j = await r.json();
     if (j.ok) {
       // Refresh rechnungenData so Baustelle views stay in sync
       try { const lr = await fetch('api.php?action=list_rechnungen'); const lj = await lr.json(); rechnungenData = lj.rechnungen || []; } catch(e) {}
-      showNotification(typ === 'rechnung' ? 'Rechnung gespeichert.' : 'Angebot gespeichert.');
+      showNotification(nurStatus ? 'Status gespeichert.' : (typ === 'rechnung' ? 'Rechnung gespeichert.' : 'Angebot gespeichert.'));
       document.getElementById('rechnungFormOverlay')?.remove();
       showRechnungenView();
     } else {
@@ -14487,6 +14596,7 @@ async function loadPermissionsEditor() {
       canSeeBautagebuch:         'Bautagebuch sehen',
       canSeeOffenesMaterial:     'Offenes Material sehen',
       canSeeAbschlagsrechnungen: 'Abschlagsrechnungen sehen',
+      canLexoffice:              'Lexware Office (Status, Projekte übertragen)',
       canSeeZeituebersicht:      'Zeitübersicht (Admin) sehen',
       canSeeOwnWochenplan:       'Eigenen Wochenplan sehen',
       canSeeAllWochenplan:       'Alle Wochenpläne sehen',
@@ -14542,7 +14652,7 @@ async function loadPermissionsEditor() {
       { title: 'Material & Preise', keys: ['canSeePrices','canSeeGewinn','canEditMaterial','canOrderMaterial','canManageKatalog'] },
       { title: 'Arbeitszeit & Pauschalen', keys: ['canEditArbeitszeit','canEditPauschalen','canManageStundenKatalog'] },
       { title: 'Wochenplan & Termine', keys: ['canSeeOwnWochenplan','canSeeAllWochenplan','canSeeAllStunden','canSeeOwnTermine','canSeeAllTermine','canManageTermine'] },
-      { title: 'Rechnungen & Angebote', keys: ['canSeeRechnungen','canManageRechnungen','canSeeAbschlagsrechnungen','canSeeAngebote','canManageAngebote'] },
+      { title: 'Rechnungen & Angebote', keys: ['canSeeRechnungen','canManageRechnungen','canSeeAbschlagsrechnungen','canSeeAngebote','canManageAngebote','canLexoffice'] },
       { title: 'Auswertungen & Export', keys: ['canSeeZeituebersicht','canSeeStundenauswertung','canSeeWochenpruefung','canSeeAuswertung','canSeeSubunternehmerReport','canExport'] },
       { title: 'Dokumentenordner', keys: ['canReadEingangsbelege','canWriteEingangsbelege','canReadAusgangsbelege','canWriteAusgangsbelege','canReadAngebote','canWriteAngebote','canReadDateien','canWriteDateien','canReadFotos','canWriteFotos','canReadProtokolle','canWriteProtokolle','canReadSonstiges','canWriteSonstiges'] },
       { title: 'Aufmaß & Lager', keys: ['canReadAufmass','canWriteAufmass','canApproveAufmass','canReadLager','canWriteLager','canManageLagerorte'] },

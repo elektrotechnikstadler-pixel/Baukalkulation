@@ -1,0 +1,10 @@
+[
+  { "name": "Standard ohne Einstellungen", "settings": {}, "rolle": "normal", "aktiv": true, "lesbar": true, "inLexware": false },
+  { "name": "Modul Rechnungen aus", "settings": { "modul_rechnungen": false }, "rolle": "admin", "aktiv": false, "lesbar": false, "inLexware": false },
+  { "name": "Lexware gewählt, Modul Lexware aus", "settings": { "modul_lexoffice": false, "rechnung_erzeugung": "lexware" }, "rolle": "normal", "aktiv": true, "lesbar": true, "inLexware": false },
+  { "name": "Lexware an, Betriebsart Baukalkulation", "settings": { "modul_lexoffice": true, "rechnung_erzeugung": "baukalkulation" }, "rolle": "normal", "aktiv": true, "lesbar": true, "inLexware": false },
+  { "name": "Betriebsart Lexware, normaler Benutzer", "settings": { "modul_lexoffice": true, "rechnung_erzeugung": "lexware" }, "rolle": "master", "aktiv": false, "lesbar": false, "inLexware": true },
+  { "name": "Betriebsart Lexware, Admin liest Archiv", "settings": { "modul_lexoffice": true, "rechnung_erzeugung": "lexware" }, "rolle": "admin", "aktiv": false, "lesbar": true, "inLexware": true },
+  { "name": "Betriebsart Lexware und Modul Rechnungen aus", "settings": { "modul_rechnungen": false, "modul_lexoffice": true, "rechnung_erzeugung": "lexware" }, "rolle": "admin", "aktiv": false, "lesbar": false, "inLexware": true },
+  { "name": "Unbekannter Wert gilt als Baukalkulation", "settings": { "modul_lexoffice": true, "rechnung_erzeugung": "xyz" }, "rolle": "normal", "aktiv": true, "lesbar": true, "inLexware": false }
+]

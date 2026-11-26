@@ -5,6 +5,7 @@ use App\Auth;
 use App\Services\AuditService;
 use App\Services\BelegPdfService;
 use App\Services\MailService;
+use App\Services\RechnungsModus;
 use App\Services\ZugferdService;
 
 /**
@@ -117,6 +118,9 @@ class EmailActions
     public function sendRechnung(): void
     {
         Auth::requireAuth();
+        if (RechnungsModus::inLexware(Auth::loadSettings($this->db))) {
+            \jsonOut(['error' => RechnungsModus::MELDUNG_DEAKTIVIERT], 403);
+        }
         // M1 (B2a, 2026-11-19): Typrecht wie bei der PDF-Ansicht desselben Belegs
         // (renderBelegPdf) + Preisrecht (F-B2-3b) – objektunabhängiger Teil (L1).
         if (!Auth::canDo($this->db, 'canSeePrices')) {
@@ -191,6 +195,9 @@ class EmailActions
     public function sendAngebot(): void
     {
         Auth::requireAuth();
+        if (RechnungsModus::inLexware(Auth::loadSettings($this->db))) {
+            \jsonOut(['error' => RechnungsModus::MELDUNG_DEAKTIVIERT], 403);
+        }
         // M1 (B2a, 2026-11-19): Typrecht wie bei der PDF-Ansicht desselben Belegs
         // (renderBelegPdf) + Preisrecht (F-B2-3b) – objektunabhängiger Teil (L1).
         if (!Auth::canDo($this->db, 'canSeePrices')) {

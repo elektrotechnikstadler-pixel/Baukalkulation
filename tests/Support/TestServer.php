@@ -47,6 +47,8 @@ final class TestServer
         $env['BK_DATA_DIR'] = $this->dataDir;
         // Update-Prüfung in Tests nie gegen GitHub (AP-20261001-update, AK 9).
         unset($env['BK_UPDATE_REPO']);
+        // Lexware Office in Tests nie gegen die echte API (AP-20261126-lexoffice-schnittstelle, E-037).
+        $env['BK_LEXOFFICE_FAKE_DIR'] = $this->appRoot . DIRECTORY_SEPARATOR . 'tests' . DIRECTORY_SEPARATOR . 'fixtures' . DIRECTORY_SEPARATOR . 'lexoffice' . DIRECTORY_SEPARATOR . 'fake';
 
         $cmd = [
             ...self::phpCommand(),
@@ -151,6 +153,7 @@ final class TestServer
         $env = getenv();
         $env['BK_DATA_DIR'] = $this->dataDir;
         unset($env['BK_UPDATE_REPO']);
+        $env['BK_LEXOFFICE_FAKE_DIR'] = $this->appRoot . DIRECTORY_SEPARATOR . 'tests' . DIRECTORY_SEPARATOR . 'fixtures' . DIRECTORY_SEPARATOR . 'lexoffice' . DIRECTORY_SEPARATOR . 'fake';
         $proc = proc_open(
             array_merge(self::phpCommand(), [$this->appRoot . DIRECTORY_SEPARATOR . $script], $args),
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],

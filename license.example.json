@@ -4,5 +4,5 @@
     "issued":   "2026-01-01",
     "expires":  "2027-12-31",
     "tier":     "professional",
-    "modules":  ["din1090", "lager", "aufmass"]
+    "modules":  ["din1090", "lager", "aufmass", "lexoffice"]
 }

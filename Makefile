@@ -3,7 +3,7 @@ COMPOSER ?= composer
 NPM      ?= npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install verify lint fix type-check test test-unit test-api test-js test-pgsql test-cov clicktest audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
+.PHONY: help install verify lint fix type-check test test-unit test-api test-js pruefen test-pgsql test-cov clicktest audit build check-versions version-sync fixture migrate db-status docs docs-serve docker-build
 
 help: ## Diese Übersicht
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -34,6 +34,9 @@ test-api: ## Nur API-Tests
 
 test-js: ## JS-Helfer testen
 	$(NPM) run test:js
+
+pruefen: ## Tokenfreier Prüflauf, Kurzausgabe (ARGS="--filter X --pgsql --stan --voll")
+	node scripts/pruefen.mjs --php $(PHP) $(ARGS)
 
 PG_TEST_PORT ?= 55432
 test-pgsql: ## Alle Tests gegen PostgreSQL (Wegwerf-Container per Docker)

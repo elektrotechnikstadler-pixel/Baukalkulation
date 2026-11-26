@@ -12,7 +12,7 @@
     { id: 'baustellen', titel: 'Baustellen & Bereiche', ico: 'folder' },
     { id: 'zeiterfassung', titel: 'Zeiterfassung', ico: 'clock' },
     { id: 'email', titel: 'E-Mail (SMTP)', ico: 'mail' },
-    { id: 'schnittstellen', titel: 'Schnittstellen (KI, OCI)', ico: 'upload' },
+    { id: 'schnittstellen', titel: 'Schnittstellen (KI, OCI, Lexware)', ico: 'upload' },
     { id: 'datensicherung', titel: 'Datensicherung & NAS', ico: 'shield' },
     { id: 'ueberwachung', titel: 'Überwachung & Systemmeldungen', ico: 'alert' },
     { id: 'system', titel: 'System & Update', ico: 'settings' },

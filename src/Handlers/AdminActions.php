@@ -49,7 +49,8 @@ class AdminActions
             }
         }
         $current = Auth::loadSettings($this->db);
-        $allowed = array_keys($current);
+        $allowed = array_diff(array_keys($current), Auth::SERVER_SETTINGS);
+        $vorherLexSchluessel = (string)($current['lexoffice_api_key'] ?? '');
         foreach ($allowed as $key) {
             if (array_key_exists($key, $this->body)) {
                 if (is_bool($current[$key])) {
@@ -60,6 +61,10 @@ class AdminActions
                     $current[$key] = trim((string)$this->body[$key]);
                 }
             }
+        }
+        // Neuer oder gelöschter Lexware-Schlüssel: alte Verbindungsprüfung gilt nicht mehr.
+        if ($current['lexoffice_api_key'] !== $vorherLexSchluessel) {
+            $current['lexoffice_profil'] = [];
         }
         // Logo-Dateien löschen wenn firma_logo_url geleert wird
         if (array_key_exists('firma_logo_url', $this->body) && $current['firma_logo_url'] === '') {

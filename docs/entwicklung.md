@@ -21,6 +21,7 @@
 |---|---|---|
 | Abhängigkeiten | `make install` | `composer install && npm ci` |
 | Tests | `make test` | `vendor/bin/phpunit` |
+| Prüflauf mit Kurzausgabe (≤ 15 Zeilen, Logs in `tests/tmp/pruefen/`) | `make pruefen ARGS="--filter X --pgsql --stan"` / `--voll` | `node scripts/pruefen.mjs --php <pfad\php.exe> …` |
 | Tests gegen PostgreSQL | `make test-pgsql` | siehe unten |
 | Tests mit Code-Coverage | `make test-cov` | `scripts/test-cov.ps1 -Php <pfad\php.exe>` |
 | Klicktests (Playwright, nur auf Aufforderung) | `make clicktest` | `scripts/clicktest.ps1 -Php <pfad\php.exe>` |

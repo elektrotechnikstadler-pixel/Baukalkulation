@@ -5,6 +5,7 @@ use App\Auth;
 use App\Database;
 use App\Database\Dialect;
 use App\Services\AuditService;
+use App\Services\RechnungsModus;
 
 class CrudActions
 {
@@ -363,6 +364,25 @@ class CrudActions
             : Auth::canDo($this->db, 'canManageAngebote');
 
         $settings = Auth::loadSettings($this->db);
+        // Betriebsart Lexware: Archiv – keine neuen Belege; Administratoren dürfen bei bestehenden
+        // nur den Status ändern (z. B. Altrechnung bezahlt) – AP-20261126-lexoffice-schnittstelle.
+        $nurStatus = RechnungsModus::inLexware($settings);
+        if ($nurStatus) {
+            if (empty($rechnung['id'])) {
+                jsonOut(['error' => RechnungsModus::MELDUNG_DEAKTIVIERT], 403);
+            }
+            if (($_SESSION['role'] ?? '') !== 'admin') {
+                jsonOut(['error' => 'Im Archiv können nur Administratoren den Status ändern.'], 403);
+            }
+            // Alte Clients senden das volle Formular – nicht still verwerfen (E-088).
+            if (array_diff(array_keys($rechnung), ['id', 'typ', 'status']) !== []) {
+                jsonOut(['error' => 'Im Archiv lässt sich nur der Status ändern. Bitte die Seite neu laden.'], 409);
+            }
+            $erlaubt = $rechnung['typ'] === 'rechnung' ? ['offen', 'bezahlt', 'storniert'] : ['offen', 'angenommen', 'abgelehnt'];
+            if (!in_array($rechnung['status'] ?? '', $erlaubt, true)) {
+                jsonOut(['error' => 'Ungültiger Status.'], 400);
+            }
+        }
 
         if (isset($rechnung['id']) && $rechnung['id']) {
             // Update
@@ -453,6 +473,9 @@ class CrudActions
     public function deleteRechnung(): void
     {
         Auth::requireAuth();
+        if (RechnungsModus::inLexware(Auth::loadSettings($this->db))) {
+            jsonOut(['error' => RechnungsModus::MELDUNG_DEAKTIVIERT], 403);
+        }
         $delId = $this->body['id'] ?? '';
         $existing = Database::fetchOne($this->db, "SELECT typ, baustelleId FROM rechnungen WHERE id = ?", [$delId]);
         if (!$existing) jsonOut(['error' => 'Nicht gefunden.'], 404);

@@ -10,7 +10,10 @@ class Auth
     private static ?array $permissionsCache = null;
 
     /** In der DB verschlüsselte Einstellungen (SecretBox); werden nie an den Browser geliefert. */
-    public const SECRET_SETTINGS = ['smtp_pass', 'gemini_api_key'];
+    public const SECRET_SETTINGS = ['smtp_pass', 'gemini_api_key', 'lexoffice_api_key'];
+
+    /** Nur serverseitig gesetzte Einstellungen – `save_settings` darf sie nicht überschreiben. */
+    public const SERVER_SETTINGS = ['rechnung_erzeugung', 'lexoffice_profil'];
 
     // ── Auth-Checks ──────────────────────────────────────────
     public static function requireAuth(): void
@@ -126,6 +129,11 @@ class Auth
             'modul_auswertung'        => true,
             'modul_dashboard'         => false,
             'modul_vde0100'           => false,
+            // Lexware Office (AP-20261126-lexoffice-schnittstelle)
+            'modul_lexoffice'         => false,
+            'rechnung_erzeugung'      => 'baukalkulation',
+            'lexoffice_api_key'       => '',
+            'lexoffice_profil'        => [],
             'startseite'              => '',
             'mobile_startseite'       => '',
             'mobile_btn_order'        => '',
@@ -174,6 +182,39 @@ class Auth
     }
 
     // ── Einstellungen speichern ──────────────────────────────
+    /**
+     * Setzt genau eine nicht geheime Einstellung, ohne die übrigen zu überschreiben –
+     * für Werte, die nach langsamen externen Aufrufen geschrieben werden (E-003).
+     * $nurWennGleich: Einstellungen (auch geheime, Klartext), deren gespeicherter Wert noch
+     * übereinstimmen muss; sonst wird nichts geschrieben und false geliefert.
+     */
+    public static function setzeEinstellung(\PDO $db, string $key, mixed $value, array $nurWennGleich = []): bool
+    {
+        if (in_array($key, self::SECRET_SETTINGS, true)) {
+            throw new \InvalidArgumentException("Geheime Einstellung {$key} nur über saveSettings().");
+        }
+        $row  = $db->query("SELECT data FROM settings WHERE id = 1")->fetch();
+        $data = $row ? (json_decode($row['data'], true) ?? []) : [];
+        foreach ($nurWennGleich as $pruefKey => $erwartet) {
+            $gespeichert = (string)($data[$pruefKey] ?? '');
+            if (in_array($pruefKey, self::SECRET_SETTINGS, true) && $gespeichert !== '') {
+                try {
+                    $gespeichert = \App\Services\SecretBox::decrypt($gespeichert);
+                } catch (\Throwable $e) {
+                    return false;
+                }
+            }
+            if ($gespeichert !== (string)$erwartet) {
+                return false;
+            }
+        }
+        $data[$key] = $value;
+        $db->prepare("UPDATE settings SET data = ? WHERE id = 1")
+           ->execute([json_encode($data, JSON_UNESCAPED_UNICODE)]);
+        self::$settingsCache = null;
+        return true;
+    }
+
     public static function saveSettings(\PDO $db, array $settings): void
     {
         foreach (self::SECRET_SETTINGS as $key) {
@@ -274,6 +315,8 @@ class Auth
                 // DIN EN 1090 (v2.8.8)
                 'canReadDin1090'            => true,
                 'canWriteDin1090'           => true,
+                // Lexware Office (AP-20261126)
+                'canLexoffice'              => true,
             ],
             'normal' => [
                 'canSeePrices'              => false,
@@ -343,6 +386,8 @@ class Auth
                 // DIN EN 1090 (v2.8.8)
                 'canReadDin1090'            => true,
                 'canWriteDin1090'           => false,
+                // Lexware Office (AP-20261126)
+                'canLexoffice'              => false,
             ],
         ];
     }

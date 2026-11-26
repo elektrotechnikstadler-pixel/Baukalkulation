@@ -5,7 +5,7 @@
         "set_show_in_wochenplanung", "admin_reset_password", "set_subunternehmer",
         "set_theme",
         "project_heartbeat", "project_presence",
-        "send_rechnung", "test_smtp",
+        "test_smtp",
         "search_archive", "view_archive", "download_archive_excel", "download_archive_json",
         "download_archive_all", "upload_archive_json", "upload_archive_all", "reimport_baustelle",
         "repair_archiv_projekte", "delete_archive", "clear_archive",
@@ -33,7 +33,7 @@
         "oci_list_lieferanten", "oci_save_lieferant", "oci_delete_lieferant", "oci_prepare",
         "oci_start", "oci_hook"
     ],
-    "vor_routen": ["list_modules", "module"],
+    "vor_routen": ["list_modules"],
     "module": {
         "aufmass": ["ping", "list", "load", "save", "delete", "status", "uebernehmen", "foto_ocr"],
         "lager": [

@@ -37,6 +37,20 @@
 
 ---
 
+## Unveröffentlicht – Lexware Office (Serie 1, in Arbeit)
+
+### Neu
+- **Modul „Lexware Office“ (ehem. lexoffice)**, Standard aus: Schalter in Verwaltung → Allgemein → Module;
+  Karte unter „Schnittstellen“ (nur Administratoren) mit verschlüsselt gespeichertem API-Schlüssel,
+  „Verbindung testen“ (Firmenname, Steuerart, Kleinunternehmer-Abgleich) und der Auswahl
+  **„Rechnungen erzeugen in: Baukalkulation / Lexware Office“**. Bei „Lexware Office“ sind Anlegen, Löschen und
+  E-Mail-Versand von Angeboten/Rechnungen gesperrt; Administratoren sehen den Bestand als Archiv und können nur den
+  Status ändern. Neues Recht „Lexware Office (Status, Projekte übertragen)“.
+- **Entwicklung:** `node scripts/pruefen.mjs` bzw. `make pruefen` – ein Prüfaufruf für PHPUnit (SQLite/PostgreSQL),
+  `test:js`, PHPStan und Versionsprüfung mit Kurzausgabe; Logs unter `tests/tmp/pruefen/`.
+
+---
+
 ## v3.0.27 – Dateinamen, Seitenleiste und Rechte-Härtung
 
 ### Behoben

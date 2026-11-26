@@ -1,0 +1,12 @@
+{
+    "name": "lexoffice",
+    "title": "Lexware Office",
+    "version": "0.1.0",
+    "icon": "🧾",
+    "tier": "professional",
+    "module_file": "backend/Module.php",
+    "module_class": "App\\Modules\\Lexoffice\\Module",
+    "permissions": ["admin", "master", "normal"],
+    "feature_flag": "lexoffice",
+    "depends_on": []
+}

@@ -438,6 +438,20 @@
         <li><strong>Lager:</strong> Artikel, Lagerorte, Bestände.</li>
         <li><strong>Aufmaß:</strong> Aufmaß-Positionen mit Formeln, Übernahme in Projekte.</li>
         <li><strong>VDE 0100:</strong> Prüfprotokolle für Elektroanlagen (Verteiler, RCD, Sicherungen, Messungen).</li>
+        <li><strong>Lexware Office (ehem. lexoffice):</strong> Schnittstelle zur Buchhaltung. Einschalten unter
+          <strong>Verwaltung → Allgemein → Module</strong> („Lexware Office (Schnittstelle)“), danach als Administrator
+          unter <strong>Verwaltung → Allgemein → Schnittstellen</strong> den API-Schlüssel eintragen (erzeugt in Lexware Office
+          unter <em>app.lexware.de/addons/public-api</em>; er wird verschlüsselt gespeichert) und
+          <strong>Verbindung testen</strong> – angezeigt werden Firmenname, Steuerart und ob Lexware die Firma als
+          Kleinunternehmer führt; weicht das von der Einstellung der Baukalkulation ab, erscheint ein Hinweis.
+          Unter <strong>Rechnungen erzeugen in</strong> wählen Sie nach erfolgreichem Verbindungstest zwischen
+          <em>Baukalkulation</em> (wie bisher) und <em>Lexware Office</em>. Bei „Lexware Office“ lassen sich in der Baukalkulation
+          keine Angebote und Rechnungen mehr anlegen, löschen oder per E-Mail versenden; die Menüpunkte und die Knöpfe
+          „Rechnung/Angebot erstellen“ im Projekt verschwinden. Administratoren sehen die vorhandenen Belege weiter als
+          Archiv (Ansicht, PDF, ZUGFeRD) und können nur noch den Status ändern (z.&nbsp;B. „bezahlt“). Schalten Sie das Modul
+          aus, sind Angebote und Rechnungen der Baukalkulation sofort wieder nutzbar; Schlüssel und Einstellung bleiben
+          für das spätere Wiedereinschalten erhalten. Die Rechte-Einstellung „Lexware Office (Status, Projekte übertragen)“
+          gilt für die Projektübertragung, die in einer der nächsten Versionen folgt.</li>
       </ul>
       <p>Module lassen sich in den Einstellungen aktivieren; sie erscheinen dann in der Seitenleiste.</p>
     </section>
@@ -450,7 +464,7 @@
         <li><strong>Allgemeine Einstellungen:</strong> Firmendaten, Zeiterfassungs-Optionen, Modul-Aktivierung, Erinnerungen.
           <strong>Verwaltung → Allgemein</strong> ist in Bereiche gegliedert (links eine Unternavigation, z.&nbsp;B.
           „Firma &amp; Branding“, „Module“, „Anmeldung &amp; Startseiten“, „Kunden- &amp; Personalnummern“,
-          „Baustellen &amp; Bereiche“, „Zeiterfassung“, „E-Mail (SMTP)“, „Schnittstellen (KI, OCI)“, „Datensicherung &amp; NAS“,
+          „Baustellen &amp; Bereiche“, „Zeiterfassung“, „E-Mail (SMTP)“, „Schnittstellen (KI, OCI, Lexware)“, „Datensicherung &amp; NAS“,
           „Überwachung &amp; Systemmeldungen“ und „System &amp; Update“; nur Bereiche mit sichtbaren Einstellungen
           erscheinen). Ein Suchfeld oben
           filtert alle Bereiche nach Titel und Feldbeschriftung und zeigt bei fehlenden Treffern einen Hinweis; eine
