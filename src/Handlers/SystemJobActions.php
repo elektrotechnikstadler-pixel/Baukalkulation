@@ -25,7 +25,7 @@ final class SystemJobActions
     private const TESTMAIL_DROSSEL_SEKUNDEN = 60;
     private const TESTMAIL_BUDGET_SEKUNDEN = 20; // Gesamtbudget über alle Empfänger (Reviewbefund 6)
     /** Jobs der Status-/Hinweis-Anzeige, die inaktiv sein können (Reviewbefund 7). */
-    private const UEBERWACHTE_JOBS = ['sicherung', 'probe_wiederherstellung', 'speicherplatz', 'backupmail', 'nas'];
+    private const UEBERWACHTE_JOBS = ['sicherung', 'probe_wiederherstellung', 'speicherplatz', 'backupmail', 'nas', 'lexoffice'];
     /** Offene, ungesendete Einträge älter als 7 Tage zählen nicht mehr als Dauerbanner-Grund (Reviewbefund 2). */
     private const HINWEIS_ALTER_GRENZE_TAGE = 7;
     private const NAS_TEST_DROSSEL_SEKUNDEN = 10;

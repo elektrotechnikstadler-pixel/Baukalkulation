@@ -12,6 +12,8 @@ final class LexofficeProjektTest extends ApiTestCase
 {
     private const ANGEBOT  = 'a1a1a1a1-0000-4000-8000-000000000001';
     private const RECHNUNG = 'b2b2b2b2-0000-4000-8000-000000000002';
+    private const ABSCHLAG = 'd3d3d3d3-0000-4000-8000-000000000003';
+    private const SCHLUSS  = 'e4e4e4e4-0000-4000-8000-000000000004';
 
     private int $rev = 0;
 
@@ -198,6 +200,124 @@ final class LexofficeProjektTest extends ApiTestCase
         $this->server->db()->exec("UPDATE lexoffice_belege SET status = 'open' WHERE lexId = '" . self::RECHNUNG . "'");
         $this->assertStatus(502, $this->api->module('lexoffice', 'projekt_abgleichen', ['baustelleId' => 1]));
         $this->assertSame('open', $this->server->db()->query("SELECT status FROM lexoffice_belege WHERE lexId = '" . self::RECHNUNG . "'")->fetchColumn());
+    }
+
+    private function planer(): void
+    {
+        [$code, $out] = $this->server->runCli('bin/console', ['system:planer']);
+        $this->assertSame(0, $code, $out);
+    }
+
+    /** @return array<string,mixed> */
+    private function jobStatus(): array
+    {
+        $row = $this->server->db()->query("SELECT * FROM job_status WHERE job = 'lexoffice'")->fetch(\PDO::FETCH_ASSOC);
+        return is_array($row) ? $row : [];
+    }
+
+    private function eineStundeSpaeter(): void
+    {
+        $this->server->db()->exec("UPDATE job_status SET letzterLaufAm = '2000-01-01 00:00:00', letzterErfolgAm = CASE WHEN letzterErfolgAm = '' THEN '' ELSE '2000-01-01 00:00:00' END WHERE job = 'lexoffice'");
+    }
+
+    private function profilOrganisation(string $org): void
+    {
+        $db = $this->server->db();
+        $data = json_decode((string) $db->query('SELECT data FROM settings WHERE id = 1')->fetchColumn(), true);
+        $data['lexoffice_profil']['organisationId'] = $org;
+        $db->prepare('UPDATE settings SET data = ? WHERE id = 1')->execute([json_encode($data)]);
+    }
+
+    public function testPlanerGleichtStuendlichAbUndMeldetZugangsfehlerSofort(): void
+    {
+        $this->vorbereiten(lexwareModus: false);
+        $this->planer();
+        $this->assertSame([], $this->jobStatus(), 'Betriebsart Baukalkulation: kein Lexware-Job');
+
+        $this->assertOk($this->api->module('lexoffice', 'modus_setzen', ['modus' => 'lexware']));
+        $this->assertOk($this->api->module('lexoffice', 'projekt_senden', ['baustelleId' => 1, 'auswahl' => ['belegart' => 'angebot']]));
+        $this->assertOk($this->api->module('lexoffice', 'projekt_senden', ['baustelleId' => 1, 'auswahl' => ['belegart' => 'rechnung']]));
+        $schreibend = count($this->anfragen('POST', '/v1/')) + count($this->anfragen('PUT', '/v1/'));
+        $this->planer();
+        $this->assertSame('', $this->jobStatus()['fehlerCode']);
+        $this->assertNotSame('', $this->jobStatus()['letzterErfolgAm']);
+        $status = $this->server->db()->query('SELECT lexId, status FROM lexoffice_belege')->fetchAll(\PDO::FETCH_KEY_PAIR);
+        $this->assertSame(['accepted', 'geloescht', 'paid', 'open'], [$status[self::ANGEBOT], $status[self::RECHNUNG],
+            $status[self::ABSCHLAG], $status[self::SCHLUSS]], 'Belegkette wie beim manuellen Abgleich');
+
+        $anzahl = count($this->anfragen('GET', '/v1/'));
+        $this->planer();
+        $this->assertCount($anzahl, $this->anfragen('GET', '/v1/'), 'höchstens stündlich');
+
+        // Eine Stunde später: nur Belege, die sich noch ändern können (bezahlter Abschlag, gelöschter Entwurf nicht erneut)
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertCount(1, $this->anfragen('GET', '/v1/down-payment-invoices/'));
+        $this->assertCount(1, $this->anfragen('GET', '/v1/invoices/' . self::RECHNUNG));
+        $this->assertCount(2, $this->anfragen('GET', '/v1/invoices/' . self::SCHLUSS));
+
+        // Bezahlt, aber Zahlungsdatum fehlt (Abruf war fehlgeschlagen) → wird nachgeholt
+        $db = $this->server->db();
+        $db->exec("UPDATE lexoffice_belege SET bezahltAm = '' WHERE lexId = '" . self::ABSCHLAG . "'");
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertCount(2, $this->anfragen('GET', '/v1/payments/'));
+        $this->assertSame('2026-11-30', $db->query("SELECT bezahltAm FROM lexoffice_belege WHERE lexId = '" . self::ABSCHLAG . "'")->fetchColumn());
+
+        // Fehler einzelner Projekte: Störung erst nach 24 h gemeldet, Entwarnung nach Erfolg
+        $db->exec("UPDATE lexoffice_belege SET status = 'open' WHERE lexId = '" . self::RECHNUNG . "'"); // fertiger Beleg fehlt (404)
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame('LEXWARE_ABGLEICH', $this->jobStatus()['fehlerCode']);
+        $this->assertSame([], $this->meldungen());
+        $db->exec("UPDATE job_status SET stoerungSeit = '2000-01-01 00:00:00' WHERE job = 'lexoffice'");
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame(['fehler'], $this->meldungen());
+        $db->exec("UPDATE lexoffice_belege SET status = 'geloescht' WHERE lexId = '" . self::RECHNUNG . "'");
+        $db->exec("UPDATE meldungen_outbox SET erstelltAm = '" . date('Y-m-d H:i:s', time() - 3600) . "' WHERE job = 'lexoffice'");
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame('', $this->jobStatus()['fehlerCode']);
+        $this->assertSame(['entwarnung', 'fehler'], $this->meldungen());
+
+        // Schlüssel gehört zu einem anderen Konto → Störung sofort
+        $db->exec("DELETE FROM meldungen_outbox WHERE job = 'lexoffice'");
+        $this->profilOrganisation('00000000-0000-4000-8000-0000000000ff');
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame('LEXWARE_ZUGANG', $this->jobStatus()['fehlerCode']);
+        $this->assertSame(['fehler'], $this->meldungen());
+        $this->assertSame(2, (int) $db->query("SELECT COUNT(*) FROM job_laeufe WHERE job = 'lexoffice' AND status = 'fehler'")->fetchColumn(), 'Protokoll nur bei Zustandswechsel');
+
+        // Wieder in Ordnung → Fehler zurückgesetzt; der Job hat nie nach Lexware geschrieben
+        $this->profilOrganisation('00000000-0000-4000-8000-000000000001');
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame('', $this->jobStatus()['fehlerCode']);
+
+        // Verbindung nach Schlüsselwechsel nicht geprüft (Profil leer) → Störung statt stiller Pause
+        $this->profilOrganisation('');
+        $this->eineStundeSpaeter();
+        $this->planer();
+        $this->assertSame('LEXWARE_ZUGANG', $this->jobStatus()['fehlerCode']);
+        $this->profilOrganisation('00000000-0000-4000-8000-000000000001');
+        $this->assertSame($schreibend, count($this->anfragen('POST', '/v1/')) + count($this->anfragen('PUT', '/v1/')), 'Job schreibt nie nach Lexware');
+
+        // Projektauswahl: angenommenes Angebot nur ohne gültige Schlussrechnung
+        require_once dirname(__DIR__, 2) . '/modules/lexoffice/backend/LexofficeJob.php';
+        $org = '00000000-0000-4000-8000-000000000001';
+        $this->assertSame([1], \App\Modules\Lexoffice\LexofficeJob::offeneProjekte($db, $org), 'Schlussrechnung offen');
+        $db->exec("UPDATE lexoffice_belege SET status = 'paid', bezahltAm = '2026-12-01' WHERE lexId = '" . self::SCHLUSS . "'");
+        $this->assertSame([], \App\Modules\Lexoffice\LexofficeJob::offeneProjekte($db, $org), 'alles bezahlt');
+        $db->exec("UPDATE lexoffice_belege SET status = 'voided' WHERE lexId = '" . self::SCHLUSS . "'");
+        $this->assertSame([1], \App\Modules\Lexoffice\LexofficeJob::offeneProjekte($db, $org), 'Schlussrechnung storniert → Angebot wieder offen');
+    }
+
+    /** @return list<string> */
+    private function meldungen(): array
+    {
+        return $this->server->db()->query("SELECT typ FROM meldungen_outbox WHERE job = 'lexoffice' ORDER BY typ")->fetchAll(\PDO::FETCH_COLUMN);
     }
 
     public function testOhneKundeKeinVersand(): void

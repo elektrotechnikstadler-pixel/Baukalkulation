@@ -19,6 +19,19 @@ final class LexofficeProjekt
     private const SPERRE_SEK = 300;
     private const MAX_BELEGE = 60;
     private const ZEIT_SEK = 20;
+    /** Belegstatus, die sich in Lexware nicht mehr ändern (bezahlt, storniert, abgelehnt, gelöscht). */
+    public const ENDSTATUS = ['geloescht', 'voided', 'paid', 'paidoff', 'rejected'];
+
+    /**
+     * SQL-Bedingung „Beleg kann sich noch ändern“ (automatischer Abgleich, B6): nicht im Endzustand – oder bezahlt,
+     * aber das Zahlungsdatum fehlt noch (wird nachgeholt). $a: Tabellenalias mit Punkt oder ''.
+     * @return array{0:string, 1:list<string>}
+     */
+    public static function offenSql(string $a): array
+    {
+        $platz = implode(',', array_fill(0, count(self::ENDSTATUS), '?'));
+        return ["(COALESCE({$a}status, '') NOT IN ({$platz}) OR ({$a}status IN ('paid', 'paidoff') AND COALESCE({$a}bezahltAm, '') = ''))", self::ENDSTATUS];
+    }
     /** Lexware-Belegart → API-/Permalink-Pfad */
     private const PFAD = ['quotation' => 'quotations', 'invoice' => 'invoices', 'downpaymentinvoice' => 'down-payment-invoices'];
 
@@ -150,16 +163,19 @@ final class LexofficeProjekt
      * Spiegelt die Belege des Projekts aus Lexware Office: Status, Nummer, Beträge, bezahlt am; findet über die
      * Belegkette (relatedVouchers) in Lexware erzeugte Abschlags- und Schlussrechnungen. Nur lesend gegenüber Lexware.
      * Zeitbudget: bricht nach ZEIT_SEK ab (`vollstaendig` = false) – der nächste Abgleich macht weiter.
+     * $nurOffene (automatischer Abgleich, B6): Belege im Endzustand nicht erneut abfragen.
      * @return array{belege:list<array<string,mixed>>, neu:int, geprueft:int, vollstaendig:bool}
      */
-    public function abgleichen(int $baustelleId): array
+    public function abgleichen(int $baustelleId, bool $nurOffene = false): array
     {
         $this->sync->kontoPruefen();
         $org = $this->sync->organisationId();
         $ende = microtime(true) + self::ZEIT_SEK;
         // In Lexware gelöschte Entwürfe sind endgültig weg – nicht erneut abfragen.
-        $stmt = $this->db->prepare("SELECT lexId, belegart, kundeId, bezahltAm, status FROM lexoffice_belege WHERE baustelleId = ? AND organisationId = ? AND COALESCE(status, '') <> 'geloescht' ORDER BY geprueftAm, id");
-        $stmt->execute([$baustelleId, $org]);
+        [$offen, $offenParam] = $nurOffene ? self::offenSql('') : ['1 = 1', []];
+        $stmt = $this->db->prepare("SELECT lexId, belegart, kundeId, bezahltAm, status FROM lexoffice_belege WHERE baustelleId = ? AND organisationId = ?
+            AND COALESCE(status, '') <> 'geloescht' AND {$offen} ORDER BY geprueftAm, id");
+        $stmt->execute([$baustelleId, $org, ...$offenParam]);
         $warteschlange = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         $gesehen = [];
         $neu = 0;

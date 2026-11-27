@@ -12669,6 +12669,7 @@ function renderLexofficeKarte(s) {
       <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Rechnungen erzeugen in</h3>
       ${radio('baukalkulation', 'Baukalkulation', 'Angebote und Rechnungen wie bisher in der Baukalkulation.')}
       ${radio('lexware', 'Lexware Office', 'Angebote und Rechnungen der Baukalkulation werden abgeschaltet (Archiv bleibt für Administratoren lesbar); Projekte werden nach Lexware Office übertragen.')}
+      ${inLexware ? '<p style="font-size:.75rem;color:#777;margin-top:8px">Belege offener Projekte werden stündlich automatisch mit Lexware Office abgeglichen (Zeitplaner, nur lesend). Status und Störungen: Überwachung der Serverjobs („Lexware-Abgleich“). Nach einem Wechsel des API-Schlüssels bitte „Verbindung testen“, sonst meldet der Abgleich eine Störung.</p>' : ''}
     </div>
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;margin-top:12px">
       <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">API-Schlüssel</h3>
@@ -21313,6 +21314,7 @@ const UEB_JOB_LABEL = {
   backupmail: 'Backup-E-Mail',
   planer: 'Zeitplaner (Cron)',
   nas: 'NAS-Abgleich',
+  lexoffice: 'Lexware-Abgleich',
 };
 
 function uebFormatZeitpunkt(wert) {

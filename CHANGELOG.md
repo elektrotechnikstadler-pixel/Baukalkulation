@@ -37,9 +37,12 @@
 
 ---
 
-## Unveröffentlicht – Lexware Office: Kunden, Projekte und Belege (Serie 1, B2 + B4 + B5)
+## Unveröffentlicht – Lexware Office: Kunden, Projekte und Belege (Serie 1, B2 + B4 + B5 + B6)
 
 ### Neu
+- **Automatischer Lexware-Abgleich:** Der Zeitplaner spiegelt stündlich die Belege aller Projekte mit offenen
+  Lexware-Belegen (nur lesend, Zeitbudget). Neuer Serverjob „Lexware-Abgleich“ in der Überwachung; abgelehnter Zugriff
+  (Schlüssel, Tarif, anderes Konto) wird sofort gemeldet, sonstige Fehler nach 24 Stunden.
 - **Lexware-Belege im Projekt:** Abschlagsliste zeigt Angebote, Rechnungsentwürfe, Abschlags- und Schlussrechnungen aus
   Lexware Office (Belegkette des Angebots) mit Status und „bezahlt am“; „Mit Lexware abgleichen“, „Abschlag in Lexware
   erstellen“. Bezahlte Lexware-Rechnungen/-Abschläge zählen zu den erhaltenen Beträgen (Schlussrechnung ohne

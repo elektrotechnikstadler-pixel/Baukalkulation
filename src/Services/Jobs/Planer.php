@@ -1,6 +1,8 @@
 <?php
 namespace App\Services\Jobs;
 
+use App\Services\LicenseService;
+
 /**
  * Zeitgesteuerter Tageslauf „sicherung“ (F8) mit bis zu 3 Wiederholungen alle 30 min (F10).
  * Seit T3 zusätzlich: monatliche Wiederherstellungs-Probe, stündliche Speicherplatzprüfung,
@@ -120,6 +122,16 @@ final class Planer
         // 5. Wiederherstellungs-Probe (monatlich, O5)
         $schritt('probe_wiederherstellung', function () use ($db, $protokoll, $jetzt, &$auftragProbe) {
             return $this->probeAusfuehren($db, $protokoll, $jetzt, $auftragProbe);
+        });
+
+        // 5b. Lexware Office: Belege offener Projekte spiegeln (Modul lexoffice, stündlich, nur lesend – AP-20261126 B6)
+        $schritt('lexoffice', function () use ($db, $jetzt) {
+            $datei = rtrim(defined('MODULES_DIR') ? MODULES_DIR : dirname(__DIR__, 3) . '/modules/', '/\\') . '/lexoffice/backend/LexofficeJob.php';
+            if (!is_file($datei) || !LicenseService::isModuleAllowed('lexoffice')) {
+                return null;
+            }
+            require_once $datei;
+            return \App\Modules\Lexoffice\LexofficeJob::lauf($db, $jetzt);
         });
 
         // 6. Speicherplatz (höchstens einmal je Stunde, nur bei Zustandswechsel protokolliert)

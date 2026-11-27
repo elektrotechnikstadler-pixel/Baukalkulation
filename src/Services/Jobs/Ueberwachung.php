@@ -1,6 +1,10 @@
 <?php
 namespace App\Services\Jobs;
 
+use App\Auth;
+use App\Services\LicenseService;
+use App\Services\RechnungsModus;
+
 /**
  * Überwachung der System-Jobs und Systemmeldungen (T3, AP-20261012-datensicherung-nas).
  * Pflegt je Job den Beobachtungs-/Störungszustand in job_status und erzeugt bei Bedarf
@@ -10,7 +14,7 @@ namespace App\Services\Jobs;
 final class Ueberwachung
 {
     /** Alle von der Überwachung verwalteten Jobs (unabhängig davon, ob aktuell aktiv). */
-    private const JOBS = ['sicherung', 'probe_wiederherstellung', 'speicherplatz', 'backupmail', 'planer', 'nas'];
+    private const JOBS = ['sicherung', 'probe_wiederherstellung', 'speicherplatz', 'backupmail', 'planer', 'nas', 'lexoffice'];
 
     /** Ausbleiben-Fristen in Stunden; 'sicherung' kommt aus den Einstellungen (ausbleibenStunden). */
     private const FRIST_PROBE_STUNDEN = 32 * 24 + 2;
@@ -65,6 +69,8 @@ final class Ueberwachung
             'backupmail' => (bool)(self::erinnerungSettings($db)['backup_email_aktiv'] ?? false),
             'planer'     => self::planerHatHerzschlagGehabt($db),
             'nas'        => (bool)(SystemEinstellungen::laden($db)['nas']['aktiv'] ?? false),
+            // Automatischer Lexware-Abgleich (AP-20261126 B6) – gleiche Bedingung wie LexofficeJob::aktiv().
+            'lexoffice'  => LicenseService::isModuleAllowed('lexoffice') && RechnungsModus::inLexware(Auth::loadSettings($db)),
             default      => true,
         };
     }
@@ -104,6 +110,17 @@ final class Ueberwachung
                 ($status['fehlerCode'] ?? '') === 'SPEICHER_KNAPP',
                 'speicherplatz:' . $heute . ':fehler',
                 'SPEICHER_KNAPP',
+                (string)($status['stoerungSeit'] ?? ''),
+            ],
+            // Lexware-Abgleich (stündlich): Zugriff verweigert sofort, sonstige Fehler erst nach 24 h Dauer.
+            'lexoffice' => [
+                (string)($status['fehlerCode'] ?? '') !== ''
+                    && (string)($status['letzterFehlerAm'] ?? '') > (string)($status['letzterErfolgAm'] ?? '')
+                    && (string)($status['stoerungSeit'] ?? '') !== ''
+                    && (($status['fehlerCode'] ?? '') === 'LEXWARE_ZUGANG'
+                        || (string)($status['stoerungSeit'] ?? '') <= $jetzt->modify('-24 hours')->format('Y-m-d H:i:s')),
+                'lexoffice:' . $heute . ':fehler',
+                (string)($status['fehlerCode'] ?? ''),
                 (string)($status['stoerungSeit'] ?? ''),
             ],
             default => [false, '', '', ''],

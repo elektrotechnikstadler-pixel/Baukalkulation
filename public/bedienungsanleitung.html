@@ -384,7 +384,7 @@
       <ul>
         <li><strong>Bereich „Überwachung“ (nur Administratoren):</strong> In „Verwaltung → Allgemein → Überwachung“
           zeigt eine Ampel je Job (Serversicherung, NAS-Abgleich, Wiederherstellungs-Probe, Speicherplatz, Backup-E-Mail,
-          Zeitplaner (Cron)) den letzten Erfolg und einen etwaigen Fehlercode. Grau bedeutet, dass der Job gerade
+          Lexware-Abgleich, Zeitplaner (Cron)) den letzten Erfolg und einen etwaigen Fehlercode. Grau bedeutet, dass der Job gerade
           inaktiv ist (z.&nbsp;B. Backup-E-Mail abgeschaltet), Gelb „noch kein Lauf“, Grün „letzter Lauf
           erfolgreich“ und Rot eine gemeldete Störung; ein Hinweis über der Tabelle nennt die Frist, ab der ein
           Ausbleiben gemeldet wird (z.&nbsp;B. „Meldung, wenn &gt; 26 h kein Erfolg“). Darunter lassen sich die
@@ -489,7 +489,13 @@
           (Projekt, Übersicht, Auswertung und Exporte); eine Schlussrechnung nur mit dem nach Abzug der Abschläge noch geforderten
           Betrag. Lexware-Abschläge daher <strong>nicht zusätzlich</strong> als eigene Zeile in der Abschlagsliste erfassen – sonst
           werden sie doppelt gezählt; bereits manuell eingetragene Zeilen für Lexware-Belege bitte löschen. Wird ein Rechnungsentwurf in Lexware
-          gelöscht oder eine Rechnung storniert, gelten ihre Positionen nach dem Abgleich wieder als nicht abgerechnet.</li>
+          gelöscht oder eine Rechnung storniert, gelten ihre Positionen nach dem Abgleich wieder als nicht abgerechnet.
+          <br><strong>Automatischer Abgleich:</strong> Der Zeitplaner des Servers gleicht stündlich alle Projekte mit noch offenen
+          Lexware-Belegen ab (nur lesend; bezahlte, stornierte und gelöschte Belege werden nicht erneut abgefragt). Status und
+          Störungen stehen in der Überwachung der Serverjobs unter „Lexware-Abgleich“. Lehnt Lexware Office den Zugriff ab
+          (Schlüssel gesperrt, Tarif, anderes Konto) oder wurde die Verbindung nach einem Schlüsselwechsel noch nicht getestet,
+          gibt es sofort eine Systemmeldung; andere Fehler werden erst gemeldet, wenn sie
+          länger als 24 Stunden bestehen.</li>
       </ul>
       <p>Module lassen sich in den Einstellungen aktivieren; sie erscheinen dann in der Seitenleiste.</p>
     </section>

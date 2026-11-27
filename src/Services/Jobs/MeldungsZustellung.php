@@ -25,6 +25,7 @@ final class MeldungsZustellung
         'backupmail'              => 'Backup-E-Mail',
         'planer'                  => 'Zeitplaner (Cron)',
         'nas'                     => 'NAS-Abgleich',
+        'lexoffice'               => 'Lexware-Abgleich',
     ];
 
     private const JOB_EMPFEHLUNG = [
@@ -34,6 +35,7 @@ final class MeldungsZustellung
         'backupmail'              => 'Bitte SMTP-Einstellungen und Backup-E-Mail-Konfiguration prüfen.',
         'planer'                  => 'Bitte prüfen, ob der Cron-Dienst bzw. Container läuft.',
         'nas'                     => 'Bitte NAS-Zugangsdaten, Netzwerkverbindung und rclone-Installation prüfen.',
+        'lexoffice'               => 'Bitte in Verwaltung → Allgemein → Lexware Office die Verbindung testen und ggf. den API-Schlüssel erneuern.',
     ];
 
     private const FEHLER_TEXTE = [
@@ -54,6 +56,8 @@ final class MeldungsZustellung
         'NAS_VERBINDUNG'          => 'Die Verbindung zur NAS ist fehlgeschlagen.',
         'NAS_TRANSFER'            => 'Der Dateiabgleich mit der NAS ist fehlgeschlagen.',
         'NAS_ZEIT'                => 'Der NAS-Abgleich hat die Höchstdauer überschritten.',
+        'LEXWARE_ZUGANG'          => 'Kein Zugriff auf Lexware Office (Verbindung nicht geprüft, API-Schlüssel abgelehnt, Tarif oder anderes Konto).',
+        'LEXWARE_ABGLEICH'        => 'Einzelne Projekte konnten nicht mit Lexware Office abgeglichen werden.',
     ];
 
     private const TYP_TEXTE = ['fehler' => 'Störung', 'ausbleiben' => 'Ausgeblieben', 'entwarnung' => 'Entwarnung'];
