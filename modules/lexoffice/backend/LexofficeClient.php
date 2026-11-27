@@ -23,6 +23,11 @@ final class LexofficeFehler extends \RuntimeException
         'laeuft'               => 'Die Übertragung läuft bereits – bitte kurz warten.',
         'unklar'               => 'Die letzte Übertragung dieses Kunden blieb ohne Antwort. Bitte in Lexware Office prüfen und im Kunden-Abgleich zuordnen (oder die Verknüpfung lösen, falls dort kein Kontakt entstanden ist).',
         'bereits_verknuepft'   => 'Der Kunde ist bereits mit einem anderen Lexware-Kontakt verknüpft.',
+        'keine_positionen'     => 'Keine Positionen zum Übertragen – Auswahl prüfen (evtl. sind alle bereits abgerechnet).',
+        'kein_kunde'           => 'Dem Projekt ist kein Kunde zugeordnet.',
+        'projekt_fehlt'        => 'Projekt nicht gefunden.',
+        'unklar_beleg'         => 'Die letzte Übertragung dieses Projekts blieb ohne Antwort. Bitte in Lexware Office prüfen, ob der Beleg angelegt wurde – erst dann erneut senden.',
+        'modus'                => 'Projekte werden nur übertragen, wenn „Rechnungen erzeugen in: Lexware Office“ eingestellt ist.',
         'kunde_fehlt'          => 'Kunde nicht gefunden.',
         'fehler'               => 'Lexware Office hat die Anfrage abgelehnt.',
     ];

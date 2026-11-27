@@ -4,3 +4,7 @@
 .lex-warn { color: #C62828; }
 .lex-abgleich { max-width: 980px; width: 96vw; }
 .lex-abgleich select.form-control { font-size: .8rem; min-width: 220px; }
+.lex-maske { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 16px; font-size: .85rem; }
+.lex-maske fieldset { border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; }
+.lex-maske label { display: block; margin: 4px 0; }
+.lex-maske input[type="date"] { display: inline-block; width: auto; }

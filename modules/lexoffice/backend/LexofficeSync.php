@@ -38,6 +38,16 @@ final class LexofficeSync
         return new self($db, LexofficeClient::ausEinstellungen($settings), $org);
     }
 
+    public function client(): LexofficeClient
+    {
+        return $this->client;
+    }
+
+    public function organisationId(): string
+    {
+        return $this->organisationId;
+    }
+
     /** Schützt davor, mit einem Schlüssel eines anderen Kontos zu schreiben. */
     public function kontoPruefen(): void
     {

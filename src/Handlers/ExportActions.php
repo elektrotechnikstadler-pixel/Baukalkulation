@@ -3,6 +3,7 @@ namespace App\Handlers;
 
 use App\Auth;
 use App\DataService;
+use App\Services\ProjektPositionen;
 
 class ExportActions
 {
@@ -34,76 +35,20 @@ class ExportActions
         $bData = json_decode($bRow['data'], true) ?: [];
         $bName = $bRow['name'];
 
-        // Globale Pauschalen laden (v2.9.20: Cents -> Euro)
-        $globalPauschalen = $this->db->query("SELECT id, name, preis FROM pauschalen ORDER BY id")->fetchAll();
-        $gpMap = [];
-        foreach ($globalPauschalen as $gp) {
-            $gp['preis'] = money_from_cents($gp['preis']);
-            $gpMap[(int)$gp['id']] = $gp;
-        }
-
+        // Gemeinsame Rechenquelle mit der Lexware-Übertragung (AP-20261126, B4)
+        $kategorieName = ['material' => 'Material', 'arbeitszeit' => 'Arbeitszeit', 'pauschale' => 'Pauschale'];
         $rows = [];
         $posNr = 1;
-
-        // Material
-        foreach ($bData['material'] ?? [] as $m) {
-            $ek = (float)($m['ek'] ?? 0);
-            $anzahl = (float)($m['anzahl'] ?? 0);
-            $rabattF = 1 - ((float)($m['rabatt'] ?? 0)) / 100;
-            $ga = (float)($bData['materialAufschlagGlobal'] ?? 0);
-            if (!empty($m['vkDirekt'])) {
-                $ep = $ek * $rabattF;
-            } else {
-                $aufschlag = (float)($m['aufschlag'] ?? 0);
-                $ep = $ek * (1 + $aufschlag / 100) * (1 + $ga / 100) * $rabattF;
-            }
-            $gp = $ep * $anzahl;
+        foreach (ProjektPositionen::aus($bData, ProjektPositionen::pauschalenKatalog($this->db)) as $p) {
             $rows[] = [
                 'PosNr'       => $posNr++,
-                'Artikelnr'   => $m['artikelNr'] ?? '',
-                'Bezeichnung' => $m['bezeichnung'] ?? '',
-                'Menge'       => $anzahl,
-                'Einheit'     => $m['einheit'] ?? 'Stk',
-                'EP_Netto'    => round($ep, 2),
-                'GP_Netto'    => round($gp, 2),
-                'Kategorie'   => 'Material',
-            ];
-        }
-
-        // Arbeitszeiten
-        foreach ($bData['arbeitszeit'] ?? [] as $a) {
-            $stunden = (float)($a['stunden'] ?? 0);
-            $stundenpreis = (float)($a['stundenpreis'] ?? 0);
-            $gp = $stunden * $stundenpreis;
-            $rows[] = [
-                'PosNr'       => $posNr++,
-                'Artikelnr'   => '',
-                'Bezeichnung' => $a['beschreibung'] ?? 'Arbeitszeit',
-                'Menge'       => $stunden,
-                'Einheit'     => 'Std',
-                'EP_Netto'    => round($stundenpreis, 2),
-                'GP_Netto'    => round($gp, 2),
-                'Kategorie'   => 'Arbeitszeit',
-            ];
-        }
-
-        // Pauschalen
-        foreach ($bData['pauschalen'] ?? [] as $pe) {
-            $peId = $pe['id'] ?? (is_int($pe) ? $pe : 0);
-            $peAnzahl = (float)($pe['anzahl'] ?? 1);
-            $pDef = $gpMap[$peId] ?? null;
-            $name  = $pDef['name'] ?? 'Pauschale';
-            $preis = (float)($pDef['preis'] ?? 0);
-            $gesamt = $preis * $peAnzahl;
-            $rows[] = [
-                'PosNr'       => $posNr++,
-                'Artikelnr'   => '',
-                'Bezeichnung' => $name,
-                'Menge'       => $peAnzahl,
-                'Einheit'     => 'psch',
-                'EP_Netto'    => round($preis, 2),
-                'GP_Netto'    => round($gesamt, 2),
-                'Kategorie'   => 'Pauschale',
+                'Artikelnr'   => $p['artikelNr'],
+                'Bezeichnung' => $p['bezeichnung'],
+                'Menge'       => $p['menge'],
+                'Einheit'     => $p['einheit'],
+                'EP_Netto'    => round($p['ep'], 2),
+                'GP_Netto'    => ProjektPositionen::zeilenbetrag($p['menge'], $p['ep']),
+                'Kategorie'   => $kategorieName[$p['art']],
             ];
         }
 

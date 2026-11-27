@@ -18,6 +18,8 @@ require_once __DIR__ . '/LexofficeTransport.php';
 require_once __DIR__ . '/LexofficeClient.php';
 require_once __DIR__ . '/LexofficeMapper.php';
 require_once __DIR__ . '/LexofficeSync.php';
+require_once __DIR__ . '/LexofficeBeleg.php';
+require_once __DIR__ . '/LexofficeProjekt.php';
 
 class Module extends AbstractModule
 {
@@ -69,6 +71,23 @@ class Module extends AbstractModule
                 LexofficeSync::verknuepfungLoesen($this->db, $kundeId);
                 $this->audit('kunde_verknuepfung_loesen', "Kunde {$kundeId}");
                 \jsonOut(['ok' => true]);
+            case 'projekt_vorschau':
+                $this->nurPost();
+                $baustelleId = $this->projektZugriff($settings);
+                $this->mitSync($settings, fn(LexofficeSync $s) => (new LexofficeProjekt($this->db, $s))
+                    ->vorschau($baustelleId, (array) ($this->body['auswahl'] ?? []), $settings));
+            case 'projekt_senden':
+                $this->nurPost();
+                $baustelleId = $this->projektZugriff($settings);
+                $this->mitSync($settings, function (LexofficeSync $s) use ($baustelleId, $settings) {
+                    $ergebnis = (new LexofficeProjekt($this->db, $s))
+                        ->senden($baustelleId, (array) ($this->body['auswahl'] ?? []), $settings, ($this->body['trotzdem'] ?? false) === true);
+                    $this->audit('projekt_senden', "Projekt {$baustelleId} → {$ergebnis['belegart']} {$ergebnis['lexId']}");
+                    return $ergebnis;
+                });
+            case 'projekt_belege':
+                $baustelleId = $this->projektZugriff($settings);
+                $this->mitSync($settings, fn(LexofficeSync $s) => ['belege' => (new LexofficeProjekt($this->db, $s))->belege($baustelleId)]);
             default:
                 \jsonOut(['error' => 'Unbekannte Lexware-Aktion: ' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8')], 400);
         }
@@ -86,6 +105,24 @@ class Module extends AbstractModule
     {
         Auth::requireRole('admin');
         $this->nurPost();
+    }
+
+    /**
+     * Rechte für Projektaktionen am gespeicherten Projekt (E-099) und Betriebsart Lexware.
+     * Rechte vor Betriebsart, damit Unberechtigte nichts über die Einstellung erfahren.
+     */
+    private function projektZugriff(array $settings): int
+    {
+        $this->requirePerm('canLexoffice');
+        $this->requirePerm('canSeePrices');
+        $baustelleId = (int) ($this->body['baustelleId'] ?? $_GET['baustelleId'] ?? 0);
+        if ($baustelleId <= 0 || !Auth::canSeeBaustelle($this->db, $baustelleId)) {
+            \jsonOut(['error' => 'Keine Berechtigung für dieses Projekt.'], 403);
+        }
+        if (!RechnungsModus::inLexware($settings)) {
+            \jsonOut(['error' => (new LexofficeFehler('modus'))->meldung(), 'fehlerCode' => 'modus'], 409);
+        }
+        return $baustelleId;
     }
 
     private function nurPost(): void
@@ -111,8 +148,9 @@ class Module extends AbstractModule
     {
         return match ($e->fehlerCode) {
             'schluessel_fehlt'                                  => 400,
-            'nicht_geprueft', 'anderes_konto', 'mehrdeutig', 'laeuft', 'unklar', 'bereits_verknuepft' => 409,
-            'kunde_fehlt'                                       => 404,
+            'nicht_geprueft', 'anderes_konto', 'mehrdeutig', 'laeuft', 'unklar', 'bereits_verknuepft', 'unklar_beleg', 'modus' => 409,
+            'kunde_fehlt', 'projekt_fehlt'                      => 404,
+            'keine_positionen', 'kein_kunde'                    => 400,
             default                                             => 502,
         };
     }
@@ -208,7 +246,14 @@ class Module extends AbstractModule
             && (($settings['lexoffice_api_key'] ?? '') === '' || ($settings['lexoffice_profil']['organisationId'] ?? '') === '')) {
             \jsonOut(['error' => 'Zuerst den API-Schlüssel hinterlegen und die Verbindung erfolgreich testen.'], 409);
         }
-        // B4: zusätzlich sperren, solange Übertragungen offen sind (AP 2.2.3).
+        // Keine Umschaltung, solange eine Übertragung läuft (AP 2.2.3) – Zeitvergleich in PHP, nicht als Text (Zeitzonen).
+        $laufend = array_filter(
+            $this->db->query("SELECT geprueftAm FROM lexoffice_verknuepfung WHERE status = 'sendet'")->fetchAll(\PDO::FETCH_COLUMN),
+            static fn($t) => (int) strtotime((string) $t) > time() - 300,
+        );
+        if ($laufend) {
+            \jsonOut(['error' => 'Eine Übertragung nach Lexware Office läuft gerade – bitte kurz warten.'], 409);
+        }
         Auth::setzeEinstellung($this->db, 'rechnung_erzeugung', $modus);
         $settings['rechnung_erzeugung'] = $modus;
         $this->audit('modus_setzen', 'Rechnungen erzeugen in: ' . $modus);

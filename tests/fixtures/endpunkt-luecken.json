@@ -29,7 +29,7 @@
         "trigger_material_erinnerung", "trigger_backup_email", "trigger_stundenauswertung_email",
         "datanorm_status", "datanorm_upload", "datanorm_clear", "metallprofile_catalog",
         "metallprofile_auto_update", "hicad_list", "hicad_import", "material_top_used",
-        "export_inform_csv", "subunternehmer_report",
+        "subunternehmer_report",
         "oci_list_lieferanten", "oci_save_lieferant", "oci_delete_lieferant", "oci_prepare",
         "oci_start", "oci_hook"
     ],

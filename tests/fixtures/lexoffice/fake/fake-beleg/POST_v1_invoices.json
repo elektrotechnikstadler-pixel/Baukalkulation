@@ -1,0 +1,5 @@
+{
+  "status": 406,
+  "headers": { "content-type": "application/json" },
+  "body": { "IssueList": [{ "i18nKey": "invalid_value", "source": "lineItems[0].unitPrice.netAmount", "type": "validation_failure" }] }
+}

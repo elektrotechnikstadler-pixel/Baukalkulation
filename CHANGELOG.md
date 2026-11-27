@@ -37,9 +37,18 @@
 
 ---
 
-## Unveröffentlicht – Lexware Office: Kunden (Serie 1, B2)
+## Unveröffentlicht – Lexware Office: Kunden und Projekte (Serie 1, B2 + B4)
 
 ### Neu
+- **Projekt an Lexware übertragen** (Betriebsart „Rechnungen erzeugen in: Lexware Office“): Übertragungsmaske im Projekt
+  mit Belegart (Angebot/Rechnungsentwurf), Darstellung je Gruppe, § 13b, Leistungszeitraum, Texten und Positionsauswahl;
+  Vorschau mit Netto/USt/Brutto; Lexware erhält immer einen Entwurf. Rechnungsentwürfe markieren Positionen als
+  abgerechnet (Teilabrechnung ohne Doppelungen); Sperre gegen Doppelversand; Umschalten der Betriebsart während einer
+  Übertragung gesperrt.
+- **IN-FORM-Export** rechnet über denselben Dienst wie die Lexware-Übertragung (`ProjektPositionen`): Gesamtpreis =
+  Menge × Einzelpreis (4 Nachkommastellen) auf Cent; Artikelnummern in Kleinschreibung (`artikelnr`) werden jetzt
+  exportiert, leere Einheit wird „Stk“, leere Beschreibung einer Arbeitszeit „Arbeitszeit“. Der Einzelpreis im CSV bleibt
+  auf 2 Stellen gerundet; bei Preisen mit mehr Nachkommastellen ist Menge × Einzelpreis daher nicht immer exakt der Gesamtpreis.
 - **Kundenfelder** Land (ISO-Code, Standard DE), USt-IdNr. und Leitweg-ID; ältere Clients leeren sie beim Speichern nicht.
 - **Kunden-Abgleich mit Lexware Office** (Verwaltung → Schnittstellen, nur Administratoren): Vorschau mit Vorschlägen
   per E-Mail/Name, Verknüpfen oder Neuanlage ohne Dubletten, blockweise Ausführung. Im Kundenformular Bereich

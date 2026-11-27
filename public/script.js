@@ -2551,7 +2551,8 @@ function renderDetail() {
           canEdit ? { label: 'Excel Export', icon: ico('download'), onclick: 'exportBaustelleExcel()' } : null,
           canEdit ? { label: 'PDF Export', icon: ico('download'), onclick: 'exportBaustellePDF()' } : null,
           (bkRechnungenAktiv(appSettings) && canDo('canManageRechnungen')) ? { label: 'Rechnung erstellen', icon: ico('clipboard'), onclick: 'createRechnungFromBaustelle()' } : null,
-          (bkRechnungenAktiv(appSettings) && canDo('canManageAngebote')) ? { label: 'Angebot erstellen', icon: ico('clipboard'), onclick: 'createAngebotFromBaustelle()' } : null
+          (bkRechnungenAktiv(appSettings) && canDo('canManageAngebote')) ? { label: 'Angebot erstellen', icon: ico('clipboard'), onclick: 'createAngebotFromBaustelle()' } : null,
+          (bkRechnungenInLexware(appSettings) && canDo('canLexoffice') && canDo('canSeePrices') && typeof lexofficeProjektUebertragen === 'function') ? { label: 'An Lexware übertragen', icon: ico('upload'), onclick: 'lexofficeProjektUebertragen(selectedId)' } : null
         ])}
       </div>
     </div>

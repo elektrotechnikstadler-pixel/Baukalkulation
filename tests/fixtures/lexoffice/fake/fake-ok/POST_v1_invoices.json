@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "id": "b2b2b2b2-0000-4000-8000-000000000002", "resourceUri": "https://api.lexware.io/v1/invoices/b2b2b2b2-0000-4000-8000-000000000002",
+    "createdDate": "2026-11-27T10:00:00.000+01:00", "updatedDate": "2026-11-27T10:00:00.000+01:00", "version": 1 }
+}

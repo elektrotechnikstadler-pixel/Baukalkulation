@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "id": "a1a1a1a1-0000-4000-8000-000000000001", "resourceUri": "https://api.lexware.io/v1/quotations/a1a1a1a1-0000-4000-8000-000000000001",
+    "createdDate": "2026-11-27T10:00:00.000+01:00", "updatedDate": "2026-11-27T10:00:00.000+01:00", "version": 1 }
+}

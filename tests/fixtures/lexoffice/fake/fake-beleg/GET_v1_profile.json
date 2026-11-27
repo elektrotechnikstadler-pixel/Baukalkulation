@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": {
+    "organizationId": "00000000-0000-4000-8000-000000000001",
+    "companyName": "Musterbau Test GmbH",
+    "created": { "userId": "00000000-0000-4000-8000-000000000002", "userName": "Max Muster", "userEmail": "max@example.invalid", "date": "2024-01-15T10:00:00.000+01:00" },
+    "connectionId": "00000000-0000-4000-8000-000000000003",
+    "features": ["cashbox"],
+    "businessFeatures": ["INVOICING", "BOOKKEEPING"],
+    "subscriptionStatus": "active",
+    "taxType": "net",
+    "smallBusiness": false
+  }
+}
