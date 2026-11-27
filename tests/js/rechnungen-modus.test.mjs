@@ -19,10 +19,13 @@ for (const fall of faelle) {
   });
 }
 
-test('rechnungen-modus.js wird vor script.min.js geladen und vom Service Worker vorgehalten', async () => {
+test('Helfer-Skripte werden vor script.min.js geladen und vom Service Worker vorgehalten', async () => {
   const index = await readFile(new URL('../../public/index.html', import.meta.url), 'utf8');
   const sw = await readFile(new URL('../../public/sw.js', import.meta.url), 'utf8');
-  const helfer = index.search(/<script src="rechnungen-modus\.js\?v=\d+"><\/script>/);
-  assert.ok(helfer > 0 && helfer < index.indexOf('<script src="script.min.js'));
-  assert.match(sw, /'\.\/rechnungen-modus\.js\?v=\d+'/);
+  for (const datei of ['rechnungen-modus.js', 'modules/lexoffice/lexoffice.js']) {
+    const muster = datei.replace(/[./]/g, c => '\\' + c);
+    const helfer = index.search(new RegExp(`<script src="${muster}\\?v=\\d+"></script>`));
+    assert.ok(helfer > 0 && helfer < index.indexOf('<script src="script.min.js'), datei);
+    assert.match(sw, new RegExp(`'\\./${muster}\\?v=\\d+'`), datei);
+  }
 });

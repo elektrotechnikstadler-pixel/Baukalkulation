@@ -36,7 +36,7 @@ $api = $server->client();
 ok($api->post('setup', ['username' => ADMIN_USER, 'password' => ADMIN_PASS]));
 $version = $api->get('check')->json()['version'];
 
-$kunde1 = ok($api->post('save_kunde', ['firma' => 'Muster GmbH', 'ort' => 'Augsburg']))['kunde']['id'];
+$kunde1 = ok($api->post('save_kunde', ['firma' => 'Muster GmbH', 'ort' => 'Augsburg', 'land' => 'DE', 'ustId' => 'DE123456789', 'leitwegId' => '991-12345-67']))['kunde']['id'];
 $kunde2 = ok($api->post('save_kunde', ['nachname' => 'Huber', 'vorname' => 'Anna', 'ort' => 'Friedberg']))['kunde']['id'];
 
 ok($api->post('save', ['data' => [

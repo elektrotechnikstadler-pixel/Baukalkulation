@@ -451,7 +451,20 @@
           Archiv (Ansicht, PDF, ZUGFeRD) und können nur noch den Status ändern (z.&nbsp;B. „bezahlt“). Schalten Sie das Modul
           aus, sind Angebote und Rechnungen der Baukalkulation sofort wieder nutzbar; Schlüssel und Einstellung bleiben
           für das spätere Wiedereinschalten erhalten. Die Rechte-Einstellung „Lexware Office (Status, Projekte übertragen)“
-          gilt für die Projektübertragung, die in einer der nächsten Versionen folgt.</li>
+          gilt für die Projektübertragung, die in einer der nächsten Versionen folgt.
+          <br><strong>Kunden:</strong> Im Kundenformular gibt es zusätzlich <em>Land</em> (zweistelliger Ländercode, Standard DE),
+          <em>USt-IdNr.</em> und <em>Leitweg-ID</em> (für öffentliche Auftraggeber). Nach erfolgreichem Verbindungstest öffnet
+          „Kunden abgleichen…“ (Verwaltung → Allgemein → Schnittstellen, nur Administratoren) eine Vorschau aller noch nicht
+          verknüpften Kunden: Gibt es in Lexware genau einen aktiven Kunden-Kontakt mit derselben E-Mail-Adresse bzw.
+          demselben Namen, wird „Verknüpfen“ vorgeschlagen, sonst „Neu in Lexware anlegen“; bei mehreren gleichnamigen
+          Kontakten steht „Überspringen“ mit Hinweis. „Ausführen“ arbeitet in Zehnerschritten und zeigt je Kunde das
+          Ergebnis. Im Kundenformular zeigt der Bereich „Lexware Office“ (sichtbar mit dem Recht „Lexware Office“), ob der
+          Kunde verknüpft ist, mit <em>In Lexware öffnen</em>, <em>An Lexware übertragen</em> und für Administratoren
+          <em>Verknüpfung lösen</em>. Vorhandene Lexware-Kontakte werden nie verändert; vor dem Anlegen sucht die
+          Baukalkulation nach einem passenden Kontakt, damit keine Dubletten entstehen. Passt der API-Schlüssel nicht mehr
+          zum zuletzt geprüften Lexware-Konto, wird nichts übertragen. Verknüpfungen aus einer Sicherung eines anderen
+          Lexware-Kontos werden nicht verwendet. Wird ein verknüpfter Kunde nach DSGVO gelöscht, bleibt der Kontakt in
+          Lexware Office bestehen; die Baukalkulation weist darauf hin, ihn dort zu löschen bzw. zu archivieren.</li>
       </ul>
       <p>Module lassen sich in den Einstellungen aktivieren; sie erscheinen dann in der Seitenleiste.</p>
     </section>

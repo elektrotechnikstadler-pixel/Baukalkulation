@@ -69,11 +69,14 @@ final class FakeTransport implements LexofficeTransport
     /** @var list<array{methode:string, pfad:string, body:?string}> */
     public array $anfragen = [];
 
-    public function __construct(private string $verzeichnis, #[\SensitiveParameter] private string $schluessel) {}
+    public function __construct(private string $verzeichnis, #[\SensitiveParameter] private string $schluessel, private string $logDatei = '') {}
 
     public function senden(string $methode, string $pfad, array $header, ?string $body): array
     {
         $this->anfragen[] = ['methode' => $methode, 'pfad' => $pfad, 'body' => $body];
+        if ($this->logDatei !== '') {
+            file_put_contents($this->logDatei, json_encode(['methode' => $methode, 'pfad' => $pfad, 'body' => $body], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+        }
         $ordner = preg_replace('/[^A-Za-z0-9-]/', '', $this->schluessel) ?? '';
         $pfadTeil = preg_replace('/[^A-Za-z0-9]+/', '_', trim(explode('?', $pfad)[0], '/')) ?? '';
         $datei = rtrim($this->verzeichnis, '/\\') . '/' . $ordner . '/' . strtoupper($methode) . '_' . $pfadTeil . '.json';

@@ -6,6 +6,10 @@
     "tier": "professional",
     "module_file": "backend/Module.php",
     "module_class": "App\\Modules\\Lexoffice\\Module",
+    "frontend": {
+        "js": "modules/lexoffice/lexoffice.js",
+        "css": "modules/lexoffice/lexoffice.css"
+    },
     "permissions": ["admin", "master", "normal"],
     "feature_flag": "lexoffice",
     "depends_on": []

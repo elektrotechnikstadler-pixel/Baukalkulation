@@ -17,6 +17,13 @@ final class LexofficeFehler extends \RuntimeException
         'tarif'                => 'Der Lexware-Office-Tarif erlaubt keinen Zugriff über die Schnittstelle.',
         'rate_limit'           => 'Lexware Office meldet zu viele Anfragen – bitte später erneut versuchen.',
         'nicht_erreichbar'     => 'Lexware Office ist nicht erreichbar.',
+        'nicht_geprueft'       => 'Bitte zuerst die Verbindung zu Lexware Office testen.',
+        'anderes_konto'        => 'Der API-Schlüssel gehört zu einem anderen Lexware-Konto als zuletzt geprüft – bitte die Verbindung erneut testen.',
+        'mehrdeutig'           => 'In Lexware Office gibt es mehrere passende Kontakte – bitte im Kunden-Abgleich zuordnen.',
+        'laeuft'               => 'Die Übertragung läuft bereits – bitte kurz warten.',
+        'unklar'               => 'Die letzte Übertragung dieses Kunden blieb ohne Antwort. Bitte in Lexware Office prüfen und im Kunden-Abgleich zuordnen (oder die Verknüpfung lösen, falls dort kein Kontakt entstanden ist).',
+        'bereits_verknuepft'   => 'Der Kunde ist bereits mit einem anderen Lexware-Kontakt verknüpft.',
+        'kunde_fehlt'          => 'Kunde nicht gefunden.',
         'fehler'               => 'Lexware Office hat die Anfrage abgelehnt.',
     ];
 
@@ -51,7 +58,8 @@ final class LexofficeClient
         }
         $fake = getenv('BK_LEXOFFICE_FAKE_DIR');
         if (is_string($fake) && $fake !== '') {
-            return new self(new FakeTransport($fake, $schluessel), $schluessel, 0.0);
+            $log = defined('DATA_DIR') ? DATA_DIR . 'lexoffice-fake.jsonl' : '';
+            return new self(new FakeTransport($fake, $schluessel, $log), $schluessel, 0.0);
         }
         return new self(new CurlTransport(), $schluessel);
     }
@@ -111,8 +119,19 @@ final class LexofficeClient
                 $json = json_decode($antwort['body'], true);
                 return is_array($json) ? $json : [];
             }
-            throw new LexofficeFehler(self::codeFuerStatus($status), $status, "{$methode} {$pfad} → HTTP {$status}: " . substr($antwort['body'], 0, 300));
+            // Fürs Log nur Pfad ohne Query (E-Mail/Name) und Lexware-Fehlerschlüssel – keine Personendaten.
+            throw new LexofficeFehler(self::codeFuerStatus($status), $status, "{$methode} " . explode('?', $pfad)[0] . " → HTTP {$status}" . self::fehlerSchluessel($antwort['body']));
         }
+    }
+
+    private static function fehlerSchluessel(string $body): string
+    {
+        $json = json_decode($body, true);
+        $schluessel = [];
+        foreach ((array) ($json['IssueList'] ?? []) as $i) {
+            $schluessel[] = preg_replace('/[^A-Za-z0-9_.\-]/', '', (string) ($i['i18nKey'] ?? '') . '@' . ($i['source'] ?? ''));
+        }
+        return $schluessel ? ' [' . implode(', ', array_slice($schluessel, 0, 5)) . ']' : '';
     }
 
     private function drosseln(): void

@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "id": "77777777-7777-4777-8777-777777777777", "resourceUri": "https://api.lexware.io/v1/contacts/77777777-7777-4777-8777-777777777777",
+    "createdDate": "2026-11-27T10:00:00.000+01:00", "updatedDate": "2026-11-27T10:00:00.000+01:00", "version": 1 }
+}

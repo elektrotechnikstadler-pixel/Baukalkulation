@@ -37,6 +37,18 @@
 
 ---
 
+## Unveröffentlicht – Lexware Office: Kunden (Serie 1, B2)
+
+### Neu
+- **Kundenfelder** Land (ISO-Code, Standard DE), USt-IdNr. und Leitweg-ID; ältere Clients leeren sie beim Speichern nicht.
+- **Kunden-Abgleich mit Lexware Office** (Verwaltung → Schnittstellen, nur Administratoren): Vorschau mit Vorschlägen
+  per E-Mail/Name, Verknüpfen oder Neuanlage ohne Dubletten, blockweise Ausführung. Im Kundenformular Bereich
+  „Lexware Office“ mit Status, „In Lexware öffnen“, „An Lexware übertragen“ und „Verknüpfung lösen“.
+- Vor jedem Schreiben wird geprüft, ob der API-Schlüssel noch zum geprüften Lexware-Konto gehört; Verknüpfungen aus
+  Sicherungen eines anderen Kontos werden ignoriert. Neue Tabellen `lexoffice_*` (Sicherung enthalten).
+
+---
+
 ## v3.0.28 – Lexware Office (Grundlage), Prüfskript und Testabdeckung
 
 ### Neu

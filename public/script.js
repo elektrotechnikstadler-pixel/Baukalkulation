@@ -12666,6 +12666,11 @@ function renderLexofficeKarte(s) {
         <span id="lexofficeErgebnis" style="font-size:.85rem">${!s.lexoffice_api_key_gesetzt ? '<span style="color:#C62828">Schlüssel fehlt.</span>' : p.firma ? `✓ Verbunden mit <strong>${esc(p.firma)}</strong> (Steuerart ${esc(p.steuerart || '–')}${p.kleinunternehmer ? ', Kleinunternehmer' : ''}) – geprüft ${esc(geprueft)}` : '<span style="color:#888">Noch nicht geprüft.</span>'}</span>
       </div>
     </div>
+    ${s.lexoffice_api_key_gesetzt && p.organisationId ? `<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;background:#fafafa;margin-top:12px">
+      <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--primary,#00B4D8)">Kunden</h3>
+      <p style="font-size:.82rem;color:#555;margin-bottom:10px">Ordnet Kunden der Baukalkulation vorhandenen Lexware-Kontakten zu (Vorschlag per E-Mail oder Name) oder legt sie neu an – ohne Dubletten. Lexware-Kontakte werden dabei nicht verändert.</p>
+      <button class="btn btn-secondary btn-sm" onclick="lexofficeKundenAbgleichOeffnen()">Kunden abgleichen…</button>
+    </div>` : ''}
   </div>`;
 }
 
@@ -23606,8 +23611,12 @@ function openKundeForm(id) {
       <div><label>Telefon</label><input id="kfTelefon" value="${esc(kunde?.telefon || '')}" ${ro}></div>
       <div><label>Mobil</label><input id="kfMobil" value="${esc(kunde?.mobil || '')}" ${ro}></div>
       <div class="full-width"><label>E-Mail</label><input id="kfEmail" type="email" value="${esc(kunde?.email || '')}" ${ro}></div>
+      <div><label>Land (ISO, z. B. DE)</label><input id="kfLand" value="${esc(kunde?.land || 'DE')}" ${ro} maxlength="2" style="text-transform:uppercase"></div>
+      <div><label>USt-IdNr.</label><input id="kfUstId" value="${esc(kunde?.ustId || '')}" ${ro} maxlength="20"></div>
+      <div class="full-width"><label>Leitweg-ID (öffentliche Auftraggeber)</label><input id="kfLeitwegId" value="${esc(kunde?.leitwegId || '')}" ${ro} maxlength="50"></div>
       <div class="full-width"><label>Notizen</label><textarea id="kfNotizen" ${ro}>${esc(kunde?.notizen || '')}</textarea></div>
     </div>
+    ${kunde ? '<div id="kfLexoffice"></div>' : ''}
     ${kunde ? (() => {
       const fmtDE = d => { if (!d) return ''; try { return new Date(d).toLocaleDateString('de-DE'); } catch(e) { return d; } };
       const fmtC = v => (v||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -23670,6 +23679,7 @@ function openKundeForm(id) {
     </div>
   </div>`;
   document.body.appendChild(overlay);
+  if (kunde && typeof lexofficeKundeBadge === 'function') lexofficeKundeBadge(kunde.id, document.getElementById('kfLexoffice'));
   // Load archived projects for this customer
   if (kunde) {
     fetch('api.php?action=list_archive').then(r=>r.json()).then(j=>{
@@ -23716,6 +23726,9 @@ async function saveKunde(id) {
     telefon: document.getElementById('kfTelefon')?.value.trim() || '',
     mobil: document.getElementById('kfMobil')?.value.trim() || '',
     email: document.getElementById('kfEmail')?.value.trim() || '',
+    land: (document.getElementById('kfLand')?.value.trim() || 'DE').toUpperCase(),
+    ustId: document.getElementById('kfUstId')?.value.trim() || '',
+    leitwegId: document.getElementById('kfLeitwegId')?.value.trim() || '',
     notizen: document.getElementById('kfNotizen')?.value.trim() || ''
   };
   if (!data.firma && !data.nachname) { showNotification('Bitte Firma oder Nachname angeben.', 'error'); return; }
@@ -23787,6 +23800,7 @@ async function dsgvoDeleteKunde(id) {
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       showNotification('Kundendaten DSGVO-konform gelöscht.', 'success');
+      if (j.lexwareKontakt) alert('Hinweis: Der Kunde war mit einem Kontakt in Lexware Office verknüpft. Dieser Kontakt wird nicht automatisch gelöscht – bitte in Lexware Office löschen bzw. archivieren.');
       document.getElementById('kundeFormOverlay')?.remove();
       await loadKundenData();
     } catch (e) { showNotification('Fehler: ' + e.message, 'error'); }

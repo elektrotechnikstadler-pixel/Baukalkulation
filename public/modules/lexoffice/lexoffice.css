@@ -1,0 +1,6 @@
+/* Lexware Office – Kunden-Badge und Abgleich (AP-20261126, B2) */
+.lex-kunde { margin-top: 12px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; font-size: .85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lex-ok { color: #2E7D32; font-weight: 600; }
+.lex-warn { color: #C62828; }
+.lex-abgleich { max-width: 980px; width: 96vw; }
+.lex-abgleich select.form-control { font-size: .8rem; min-width: 220px; }

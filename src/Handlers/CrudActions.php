@@ -28,6 +28,7 @@ class CrudActions
             'telefon' => $r['telefon'], 'mobil' => $r['mobil'], 'email' => $r['email'],
             'notizen' => $r['notizen'], 'erstellt' => $r['erstellt'], 'geaendert' => $r['geaendert'],
             'kundennummer' => $r['kundennummer'] ?? '',
+            'land' => $r['land'] ?? 'DE', 'ustId' => $r['ustId'] ?? '', 'leitwegId' => $r['leitwegId'] ?? '',
         ], $rows);
         jsonOut(['ok' => true, 'kunden' => $kunden]);
     }
@@ -46,6 +47,24 @@ class CrudActions
         $clean = [];
         foreach ($allowed as $f) $clean[$f] = trim($kunde[$f] ?? '');
         $clean['geaendert'] = date('Y-m-d H:i');
+
+        // Felder für Lexware Office (AP-20261126, B2): nur übernehmen, wenn gesendet –
+        // alte Clients kennen sie nicht und dürfen sie beim Speichern nicht leeren (E-088).
+        $zusatz = [];
+        if (array_key_exists('land', $kunde)) {
+            $land = strtoupper(trim((string)$kunde['land']));
+            if ($land === '') $land = 'DE';
+            if (!preg_match('/^[A-Z]{2}$/', $land)) jsonOut(['error' => 'Land bitte als zweistelligen Ländercode angeben (z. B. DE, AT).'], 400);
+            $zusatz['land'] = $land;
+        }
+        if (array_key_exists('ustId', $kunde)) {
+            $zusatz['ustId'] = strtoupper((string)preg_replace('/\s+/', '', (string)$kunde['ustId']));
+            if (strlen($zusatz['ustId']) > 20) jsonOut(['error' => 'USt-IdNr. ist zu lang.'], 400);
+        }
+        if (array_key_exists('leitwegId', $kunde)) {
+            $zusatz['leitwegId'] = trim((string)$kunde['leitwegId']);
+            if (strlen($zusatz['leitwegId']) > 50) jsonOut(['error' => 'Leitweg-ID ist zu lang.'], 400);
+        }
 
         $settings = Auth::loadSettings($this->db);
         $kundennummerAuto = (bool)($settings['kundennummer_auto'] ?? true);
@@ -111,6 +130,12 @@ class CrudActions
             }
         }
 
+        if ($zusatz) {
+            $set = implode(', ', array_map(fn($k) => "{$k} = ?", array_keys($zusatz)));
+            $this->db->prepare("UPDATE kunden SET {$set} WHERE id = ?")->execute([...array_values($zusatz), $clean['id']]);
+        }
+        $clean += $zusatz;
+
         AuditService::log($existingId > 0 ? 'kunde_update' : 'kunde_create', 'ID=' . $clean['id'] . ', ' . trim(($clean['firma'] ?: '') . ' ' . $clean['vorname'] . ' ' . $clean['nachname']));
 
         // Kompatibilität: "data" mit allen Kunden zurückgeben
@@ -128,6 +153,7 @@ class CrudActions
         $cnt = $this->db->prepare("DELETE FROM kunden WHERE id = ?");
         $cnt->execute([$delId]);
         if ($cnt->rowCount() === 0) jsonOut(['error' => 'Kunde nicht gefunden.'], 404);
+        $this->db->prepare("DELETE FROM lexoffice_verknuepfung WHERE objektTyp = 'kunde' AND objektId = ?")->execute([(string)$delId]);
         AuditService::log('kunde_delete', 'ID=' . $delId);
         jsonOut(['ok' => true]);
     }
@@ -162,6 +188,9 @@ class CrudActions
                 'telefon'  => $kunde['telefon'],
                 'mobil'    => $kunde['mobil'],
                 'email'    => $kunde['email'],
+                'land'     => $kunde['land'] ?? 'DE',
+                'ustId'    => $kunde['ustId'] ?? '',
+                'leitwegId'=> $kunde['leitwegId'] ?? '',
                 'notizen'  => $kunde['notizen'],
                 'erstellt' => $kunde['erstellt'],
                 'geaendert'=> $kunde['geaendert'],
@@ -217,12 +246,17 @@ class CrudActions
         }
 
         // Kunden-Datensatz löschen
+        $lexStmt = $this->db->prepare("SELECT lexId FROM lexoffice_verknuepfung WHERE objektTyp = 'kunde' AND objektId = ? AND status = 'uebertragen'");
+        $lexStmt->execute([(string)$id]);
+        $lexId = (string)($lexStmt->fetchColumn() ?: '');
         $this->db->prepare("DELETE FROM kunden WHERE id = ?")->execute([$id]);
+        $this->db->prepare("DELETE FROM lexoffice_verknuepfung WHERE objektTyp = 'kunde' AND objektId = ?")->execute([(string)$id]);
 
         // Audit-Log
         AuditService::log('dsgvo_delete_kunde', 'Kundendaten gelöscht (DSGVO Art. 17): ID=' . $id . ', Name=' . trim(($kunde['firma'] ?: '') . ' ' . ($kunde['vorname'] ?? '') . ' ' . ($kunde['nachname'] ?? '')));
 
-        jsonOut(['ok' => true, 'message' => 'Kundendaten vollständig gelöscht (DSGVO Art. 17).']);
+        // Der Kontakt in Lexware Office wird nicht automatisch gelöscht – Hinweis an den Bearbeiter.
+        jsonOut(['ok' => true, 'message' => 'Kundendaten vollständig gelöscht (DSGVO Art. 17).', 'lexwareKontakt' => $lexId]);
     }
 
     // logAudit → AuditService::log()

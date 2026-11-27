@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Firma mit Ansprechpartner, USt-IdNr., Adresse und Kontaktdaten",
+    "kunde": { "firma": "Muster GmbH", "anrede": "Herr", "vorname": "Max", "nachname": "Muster", "strasse": "Hauptstr. 1", "plz": "86150", "ort": "Augsburg", "land": "de", "telefon": "0821 1", "mobil": "0170 2", "email": "max@muster.example", "ustId": "DE123456789", "notizen": "intern – nie übertragen" },
+    "kontakt": {
+      "version": 0, "roles": { "customer": {} },
+      "company": { "name": "Muster GmbH", "vatRegistrationId": "DE123456789",
+        "contactPersons": [{ "salutation": "Herr", "firstName": "Max", "lastName": "Muster", "emailAddress": "max@muster.example", "phoneNumber": "0821 1", "primary": true }] },
+      "addresses": { "billing": [{ "street": "Hauptstr. 1", "zip": "86150", "city": "Augsburg", "countryCode": "DE" }] },
+      "emailAddresses": { "business": ["max@muster.example"] },
+      "phoneNumbers": { "business": ["0821 1"], "mobile": ["0170 2"] }
+    }
+  },
+  {
+    "name": "Firma ohne Ansprechpartner (Anrede Firma wird nicht übertragen)",
+    "kunde": { "firma": "Bau AG", "anrede": "Firma", "vorname": "Eva", "ort": "Wien", "land": "AT" },
+    "kontakt": { "version": 0, "roles": { "customer": {} }, "company": { "name": "Bau AG" },
+      "addresses": { "billing": [{ "city": "Wien", "countryCode": "AT" }] } }
+  },
+  {
+    "name": "Privatperson ohne Land (Standard DE), nur Mobilnummer",
+    "kunde": { "anrede": "Frau", "vorname": "Anna", "nachname": "Huber", "plz": "86316", "ort": "Friedberg", "mobil": "0171 3" },
+    "kontakt": { "version": 0, "roles": { "customer": {} }, "person": { "salutation": "Frau", "firstName": "Anna", "lastName": "Huber" },
+      "addresses": { "billing": [{ "zip": "86316", "city": "Friedberg", "countryCode": "DE" }] },
+      "phoneNumbers": { "mobile": ["0171 3"] } }
+  },
+  {
+    "name": "Privatperson ohne Adresse",
+    "kunde": { "nachname": "Meier" },
+    "kontakt": { "version": 0, "roles": { "customer": {} }, "person": { "lastName": "Meier" } }
+  }
+]
