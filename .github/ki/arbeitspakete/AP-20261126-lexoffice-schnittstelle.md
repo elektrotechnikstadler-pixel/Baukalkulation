@@ -339,6 +339,21 @@ Einleitung/Schlusstext je Übertragung, Vorbelegung aus der Verwaltung → spät
 Summe der Einzelpositionen abweichen (Vorschau weist darauf hin). **Für B5:** in Lexware gelöschte Entwürfe beim Abgleich als
 `voided` markieren (AK 11).
 
+**B5 (Leitstand, 2026-11-27):** `LexofficeProjekt::abgleichen()` (nur lesend: GET je Beleg, `relatedVouchers` → neue
+Abschlags-/Schlussrechnungen, 404 → `geloescht`, `paidDate` über `/v1/payments` nur einmal, Schlussrechnung mit
+`claimedGrossAmount`), Aktionen `projekt_abgleichen` und `bezahlt_summen` (nur lokaler Spiegel, `canSeePrices`, je Projekt
+`canSeeBaustelle`); Frontend: Lexware-Zeilen in der Abschlagsliste; alle Leser erhaltener Beträge (Projekt-`recalc()`,
+Übersicht, Exporte, Auswertung) über `projektAbschlagSumme()`/`projektLexwareBezahlt()` in `script.js` (E-086).
+**B5 Korrekturrunde 1:** Zeitbudget/Obergrenze mit `vollstaendig`, 404 gibt nur bisherige Entwürfe frei (sonst Fehler),
+Entdeckung per `ON CONFLICT DO NOTHING`, Zahlungsabruf fehlertolerant, Belege bleiben bei Ladefehlern erhalten,
+Anleitung warnt vor Doppelerfassung. Die Vue-`AuswertungView` ist inaktiv und wurde nicht angepasst.
+**Bewusst (R2 Hinweis):** bezahlte Lexware-Beträge zählen auch nach Rückwechsel in Betriebsart A weiter – es sind echte
+Zahlungseingänge; bereits nach Lexware übertragene Positionen dürfen danach nicht erneut in der Baukalkulation berechnet werden.
+**Abweichung (bewusst, Nutzer informiert):** kein eigener Abschlagsplan mit %/Fälligkeit – die vorhandene Abschlagsliste bleibt
+für außerhalb erstellte Rechnungen, Lexware-Abschläge erscheinen gespiegelt (sonst Doppelzählung in allen Summen).
+**Offen:** Mobil-Ansicht und Kundenformular zeigen Lexware-Belege/-Zahlungen noch nicht (nur Desktop-Projekt); Abgleich
+aller Projekte automatisch → B6.
+
 ## 4. Tests
 
 | Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
@@ -349,6 +364,8 @@ Summe der Einzelpositionen abweichen (Vorschau weist darauf hin). **Für B5:** i
 | 7 Aus-/Einschalten erhält Einstellungen | `…::testBetriebsartLexwareSperrtNeueBelegeUndLaesstNurStatusZu` | grün | grün | – |
 | 9 Betriebsart Lexware: Sperren, Archiv, nur Admin-Status, alte Clients 409 | `…::testBetriebsartLexware…`, `…::testArchivLaesstNurAdminsDenStatusAendern`, `…::testAenderndeAktionenNurAdminUndPost` | grün | grün | – |
 | 9 Entscheidungslogik PHP = JS | `tests/Unit/RechnungsModusTest` + `tests/js/rechnungen-modus.test.mjs` (Fallliste `tests/fixtures/lexoffice/rechnungen-modus.json`), Einbindung in index.html/sw.js | grün | grün | grün |
+| 11 Gelöschter Entwurf / Storno gibt Positionen frei; fertiger Beleg 404 → Fehler | `tests/Api/LexofficeProjektTest::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei`, `…::testOhnePreisrechtKeineUebertragungUndStornoGibtPositionenFrei` | grün | grün | – |
+| 12 Abschläge/Schlussrechnung gespiegelt, bezahlt zählt (nur `bezahlt_summen`, ohne Preisrecht 403) | `…::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei`, `…::testNurInBetriebsartLexwareUndMitRechten` | grün | grün | – |
 | B0 Prüfskript | `tests/js/pruefen.test.mjs` | – | – | grün |
 
 Lauf: `node scripts/pruefen.mjs --filter 'Lexoffice|RechnungsModus|Rechnung|Beleg|Email|AuthTest|Settings|Permission|Module' --pgsql --stan --versionen`
@@ -368,6 +385,12 @@ bleibt rot wegen 17 **vorbestehender** veralteter Einträge jenes AP (z. B. `set
   Menge 0, Export-EP im CHANGELOG) sofort behoben. Tests B4: `LexofficeBelegTest` (Fallliste `projekte.json`, 5 Fälle),
   `LexofficeProjektTest` (Betriebsart/Rechte, Angebot ohne Abrechnung, Teilabrechnung, Sperre/unklar, Beleg 503/406,
   ohne Preisrecht, `voided`, § 13b, IN-FORM-Export) – 62 gezielte Tests SQLite + PostgreSQL grün.
+- **B5 R1:** CHANGES_REQUESTED – 3 Major (bezahlte Lexware-Beträge nur in `recalc()`, nicht in Übersicht/Exporten/Auswertung;
+  Summen nur aus dem Belege-Cache des offenen Projekts), 4 Minor (Ladefehler leert Belege, 404 gibt fertige Belege frei, kein
+  Zeitbudget, Doppelerfassung undokumentiert), 2 Hinweise. **R2 (nur Befunde):** APPROVE; R1 Minor (sichtbare Übersicht/
+  Auswertung nach Laden neu zeichnen), R2/R3 Hinweise sofort behoben bzw. dokumentiert.
+  Tests B5: `LexofficeProjektTest::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei` (Belegkette, 404 nur Entwurf,
+  `bezahlt_summen`), Rechte 403 – 63 gezielte Tests SQLite + PostgreSQL grün.
 
 - **R1** (Reviewer-Agent): CHANGES_REQUESTED – 1 Major (Profil nach Schlüsselwechsel), 9 Minor (Lesen serverseitig,
   alte Clients, Meldung je Ursache, Gesamtstand nach langem Aufruf, Plan 2.3, Exit-Code/Ergebniszeile `pruefen`, AP-Doku, Testlücken).
