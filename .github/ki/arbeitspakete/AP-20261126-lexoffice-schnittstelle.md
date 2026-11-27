@@ -312,6 +312,21 @@ mit Drossel 0,55 s/429-Retry/festen Meldungen; `CurlTransport` fester Host, `Fak
   lesen `list_rechnungen`); Menü nur für Admins; **Status ändern** nur Admin, nur `{id,typ,status}` (sonst 409).
 - Sperren nutzen `RechnungsModus::inLexware()` – `modul_rechnungen = false` verhält sich serverseitig wie bisher.
 
+**B2 (Leitstand, 2026-11-27):** Migration `20261127000000_create_lexoffice_tables` (alle drei Tabellen aus 2.6 +
+Kundenfelder); `saveKunde` übernimmt Land/USt-IdNr./Leitweg-ID nur, wenn gesendet (E-088); Verknüpfung wird beim
+(DSGVO-)Löschen entfernt. `LexofficeMapper` (Kontakt, Zuordnung per E-Mail → Name → PLZ), `LexofficeSync`
+(Kontoprüfung `/v1/profile` vor jedem Schreiben, Claim `sendet` + Dublettensuche vor `POST /v1/contacts`, Timeout →
+`fehler`, sonst Claim frei), Aktionen `kunden_status`, `kunden_abgleich_vorschau`, `kunden_abgleich_ausfuehren`
+(≤ 10 je Aufruf), `kunde_uebertragen`, `kunde_verknuepfung_loesen`; Frontend `public/modules/lexoffice/`.
+**Entscheidungen:** Lexware-Kontakte werden nie geändert (kein PUT) – Aktualisieren bei Bedarf in B4;
+Leitweg-ID geht erst mit dem Beleg (`buyerReference`, B4) nach Lexware; Backup-Fixture beim Release (Version im Namen).
+**Abweichungen vom Plan (bewusst):** `rechnungen.leistungsdatum/leistungBis/bezahltAm/festgeschrieben` erst mit
+Modus A (Serie 2); Kunden-Abgleich synchron in Zehnerblöcken (Browser ruft blockweise auf) statt Job-Auftrag –
+reicht für den Erstabgleich und braucht keinen Planer; Projekt-Sammelläufe in B4/B6 als Job.
+**B2 Korrekturrunde 1:** einheitlicher Claim mit Token für Anlegen und Verknüpfen, bedingter Abschluss, `unklar` bei
+nicht durchsuchbaren Kunden nach Zeitüberschreitung, Log ohne Personendaten, `zahlstatus`, DSGVO-Hinweis, Lösen lokal,
+Rechte `canReadKunden`/`canWriteKunden`.
+
 ## 4. Tests
 
 | Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
@@ -331,6 +346,11 @@ Lauf: `node scripts/pruefen.mjs --filter 'Lexoffice|RechnungsModus|Rechnung|Bele
 bleibt rot wegen 17 **vorbestehender** veralteter Einträge jenes AP (z. B. `set_visibility`, `send_vde`) – nicht angefasst.
 
 ## 5. Review
+
+- **B2 R1:** CHANGES_REQUESTED – 2 Major (Claim nicht in allen Schreibpfaden, Claim-Pfade ungetestet), 6 Minor, 2 Hinweise.
+  **R2 (nur Befunde):** APPROVE; 2 Hinweise (Test abgelaufener Claim, Knopf nur mit `canWriteKunden`) sofort behoben.
+  Tests B2: `LexofficeKundenTest` (Felder/alte Clients, Vorschau, Abgleich ohne Dubletten, Timeout/Claim/unklar, Fremdkonto,
+  Rechte), `LexofficeMapperTest` (Falllisten `kontakte.json`, `zuordnung.json`) – 81 gezielte Tests SQLite + PostgreSQL grün.
 
 - **R1** (Reviewer-Agent): CHANGES_REQUESTED – 1 Major (Profil nach Schlüsselwechsel), 9 Minor (Lesen serverseitig,
   alte Clients, Meldung je Ursache, Gesamtstand nach langem Aufruf, Plan 2.3, Exit-Code/Ergebniszeile `pruefen`, AP-Doku, Testlücken).
