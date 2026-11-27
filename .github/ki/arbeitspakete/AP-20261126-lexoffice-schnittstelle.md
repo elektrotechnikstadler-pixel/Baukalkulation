@@ -349,6 +349,16 @@ Entdeckung per `ON CONFLICT DO NOTHING`, Zahlungsabruf fehlertolerant, Belege bl
 Anleitung warnt vor Doppelerfassung. Die Vue-`AuswertungView` ist inaktiv und wurde nicht angepasst.
 **Bewusst (R2 Hinweis):** bezahlte Lexware-Beträge zählen auch nach Rückwechsel in Betriebsart A weiter – es sind echte
 Zahlungseingänge; bereits nach Lexware übertragene Positionen dürfen danach nicht erneut in der Baukalkulation berechnet werden.
+
+**B6 (Leitstand, 2026-11-27):** `modules/lexoffice/backend/LexofficeJob.php` – Planer-Schritt `lexoffice` (Kern lädt die
+Moduldatei nur, wenn vorhanden und lizenziert), höchstens stündlich, aktiv in jeder Betriebsart Lexware (fehlt die
+Verbindungsprüfung, meldet der Lauf `LEXWARE_ZUGANG` statt still zu pausieren); Kontoprüfung zu Beginn, Projekte mit Belegen
+außerhalb `ENDSTATUS` bzw. bezahlt ohne Zahlungsdatum (`offenSql`; angenommenes Angebot nur ohne gültige
+Schlussrechnung), älteste Prüfung zuerst, Budget 40 s, `abgleichen(nurOffene)`. Überwachung: Job `lexoffice`, Zugriff
+verweigert (`LEXWARE_ZUGANG`) sofort, sonst (`LEXWARE_ABGLEICH`) nach 24 h; kein Ausbleiben-Alarm; Laufprotokoll nur bei
+Zustandswechsel. Anzeige über die vorhandene Überwachung der Serverjobs (keine eigene Oberfläche), Hinweis in der Lexware-Karte.
+**Nicht in B6 (Serie 2, Modus A):** Zahlstatus-Abgleich für Rechnungen der Baukalkulation, Storno → Gutschrift.
+**Später (R2 Hinweis H2):** bezahlter Beleg ohne `paidDate` wird stündlich erneut abgefragt (2 GET) – bei Bedarf deckeln.
 **Abweichung (bewusst, Nutzer informiert):** kein eigener Abschlagsplan mit %/Fälligkeit – die vorhandene Abschlagsliste bleibt
 für außerhalb erstellte Rechnungen, Lexware-Abschläge erscheinen gespiegelt (sonst Doppelzählung in allen Summen).
 **Offen:** Mobil-Ansicht und Kundenformular zeigen Lexware-Belege/-Zahlungen noch nicht (nur Desktop-Projekt); Abgleich
@@ -366,6 +376,7 @@ aller Projekte automatisch → B6.
 | 9 Entscheidungslogik PHP = JS | `tests/Unit/RechnungsModusTest` + `tests/js/rechnungen-modus.test.mjs` (Fallliste `tests/fixtures/lexoffice/rechnungen-modus.json`), Einbindung in index.html/sw.js | grün | grün | grün |
 | 11 Gelöschter Entwurf / Storno gibt Positionen frei; fertiger Beleg 404 → Fehler | `tests/Api/LexofficeProjektTest::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei`, `…::testOhnePreisrechtKeineUebertragungUndStornoGibtPositionenFrei` | grün | grün | – |
 | 12 Abschläge/Schlussrechnung gespiegelt, bezahlt zählt (nur `bezahlt_summen`, ohne Preisrecht 403) | `…::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei`, `…::testNurInBetriebsartLexwareUndMitRechten` | grün | grün | – |
+| B6 Automatischer Abgleich: nur Betriebsart Lexware, stündlich, nur offene Belege, nie schreibend, Zugriffsfehler → Systemmeldung | `…::testPlanerGleichtStuendlichAbUndMeldetZugangsfehlerSofort` (CLI `system:planer`) | grün | grün | – |
 | B0 Prüfskript | `tests/js/pruefen.test.mjs` | – | – | grün |
 
 Lauf: `node scripts/pruefen.mjs --filter 'Lexoffice|RechnungsModus|Rechnung|Beleg|Email|AuthTest|Settings|Permission|Module' --pgsql --stan --versionen`
@@ -391,6 +402,13 @@ bleibt rot wegen 17 **vorbestehender** veralteter Einträge jenes AP (z. B. `set
   Auswertung nach Laden neu zeichnen), R2/R3 Hinweise sofort behoben bzw. dokumentiert.
   Tests B5: `LexofficeProjektTest::testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei` (Belegkette, 404 nur Entwurf,
   `bezahlt_summen`), Rechte 403 – 63 gezielte Tests SQLite + PostgreSQL grün.
+- **B6 R1:** APPROVE mit 5 Minor (nur `LexofficeFehler` gefangen → Dauerfehler unsichtbar; kein Abbruch bei 429/nicht
+  erreichbar; Aktivität an geprüftes Profil gekoppelt → Job pausiert still nach Schlüsselwechsel; Zahlungsdatum nie
+  nachgeholt; stornierte Schlussrechnung blockierte Angebot) und 3 Hinweisen (Schreibprüfung im Test, Testlücken
+  Entwarnung/ABGLEICH, Anleitung Ampel) – alle sofort behoben. Tests B6:
+  `LexofficeProjektTest::testPlanerGleichtStuendlichAbUndMeldetZugangsfehlerSofort` (CLI `system:planer`, inaktiv,
+  stündlich, nur offene Belege, Zahlungsdatum nachholen, ABGLEICH nach 24 h, Entwarnung, ZUGANG sofort, nie schreibend,
+  Projektauswahl) – gezielte Läufe SQLite + PostgreSQL grün, PHPStan 0.
 
 - **R1** (Reviewer-Agent): CHANGES_REQUESTED – 1 Major (Profil nach Schlüsselwechsel), 9 Minor (Lesen serverseitig,
   alte Clients, Meldung je Ursache, Gesamtstand nach langem Aufruf, Plan 2.3, Exit-Code/Ergebniszeile `pruefen`, AP-Doku, Testlücken).
