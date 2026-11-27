@@ -17,6 +17,10 @@ final class LexofficeProjekt
 {
     public const APP_URL = 'https://app.lexware.de/permalink/';
     private const SPERRE_SEK = 300;
+    private const MAX_BELEGE = 60;
+    private const ZEIT_SEK = 20;
+    /** Lexware-Belegart → API-/Permalink-Pfad */
+    private const PFAD = ['quotation' => 'quotations', 'invoice' => 'invoices', 'downpaymentinvoice' => 'down-payment-invoices'];
 
     public function __construct(private \PDO $db, private LexofficeSync $sync) {}
 
@@ -118,15 +122,114 @@ final class LexofficeProjekt
     /** @return list<array<string,mixed>> Lexware-Belege des Projekts (geprüftes Konto) */
     public function belege(int $baustelleId): array
     {
-        $stmt = $this->db->prepare('SELECT lexId, belegart, nummer, datum, netto, brutto, status, bezahltAm FROM lexoffice_belege WHERE baustelleId = ? AND organisationId = ? ORDER BY id');
+        $stmt = $this->db->prepare('SELECT lexId, belegart, nummer, datum, netto, brutto, status, bezahltAm, schlussrechnung FROM lexoffice_belege WHERE baustelleId = ? AND organisationId = ? ORDER BY datum, id');
         $stmt->execute([$baustelleId, $this->sync->organisationId()]);
         return array_map(static function ($b) {
-            $pfad = ['quotation' => 'quotations', 'invoice' => 'invoices', 'downpaymentinvoice' => 'down-payment-invoices', 'creditnote' => 'credit-notes'][$b['belegart']] ?? 'invoices';
-            return $b + ['link' => self::APP_URL . $pfad . '/view/' . rawurlencode((string) $b['lexId'])];
+            $b['schlussrechnung'] = (bool) $b['schlussrechnung'];
+            $b['netto'] = (float) $b['netto'];
+            $b['brutto'] = (float) $b['brutto'];
+            return $b + ['link' => self::APP_URL . (self::PFAD[$b['belegart']] ?? 'invoices') . '/view/' . rawurlencode((string) $b['lexId'])];
         }, $stmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
+    /** @return array<int,float> bezahlte Lexware-Rechnungen/-Abschläge je Projekt (Spiegel, ohne API-Aufruf) */
+    public static function bezahltSummen(\PDO $db, string $organisationId): array
+    {
+        $stmt = $db->prepare("SELECT baustelleId, SUM(brutto) AS summe FROM lexoffice_belege
+            WHERE organisationId = ? AND belegart IN ('invoice', 'downpaymentinvoice') AND status IN ('paid', 'paidoff') AND baustelleId IS NOT NULL
+            GROUP BY baustelleId");
+        $stmt->execute([$organisationId]);
+        $out = [];
+        foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['baustelleId']] = round((float) $r['summe'], 2);
+        }
+        return $out;
+    }
+
+    /**
+     * Spiegelt die Belege des Projekts aus Lexware Office: Status, Nummer, Beträge, bezahlt am; findet über die
+     * Belegkette (relatedVouchers) in Lexware erzeugte Abschlags- und Schlussrechnungen. Nur lesend gegenüber Lexware.
+     * Zeitbudget: bricht nach ZEIT_SEK ab (`vollstaendig` = false) – der nächste Abgleich macht weiter.
+     * @return array{belege:list<array<string,mixed>>, neu:int, geprueft:int, vollstaendig:bool}
+     */
+    public function abgleichen(int $baustelleId): array
+    {
+        $this->sync->kontoPruefen();
+        $org = $this->sync->organisationId();
+        $ende = microtime(true) + self::ZEIT_SEK;
+        // In Lexware gelöschte Entwürfe sind endgültig weg – nicht erneut abfragen.
+        $stmt = $this->db->prepare("SELECT lexId, belegart, kundeId, bezahltAm, status FROM lexoffice_belege WHERE baustelleId = ? AND organisationId = ? AND COALESCE(status, '') <> 'geloescht' ORDER BY geprueftAm, id");
+        $stmt->execute([$baustelleId, $org]);
+        $warteschlange = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $gesehen = [];
+        $neu = 0;
+        $vollstaendig = true;
+        for ($i = 0; $i < count($warteschlange); $i++) {
+            if ($i >= self::MAX_BELEGE || microtime(true) > $ende) {
+                $vollstaendig = false;
+                break;
+            }
+            $b = $warteschlange[$i];
+            if (isset($gesehen[$b['lexId']]) || !isset(self::PFAD[$b['belegart']])) {
+                continue;
+            }
+            $gesehen[$b['lexId']] = true;
+            try {
+                $daten = $this->sync->client()->get('/v1/' . self::PFAD[$b['belegart']] . '/' . rawurlencode((string) $b['lexId']));
+            } catch (LexofficeFehler $e) {
+                // Nur Entwürfe lassen sich in Lexware löschen: dann Positionen freigeben (AK 11). Ein fehlender
+                // fertiggestellter Beleg ist ein Fehler, keine Freigabe (sonst Doppelabrechnung).
+                if ($e->httpStatus === 404 && in_array((string) $b['status'], ['draft', ''], true)) {
+                    $this->db->prepare("UPDATE lexoffice_belege SET status = 'geloescht', geprueftAm = ? WHERE lexId = ?")->execute([date('c'), $b['lexId']]);
+                    continue;
+                }
+                throw $e;
+            }
+            $this->spiegeln($b, $daten);
+            foreach ((array) ($daten['relatedVouchers'] ?? []) as $rv) {
+                $art = (string) ($rv['voucherType'] ?? '');
+                $id = (string) ($rv['id'] ?? '');
+                if (!in_array($art, ['downpaymentinvoice', 'invoice'], true) || $id === '' || isset($gesehen[$id])) {
+                    continue;
+                }
+                $ins = $this->db->prepare("INSERT INTO lexoffice_belege (lexId, organisationId, belegart, nummer, baustelleId, kundeId, vorgaengerLexId, geprueftAm)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lexId) DO NOTHING");
+                $ins->execute([$id, $org, $art, (string) ($rv['voucherNumber'] ?? ''), $baustelleId, $b['kundeId'], $b['lexId'], date('c')]);
+                if ($ins->rowCount() === 1) {
+                    $neu++;
+                    $warteschlange[] = ['lexId' => $id, 'belegart' => $art, 'kundeId' => $b['kundeId'], 'bezahltAm' => '', 'status' => ''];
+                }
+            }
+        }
+        return ['belege' => $this->belege($baustelleId), 'neu' => $neu, 'geprueft' => count($gesehen), 'vollstaendig' => $vollstaendig];
+    }
+
     // ── intern ───────────────────────────────────────────────
+
+    private function spiegeln(array $b, array $daten): void
+    {
+        $status = (string) ($daten['voucherStatus'] ?? '');
+        $schluss = !empty($daten['closingInvoice']);
+        $preis = (array) ($daten['totalPrice'] ?? []);
+        // Schlussrechnung: nur der noch geforderte Betrag (ohne erhaltene Abschläge) – keine Doppelzählung.
+        $brutto = $schluss && isset($preis['claimedGrossAmount']) ? (float) $preis['claimedGrossAmount'] : (float) ($daten['totalPrice']['totalGrossAmount'] ?? 0);
+        $bezahltAm = (string) ($b['bezahltAm'] ?? '');
+        if (in_array($status, ['paid', 'paidoff'], true) && $bezahltAm === '') {
+            try {
+                $zahlung = $this->sync->client()->get('/v1/payments/' . rawurlencode((string) $b['lexId']));
+                $bezahltAm = substr((string) ($zahlung['paidDate'] ?? ''), 0, 10);
+            } catch (LexofficeFehler $e) {
+                // Zahlungsdatum ist Zusatzinfo – Status und Betrag trotzdem spiegeln, Datum beim nächsten Abgleich.
+                error_log('[Lexoffice] Zahlungsdatum ' . $b['lexId'] . ': ' . $e->fehlerCode);
+            }
+        }
+        if (!in_array($status, ['paid', 'paidoff'], true)) {
+            $bezahltAm = '';
+        }
+        $this->db->prepare('UPDATE lexoffice_belege SET status = ?, nummer = ?, datum = ?, netto = ?, brutto = ?, schlussrechnung = ?, bezahltAm = ?, geprueftAm = ? WHERE lexId = ?')
+            ->execute([$status, (string) ($daten['voucherNumber'] ?? ''), substr((string) ($daten['voucherDate'] ?? ''), 0, 10),
+                (float) ($preis['totalNetAmount'] ?? 0), $brutto, $schluss ? 1 : 0, $bezahltAm, date('c'), $b['lexId']]);
+    }
 
     private static function firma(array $settings): array
     {
@@ -151,8 +254,8 @@ final class LexofficeProjekt
     private function positionen(int $baustelleId, array $data): array
     {
         $stmt = $this->db->prepare('SELECT a.positionArt, a.positionId FROM lexoffice_abrechnung a JOIN lexoffice_belege b ON b.lexId = a.lexId
-            WHERE a.baustelleId = ? AND b.organisationId = ? AND b.status <> ?');
-        $stmt->execute([$baustelleId, $this->sync->organisationId(), 'voided']);
+            WHERE a.baustelleId = ? AND b.organisationId = ? AND b.status NOT IN (?, ?)');
+        $stmt->execute([$baustelleId, $this->sync->organisationId(), 'voided', 'geloescht']);
         $abgerechnet = [];
         foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $r) {
             $abgerechnet[$r['positionArt'] . ':' . $r['positionId']] = true;

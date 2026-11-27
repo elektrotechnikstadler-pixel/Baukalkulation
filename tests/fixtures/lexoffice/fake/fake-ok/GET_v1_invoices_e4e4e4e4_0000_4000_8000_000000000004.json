@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "id": "e4e4e4e4-0000-4000-8000-000000000004", "organizationId": "00000000-0000-4000-8000-000000000001", "version": 1,
+    "voucherStatus": "open", "voucherNumber": "RE0007", "voucherDate": "2026-12-15T00:00:00.000+01:00", "closingInvoice": true,
+    "totalPrice": { "currency": "EUR", "totalNetAmount": 3000, "totalGrossAmount": 3570, "totalTaxAmount": 570, "claimedGrossAmount": 2380 },
+    "downPaymentDeductions": [{ "id": "d3d3d3d3-0000-4000-8000-000000000003", "voucherType": "downpaymentinvoice", "title": "Abschlagsrechnung", "voucherNumber": "AR0001", "receivedGrossAmount": 1190 }],
+    "relatedVouchers": [
+      { "id": "a1a1a1a1-0000-4000-8000-000000000001", "voucherNumber": "AG0001", "voucherType": "quotation" },
+      { "id": "d3d3d3d3-0000-4000-8000-000000000003", "voucherNumber": "AR0001", "voucherType": "downpaymentinvoice" }
+    ] }
+}

@@ -2190,6 +2190,18 @@ async function movePositionToBaustelle(drag, destId) {
 // -- Helper: VK mit globalem Materialaufschlag + Positions-Rabatt --
 // vkDirekt=true: gespeicherter ek ist bereits der (Netto-)VK, kein Aufschlag/Global.
 // rabatt (%): Kundenrabatt, reduziert den VK. Negative ek/anzahl (Gutschriften) erlaubt.
+// Bezahlte Lexware-Rechnungen/-Abschläge eines Projekts (AP-20261126 B5) – 0 ohne Modul/Recht.
+function projektLexwareBezahlt(b) {
+  return (b && typeof lexofficeBezahlt === 'function') ? lexofficeBezahlt(b.id) : 0;
+}
+
+// Erhaltene/abgerechnete Beträge eines Projekts für Übersicht, Exporte und Auswertung (E-086: eine Quelle).
+function projektAbschlagSumme(b) {
+  let s = 0;
+  (b?.abschlaege || []).forEach(r => { s += r.betrag || 0; });
+  return s + projektLexwareBezahlt(b);
+}
+
 function matVk(r, b) {
   const ek = parseFloat(r?.ek) || 0;
   const rabatt = parseFloat(r?.rabatt) || 0;
@@ -3044,7 +3056,7 @@ function renderUebersicht() {
       const p = appData.pauschalen.find(p => p.id === entry.id);
       if (p) ps += p.preis * (entry.anzahl || 1);
     });
-    (b.abschlaege || []).forEach(r => { abs += r.betrag; });
+    abs += projektAbschlagSumme(b);
     const g = ms + as + ps;
     const gw = (ms - mek) + (as - afk) + ps;
     const parent = b.parentId ? parentMap[b.parentId] : null;
@@ -5297,6 +5309,8 @@ function renderAbschlagRows() {
       <td><button class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:2px 6px" onclick="openRechnungForm('rechnung',${JSON.stringify(re.id).replace(/"/g,'&quot;')})">öffnen</button></td>`;
     tbody.appendChild(tr);
   });
+  // Lexware Office: gespiegelte Belege (Betriebsart Lexware, AP-20261126 B5)
+  if (typeof lexofficeAbschlagZeilen === 'function') lexofficeAbschlagZeilen(b, tbody);
 }
 
 // ============================================================
@@ -5469,6 +5483,8 @@ function recalc() {
   (rechnungenData || []).filter(r => r.typ === 'rechnung' && calcProjectIds.has(r.baustelleId) && r.status === 'bezahlt').forEach(re => {
     abschlagSum += rechnungBrutto(re);
   });
+  // Bezahlte Rechnungen/Abschläge aus Lexware Office (Schlussrechnung nur mit dem noch geforderten Betrag)
+  calcProjects.forEach(project => { abschlagSum += projektLexwareBezahlt(project); });
   const offenBetrag = grand - abschlagSum;
 
   setCell('matTotal',     fmt(matSum));
@@ -6801,7 +6817,7 @@ function exportToExcel() {
       const p = appData.pauschalen.find(p => p.id === entry.id);
       if (p) ps += p.preis * (entry.anzahl || 1);
     });
-    (b.abschlaege || []).forEach(r => { abs += r.betrag; });
+    abs += projektAbschlagSumme(b);
     grandGrand   += ms + as + ps;
     grandAbschlag += abs;
     sumRows.push([b.name, ms, as, ps, ms + as + ps, abs, (ms + as + ps) - abs]);
@@ -7086,6 +7102,7 @@ async function exportBaustelleExcel() {
   const abRows = [['ABSCHLAGSRECHNUNGEN - ' + b.name], [], ['Bezeichnung', 'Betrag (€)']];
   let abSum = 0;
   (b.abschlaege || []).forEach(r => { abSum += r.betrag; abRows.push([r.bezeichnung, r.betrag]); });
+  if (projektLexwareBezahlt(b) > 0) { abSum += projektLexwareBezahlt(b); abRows.push(['Lexware Office (bezahlt)', projektLexwareBezahlt(b)]); }
   abRows.push([]); abRows.push(['Abschläge Gesamt (€)', abSum]);
   const abWs = XLSX.utils.aoa_to_sheet(abRows);
   abWs['!cols'] = [{ wch: 36 }, { wch: 16 }];
@@ -7566,7 +7583,7 @@ function doUebersichtPDFExport() {
       const p = appData.pauschalen.find(p => p.id === entry.id);
       if (p) { const g = p.preis * (entry.anzahl || 1); ps += g; pRows.push({ name: p.name, anzahl: entry.anzahl || 1, preis: p.preis, gesamt: g }); }
     });
-    (b.abschlaege || []).forEach(r => { abs += r.betrag; });
+    abs += projektAbschlagSumme(b);
     const g = ms + as + ps;
     const gw = (ms - mek) + (as - afk) + ps;
     totalMat += ms; totalAz += as; totalP += ps; totalAbs += abs; totalGewinn += gw;
@@ -9264,6 +9281,7 @@ function buildBaustelleArchiveRows(b) {
   rows.push(['Bezeichnung', 'Betrag (€)']);
   let abSum = 0;
   (b.abschlaege || []).forEach(r => { abSum += r.betrag; rows.push([r.bezeichnung, r.betrag]); });
+  if (projektLexwareBezahlt(b) > 0) { abSum += projektLexwareBezahlt(b); rows.push(['Lexware Office (bezahlt)', projektLexwareBezahlt(b)]); }
   rows.push(['Abschläge Gesamt (€)', abSum]);
   rows.push(['OFFENER BETRAG (€)', (matSum + azSum + pSum) - abSum]);
   rows.push([]);
@@ -9709,6 +9727,7 @@ function _renderArchiveView(j) {
   });
   let abSum = 0;
   (b.abschlaege || []).forEach(a => { abSum += (a.betrag || 0); });
+  abSum += projektLexwareBezahlt(b);
   const gesamt = matVkSum + azSum + pSum;
 
   let html = `<div style="padding:4px 0 12px">
@@ -10107,7 +10126,7 @@ async function downloadFullExcel() {
       const p = appData.pauschalen.find(p => p.id === entry.id);
       if (p) paSum += p.preis * (entry.anzahl || 1);
     });
-    (b.abschlaege || []).forEach(r => { absSum += r.betrag || 0; });
+    absSum += projektAbschlagSumme(b);
     const g = matSum + azSum + paSum;
     ovRows.push([b.name, b.status || '', b.projektstart || '', matSum, azSum, paSum, g, absSum, g - absSum]);
   });
@@ -12876,6 +12895,7 @@ function applyModuleSettings() {
   toggle('btnPauschalenView', 'modul_pauschalen');
   toggle('btnSchnellnotizenSidebar', 'modul_schnellnotizen');
   toggle('btnAuswertung', 'modul_auswertung');
+  if (s.modul_lexoffice === true && typeof lexofficeSummenLaden === 'function' && (typeof canDo !== 'function' || canDo('canSeePrices'))) lexofficeSummenLaden();
   const btnRe = document.getElementById('btnRechnungen');
   if (btnRe) btnRe.style.display = bkRechnungenLesbar(s, currentRole) ? '' : 'none';
   // Header dropdown items
@@ -24821,7 +24841,7 @@ function renderAuswertung() {
     b.material.forEach(r => { ms += matVk(r, b) * r.anzahl; mek += r.ek * r.anzahl; });
     b.arbeitszeit.forEach(r => { as += r.stunden * r.stundenpreis; afk += r.stunden * (r.fixkosten || 0); });
     b.pauschalen.forEach(entry => { const p = appData.pauschalen.find(p => p.id === entry.id); if (p) ps += p.preis * (entry.anzahl || 1); });
-    (b.abschlaege || []).forEach(r => { abs += r.betrag; });
+    abs += projektAbschlagSumme(b);
     const g = ms + as + ps;
     return { name: b.name, projektNr: b.projektNr || '', matVk: ms, matEk: mek, azEin: as, azFk: afk, pSum: ps, abSum: abs, gesamt: g, gewinn: (ms-mek)+(as-afk)+ps, offen: g-abs, source: 'aktiv', kundeId: b.kundeId || null };
   });
@@ -25092,7 +25112,7 @@ function awGetAllProjekte() {
       b.material.forEach(r => { ms += matVk(r, b) * r.anzahl; mek += r.ek * r.anzahl; });
       b.arbeitszeit.forEach(r => { as += r.stunden * r.stundenpreis; afk += r.stunden * (r.fixkosten || 0); });
       b.pauschalen.forEach(entry => { const p = appData.pauschalen.find(p => p.id === entry.id); if (p) ps += p.preis * (entry.anzahl || 1); });
-      (b.abschlaege || []).forEach(r => { abs += r.betrag; });
+      abs += projektAbschlagSumme(b);
       const g = ms + as + ps;
       return { name: b.name, projektNr: b.projektNr || '', matVk: ms, matEk: mek, azEin: as, azFk: afk, pSum: ps, abSum: abs, gesamt: g, gewinn: (ms - mek) + (as - afk) + ps, offen: g - abs, source: 'aktiv' };
     });

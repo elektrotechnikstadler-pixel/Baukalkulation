@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "openAmount": 0, "paymentStatus": "balanced", "currency": "EUR", "voucherType": "downpaymentinvoice", "voucherStatus": "paid",
+    "paidDate": "2026-11-30T10:15:00.000+01:00", "paymentItems": [] }
+}

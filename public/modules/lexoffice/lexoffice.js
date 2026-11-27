@@ -265,9 +265,112 @@
       <div class="kunde-form-actions"><button class="btn btn-ghost btn-sm" data-lex-zu>Schließen</button>
         <a class="btn btn-primary btn-sm" href="${h(r.j.link)}" target="_blank" rel="noopener">In Lexware öffnen</a></div>`;
     karte.querySelector('[data-lex-zu]').onclick = () => overlay.remove();
+    // Abschlagsliste/Summen des Projekts mit dem neuen Beleg neu laden
+    delete belegeCache[baustelleId];
+    lexofficeSummenLaden(true);
+    neuZeichnen();
+  }
+
+  // ── Projekt: gespiegelte Lexware-Belege in der Abschlagsliste (B5) ───
+  const belegeCache = {};
+  const BELEG_ART = { quotation: 'Angebot', invoice: 'Rechnung', downpaymentinvoice: 'Abschlagsrechnung' };
+  const BELEG_STATUS = { draft: ['Entwurf', '#ECEFF1', '#455A64'], open: ['offen', '#FFF3E0', '#E65100'], paid: ['bezahlt', '#E8F5E9', '#2E7D32'],
+    paidoff: ['bezahlt', '#E8F5E9', '#2E7D32'], voided: ['storniert', '#FFEBEE', '#C62828'], geloescht: ['in Lexware gelöscht', '#FFEBEE', '#C62828'],
+    accepted: ['angenommen', '#E8F5E9', '#2E7D32'], rejected: ['abgelehnt', '#FFEBEE', '#C62828'], '': ['noch nicht abgeglichen', '#ECEFF1', '#455A64'] };
+  const datumDe = d => (d && d.length >= 10) ? d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(0, 4) : '';
+
+  function projektAktiv() {
+    return typeof bkRechnungenInLexware === 'function' && typeof appSettings !== 'undefined' && bkRechnungenInLexware(appSettings)
+      && typeof canDo === 'function' && canDo('canLexoffice') && canDo('canSeePrices');
+  }
+
+  function neuZeichnen() {
+    if (typeof renderAbschlagRows === 'function') renderAbschlagRows();
+    if (typeof recalc === 'function') recalc();
+  }
+
+  async function belegeLaden(baustelleId, sub) {
+    const alt = belegeCache[baustelleId] || { belege: [] };
+    belegeCache[baustelleId] = { belege: alt.belege, laedt: true, fehler: '' };
+    let r = { ok: false, j: {} };
+    try {
+      r = await aufruf(sub, { baustelleId });
+    } catch (e) {
+      r = { ok: false, j: { error: 'Netzwerkfehler.' } };
+    } finally {
+      // Bei Fehlern den letzten bekannten Stand behalten – Summen sollen nicht „verschwinden“.
+      belegeCache[baustelleId] = { belege: r.ok ? (r.j.belege || []) : alt.belege, laedt: false, fehler: r.ok ? '' : (r.j.error || 'Fehler') };
+    }
+    return r;
+  }
+
+  // ── Bezahlte Lexware-Beträge aller Projekte (eine Quelle für alle Summen, B5) ─────
+  let summen = {};
+  let summenGeladen = false;
+
+  async function lexofficeSummenLaden(neu) {
+    if (summenGeladen && !neu) return;
+    summenGeladen = true;
+    try {
+      const r = await aufruf('bezahlt_summen', null, 'GET');
+      if (r.ok) {
+        summen = r.j.summen || {};
+        neuZeichnen();
+        // Sichtbare Übersicht/Auswertung ebenfalls mit den Lexware-Beträgen neu aufbauen
+        const sichtbar = (id) => { const el = document.getElementById(id); return !!el && el.offsetParent !== null; };
+        if (sichtbar('uebersichtView') && typeof renderUebersicht === 'function') renderUebersicht();
+        if (sichtbar('auswertungView') && typeof renderAuswertung === 'function') renderAuswertung();
+      }
+    } catch (e) { summenGeladen = false; }
+  }
+
+  function lexofficeBezahlt(projektId) {
+    return Number(summen[String(projektId)]) || 0;
+  }
+
+  function lexofficeAbschlagZeilen(b, tbody) {
+    if (!b || !tbody || !projektAktiv()) return;
+    const id = b.id;
+    const cache = belegeCache[id];
+    if (!cache) { belegeLaden(id, 'projekt_belege').then(neuZeichnen); return; }
+    const kopf = document.createElement('tr');
+    kopf.innerHTML = `<td colspan="4" class="lex-kopf">🧾 <strong>Lexware Office</strong>
+      <button class="btn btn-secondary btn-sm" data-lex-abgleich>Mit Lexware abgleichen</button>
+      <button class="btn btn-secondary btn-sm" data-lex-abschlag>Abschlag in Lexware erstellen</button>
+      ${cache.laedt ? '<em>lädt…</em>' : ''}${cache.fehler ? `<span class="lex-warn">${h(cache.fehler)}</span>` : ''}</td>`;
+    tbody.appendChild(kopf);
+    kopf.querySelector('[data-lex-abgleich]').onclick = async (ev) => {
+      ev.target.disabled = true;
+      const r = await belegeLaden(id, 'projekt_abgleichen');
+      if (r.ok && typeof showNotification === 'function') showNotification(`Lexware-Abgleich: ${r.j.geprueft} Belege geprüft, ${r.j.neu} neu gefunden${r.j.vollstaendig === false ? ' – noch nicht vollständig, bitte erneut abgleichen' : ''}.`);
+      lexofficeSummenLaden(true);
+      neuZeichnen();
+    };
+    kopf.querySelector('[data-lex-abschlag]').onclick = () => {
+      const angebot = [...cache.belege].reverse().find(x => x.belegart === 'quotation' && ['open', 'accepted'].includes(x.status));
+      if (!angebot) { alert('Zuerst ein Angebot übertragen, in Lexware Office fertigstellen und hier „Mit Lexware abgleichen“. Abschlagsrechnungen erzeugt Lexware aus dem fertiggestellten Angebot.'); return; }
+      window.open(angebot.link, '_blank', 'noopener');
+    };
+    for (const x of cache.belege) {
+      const art = x.belegart === 'invoice' && x.schlussrechnung ? 'Schlussrechnung' : (x.belegart === 'invoice' && x.status === 'draft' ? 'Rechnungsentwurf' : (BELEG_ART[x.belegart] || x.belegart));
+      const [text, bg, fg] = BELEG_STATUS[x.status] || [x.status, '#ECEFF1', '#455A64'];
+      const zaehlt = ['invoice', 'downpaymentinvoice'].includes(x.belegart) && ['paid', 'paidoff'].includes(x.status);
+      const tr = document.createElement('tr');
+      tr.style.background = zaehlt ? '#E8F5E9' : '#F5F7FA';
+      tr.innerHTML = `<td><span style="font-weight:600">${h(x.nummer || 'Entwurf')}</span>
+          <span class="lex-badge" style="background:${bg};color:${fg}">${h(text)}${x.bezahltAm ? ' am ' + h(datumDe(x.bezahltAm)) : ''}</span>
+          <span style="font-size:.72rem;color:#888">Lexware${x.datum ? ' · ' + h(datumDe(x.datum)) : ''}</span></td>
+        <td style="font-size:.75rem;color:var(--text-muted)">${h(art)}</td>
+        <td class="price-sensitive text-right" style="${zaehlt ? 'font-weight:600' : 'color:#888'}">${typeof fmt === 'function' ? fmt(x.brutto) : euro(x.brutto)}</td>
+        <td><a class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:2px 6px" href="${h(x.link)}" target="_blank" rel="noopener">öffnen</a></td>`;
+      tbody.appendChild(tr);
+    }
   }
 
   global.lexofficeKundeBadge = lexofficeKundeBadge;
   global.lexofficeKundenAbgleichOeffnen = lexofficeKundenAbgleichOeffnen;
   global.lexofficeProjektUebertragen = lexofficeProjektUebertragen;
+  global.lexofficeAbschlagZeilen = lexofficeAbschlagZeilen;
+  global.lexofficeSummenLaden = lexofficeSummenLaden;
+  global.lexofficeBezahlt = lexofficeBezahlt;
 })(window);

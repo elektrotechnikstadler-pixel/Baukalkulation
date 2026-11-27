@@ -62,6 +62,7 @@ final class LexofficeProjektTest extends ApiTestCase
         $normal = $this->createActiveUser('monteur', 'Monteur-Pass-123');
         $this->assertStatus(403, $normal->module('lexoffice', 'projekt_vorschau', ['baustelleId' => 1]));
         $this->assertStatus(403, $normal->module('lexoffice', 'projekt_senden', ['baustelleId' => 1]));
+        $this->assertStatus(403, $normal->module('lexoffice', 'bezahlt_summen'));
         $this->assertSame('projekt_fehlt', $this->assertStatus(404, $this->api->module('lexoffice', 'projekt_vorschau', ['baustelleId' => 999]))['fehlerCode']);
         $this->assertStatus(405, $this->api->get('module', ['module' => 'lexoffice', 'sub' => 'projekt_senden', 'baustelleId' => 1]));
     }
@@ -163,6 +164,40 @@ final class LexofficeProjektTest extends ApiTestCase
         $this->assertTrue($v['auswahl']['reverseCharge13b']);
         $this->assertSame(['constructionService13b', 0.0], [$v['taxType'], (float) $v['summen']['steuer']]);
         $this->assertSame('net', $this->vorschau(['reverseCharge13b' => false])['taxType']);
+    }
+
+    public function testAbgleichSpiegeltBelegketteUndGibtGeloeschteEntwuerfeFrei(): void
+    {
+        $this->vorbereiten();
+        $this->assertOk($this->api->module('lexoffice', 'projekt_senden', ['baustelleId' => 1, 'auswahl' => ['belegart' => 'angebot']]));
+        $this->assertOk($this->api->module('lexoffice', 'projekt_senden', ['baustelleId' => 1, 'auswahl' => ['belegart' => 'rechnung']]));
+
+        $ergebnis = $this->assertOk($this->api->module('lexoffice', 'projekt_abgleichen', ['baustelleId' => 1]));
+        $this->assertSame(2, $ergebnis['neu'], 'Abschlag und Schlussrechnung aus der Belegkette des Angebots');
+        $belege = array_column($ergebnis['belege'], null, 'lexId');
+        $this->assertSame(['accepted', 'AG0001'], [$belege[self::ANGEBOT]['status'], $belege[self::ANGEBOT]['nummer']]);
+        $this->assertSame('geloescht', $belege[self::RECHNUNG]['status'], 'in Lexware gelöschter Entwurf');
+        $abschlag = $belege['d3d3d3d3-0000-4000-8000-000000000003'];
+        $this->assertSame(['downpaymentinvoice', 'paid', '2026-11-30', 1190.0], [$abschlag['belegart'], $abschlag['status'], $abschlag['bezahltAm'], (float) $abschlag['brutto']]);
+        $schluss = $belege['e4e4e4e4-0000-4000-8000-000000000004'];
+        $this->assertSame([true, 2380.0, ''], [$schluss['schlussrechnung'], (float) $schluss['brutto'], $schluss['bezahltAm']], 'nur noch geforderter Betrag');
+        $this->assertStringContainsString('/permalink/down-payment-invoices/view/', $abschlag['link']);
+
+        // Gelöschter Rechnungsentwurf gibt seine Positionen frei
+        $this->assertSame([false, false, false], array_column($this->vorschau(['belegart' => 'rechnung'])['positionen'], 'abgerechnet'));
+
+        // Zweiter Abgleich: nichts Neues, Zahlungsdatum nicht erneut abgefragt
+        $this->assertSame(0, $this->assertOk($this->api->module('lexoffice', 'projekt_abgleichen', ['baustelleId' => 1]))['neu']);
+        $this->assertCount(1, $this->anfragen('GET', '/v1/payments/'));
+        $this->assertCount(0, array_filter(array_merge($this->anfragen('POST', '/v1/'), $this->anfragen('PUT', '/v1/')), fn($a) => !in_array($a['pfad'], ['/v1/quotations', '/v1/invoices'], true)), 'Abgleich schreibt nie nach Lexware');
+
+        // Summen für alle Leser: nur bezahlter Abschlag (Schlussrechnung offen, Angebot zählt nie)
+        $this->assertEquals(['1' => 1190], $this->assertOk($this->api->module('lexoffice', 'bezahlt_summen'))['summen']);
+
+        // Fehlender fertiggestellter Beleg gibt nichts frei, sondern meldet einen Fehler
+        $this->server->db()->exec("UPDATE lexoffice_belege SET status = 'open' WHERE lexId = '" . self::RECHNUNG . "'");
+        $this->assertStatus(502, $this->api->module('lexoffice', 'projekt_abgleichen', ['baustelleId' => 1]));
+        $this->assertSame('open', $this->server->db()->query("SELECT status FROM lexoffice_belege WHERE lexId = '" . self::RECHNUNG . "'")->fetchColumn());
     }
 
     public function testOhneKundeKeinVersand(): void

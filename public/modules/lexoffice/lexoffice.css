@@ -8,3 +8,6 @@
 .lex-maske fieldset { border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; }
 .lex-maske label { display: block; margin: 4px 0; }
 .lex-maske input[type="date"] { display: inline-block; width: auto; }
+.lex-kopf { background: #F5F7FA; font-size: .82rem; }
+.lex-kopf .btn { font-size: .72rem; padding: 2px 8px; margin-left: 6px; }
+.lex-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .7rem; font-weight: 600; margin-left: 6px; }

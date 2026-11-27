@@ -88,6 +88,21 @@ class Module extends AbstractModule
             case 'projekt_belege':
                 $baustelleId = $this->projektZugriff($settings);
                 $this->mitSync($settings, fn(LexofficeSync $s) => ['belege' => (new LexofficeProjekt($this->db, $s))->belege($baustelleId)]);
+            case 'projekt_abgleichen':
+                $this->nurPost();
+                $baustelleId = $this->projektZugriff($settings);
+                $this->mitSync($settings, fn(LexofficeSync $s) => (new LexofficeProjekt($this->db, $s))->abgleichen($baustelleId));
+            case 'bezahlt_summen':
+                // Für alle Summen der Oberfläche (Projekt, Übersicht, Exporte, Auswertung) – nur lokaler Spiegel.
+                $this->requirePerm('canSeePrices');
+                $org = (string) ($settings['lexoffice_profil']['organisationId'] ?? '');
+                $summen = [];
+                foreach ($org === '' ? [] : LexofficeProjekt::bezahltSummen($this->db, $org) as $id => $summe) {
+                    if (Auth::canSeeBaustelle($this->db, $id)) {
+                        $summen[$id] = $summe;
+                    }
+                }
+                \jsonOut(['ok' => true, 'summen' => (object) $summen]);
             default:
                 \jsonOut(['error' => 'Unbekannte Lexware-Aktion: ' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8')], 400);
         }

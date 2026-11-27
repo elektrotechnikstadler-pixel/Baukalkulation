@@ -37,9 +37,13 @@
 
 ---
 
-## Unveröffentlicht – Lexware Office: Kunden und Projekte (Serie 1, B2 + B4)
+## Unveröffentlicht – Lexware Office: Kunden, Projekte und Belege (Serie 1, B2 + B4 + B5)
 
 ### Neu
+- **Lexware-Belege im Projekt:** Abschlagsliste zeigt Angebote, Rechnungsentwürfe, Abschlags- und Schlussrechnungen aus
+  Lexware Office (Belegkette des Angebots) mit Status und „bezahlt am“; „Mit Lexware abgleichen“, „Abschlag in Lexware
+  erstellen“. Bezahlte Lexware-Rechnungen/-Abschläge zählen zu den erhaltenen Beträgen (Schlussrechnung ohne
+  Doppelzählung); gelöschte Entwürfe und stornierte Rechnungen geben ihre Positionen frei.
 - **Projekt an Lexware übertragen** (Betriebsart „Rechnungen erzeugen in: Lexware Office“): Übertragungsmaske im Projekt
   mit Belegart (Angebot/Rechnungsentwurf), Darstellung je Gruppe, § 13b, Leistungszeitraum, Texten und Positionsauswahl;
   Vorschau mit Netto/USt/Brutto; Lexware erhält immer einen Entwurf. Rechnungsentwürfe markieren Positionen als

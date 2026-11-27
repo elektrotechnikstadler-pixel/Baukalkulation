@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": { "id": "d3d3d3d3-0000-4000-8000-000000000003", "organizationId": "00000000-0000-4000-8000-000000000001", "version": 2,
+    "voucherStatus": "paid", "voucherNumber": "AR0001", "voucherDate": "2026-11-28T00:00:00.000+01:00",
+    "closingInvoiceId": "e4e4e4e4-0000-4000-8000-000000000004",
+    "totalPrice": { "currency": "EUR", "totalNetAmount": 1000, "totalGrossAmount": 1190, "totalTaxAmount": 190 },
+    "relatedVouchers": [
+      { "id": "a1a1a1a1-0000-4000-8000-000000000001", "voucherNumber": "AG0001", "voucherType": "quotation" },
+      { "id": "e4e4e4e4-0000-4000-8000-000000000004", "voucherNumber": "RE0007", "voucherType": "invoice" }
+    ] }
+}
