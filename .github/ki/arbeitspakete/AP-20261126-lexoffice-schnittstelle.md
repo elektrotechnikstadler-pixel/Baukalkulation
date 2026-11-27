@@ -327,6 +327,18 @@ reicht für den Erstabgleich und braucht keinen Planer; Projekt-Sammelläufe in 
 nicht durchsuchbaren Kunden nach Zeitüberschreitung, Log ohne Personendaten, `zahlstatus`, DSGVO-Hinweis, Lösen lokal,
 Rechte `canReadKunden`/`canWriteKunden`.
 
+**B4 (Leitstand, 2026-11-27):** `src/Services/ProjektPositionen.php` (eine Rechenquelle inkl. `zeilenbetrag()` für
+IN-FORM-Export und Lexware, Export erstmals getestet), `LexofficeBeleg` (rein: Darstellungen, Steuerart, Leistungszeitraum,
+Anfrage-JSON; EP 4 Stellen, Gutschriften als negativer EP), `LexofficeProjekt` (Vorschau ohne API, Senden mit Sperre je
+Projekt – unklar nur nach Beleg-POST, Vermerk `lexoffice_belege`/`lexoffice_abrechnung` nur für Rechnungsentwürfe,
+`voided` gibt frei), Aktionen `projekt_vorschau`, `projekt_senden`, `projekt_belege`, Umschaltsperre; Maske in
+`public/modules/lexoffice/lexoffice.js`, Aktionsmenü „An Lexware übertragen“.
+**Abweichungen (bewusst):** Auswahl je Projekt im Browser (`localStorage`) statt im Projekt-JSON (keine Server-Schreibzugriffe
+aufs Projekt, E-085); § 13b als Projektfeld `reverseCharge13b`, gesetzt aus der Maske über den normalen Client-Speicherweg;
+Einleitung/Schlusstext je Übertragung, Vorbelegung aus der Verwaltung → später; zusammengefasste Zeilen können um Cent von der
+Summe der Einzelpositionen abweichen (Vorschau weist darauf hin). **Für B5:** in Lexware gelöschte Entwürfe beim Abgleich als
+`voided` markieren (AK 11).
+
 ## 4. Tests
 
 | Abnahmekriterium | Test (Datei::Methode) | SQLite | PostgreSQL | JS |
@@ -351,6 +363,11 @@ bleibt rot wegen 17 **vorbestehender** veralteter Einträge jenes AP (z. B. `set
   **R2 (nur Befunde):** APPROVE; 2 Hinweise (Test abgelaufener Claim, Knopf nur mit `canWriteKunden`) sofort behoben.
   Tests B2: `LexofficeKundenTest` (Felder/alte Clients, Vorschau, Abgleich ohne Dubletten, Timeout/Claim/unklar, Fremdkonto,
   Rechte), `LexofficeMapperTest` (Falllisten `kontakte.json`, `zuordnung.json`) – 81 gezielte Tests SQLite + PostgreSQL grün.
+- **B4 R1:** CHANGES_REQUESTED – 4 Major (Rundung Export ≠ Lexware, Gutschriften verworfen, § 13b nur lokal, Beleg-Fehlerpfade
+  ungetestet), 4 Minor, 1 Hinweis. **R2 (nur Befunde):** APPROVE; 3 Hinweise (Gruppierung nach 4-stelligem EP, Zeilen mit
+  Menge 0, Export-EP im CHANGELOG) sofort behoben. Tests B4: `LexofficeBelegTest` (Fallliste `projekte.json`, 5 Fälle),
+  `LexofficeProjektTest` (Betriebsart/Rechte, Angebot ohne Abrechnung, Teilabrechnung, Sperre/unklar, Beleg 503/406,
+  ohne Preisrecht, `voided`, § 13b, IN-FORM-Export) – 62 gezielte Tests SQLite + PostgreSQL grün.
 
 - **R1** (Reviewer-Agent): CHANGES_REQUESTED – 1 Major (Profil nach Schlüsselwechsel), 9 Minor (Lesen serverseitig,
   alte Clients, Meldung je Ursache, Gesamtstand nach langem Aufruf, Plan 2.3, Exit-Code/Ergebniszeile `pruefen`, AP-Doku, Testlücken).
