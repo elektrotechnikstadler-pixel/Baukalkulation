@@ -37,7 +37,7 @@
 
 ---
 
-## Unveröffentlicht – Lexware Office: Kunden, Projekte und Belege (Serie 1, B2 + B4 + B5 + B6)
+## v3.0.29 – Lexware Office: Kunden, Projekte, Belege und automatischer Abgleich
 
 ### Neu
 - **Automatischer Lexware-Abgleich:** Der Zeitplaner spiegelt stündlich die Belege aller Projekte mit offenen
